@@ -1,0 +1,1 @@
+VERSION  # shipyard resolves the version during CMake configuration

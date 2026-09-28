@@ -1,0 +1,14 @@
+{
+  "version": 6,
+  "include": [
+    "/usr/local/mavergreen/shipyard/share/cmake/MavericksShipyard/mavericks-presets.json"
+  ],
+  "configurePresets": [
+    { "name": "native", "inherits": "mavericks-native" },
+    { "name": "cross", "inherits": "mavericks-cross" }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "cross", "configurePreset": "cross" }
+  ]
+}
