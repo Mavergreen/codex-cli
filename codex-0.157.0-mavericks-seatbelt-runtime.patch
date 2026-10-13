@@ -1,0 +1,68 @@
+diff --git a/codex-rs/cli/src/debug_sandbox.rs b/codex-rs/cli/src/debug_sandbox.rs
+index 55d71d6..e6e27db 100644
+--- a/codex-rs/cli/src/debug_sandbox.rs
++++ b/codex-rs/cli/src/debug_sandbox.rs
+@@ -413,7 +413,13 @@ async fn run_command_under_sandbox(
+             // for the unsandboxed shell that resumes when Codex exits.
+             match args.as_mut_slice() {
+                 [flag, policy, ..] if flag.as_str() == "-p" => {
+-                    policy.push_str("\n(deny file-ioctl (ioctl-command TIOCSTI))");
++                    // TIOCSTI is 0x80017472 on Darwin, but Mavericks does not
++                    // expose the symbolic constant to Seatbelt profiles.
++                    policy.push_str(
++                        "\n(if (defined? 'TIOCSTI)\n\
++                         (deny file-ioctl (ioctl-command TIOCSTI))\n\
++                         (deny file-ioctl (ioctl-command 2147578994)))",
++                    );
+                 }
+                 _ => anyhow::bail!("Seatbelt command is missing its generated policy"),
+             }
+diff --git a/codex-rs/sandboxing/src/seatbelt.rs b/codex-rs/sandboxing/src/seatbelt.rs
+index 3597649..4a27a56 100644
+--- a/codex-rs/sandboxing/src/seatbelt.rs
++++ b/codex-rs/sandboxing/src/seatbelt.rs
+@@ -1067,7 +1067,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
+             .map_err(|error| SeatbeltPreparationError::FileSystem(error.to_string()))?;
+         policy_sections.push(daemon::protection_policy(&directory)?);
+     }
+-    policy_sections.push("(deny mach-lookup (xpc-service-name-prefix \"\"))".to_string());
++    policy_sections.push(
++        "(if (defined? 'xpc-service-name-prefix)\n\
++           (deny mach-lookup (xpc-service-name-prefix \"\")))"
++            .to_string(),
++    );
+     policy_sections.push(deny_read_policy);
+     // Renaming an allowed ancestor relocates its protected descendants past
+     // their pathname carveouts. Keep these denies last so no broader allowance
+@@ -1084,7 +1088,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
+     // file-write* and file-ioctl. Even deny-default needs this explicit deny.
+     // F_MAKECOMPRESSED = 80, F_TRANSFEREXTENTS = 110.
+     if !file_system_sandbox_policy.has_full_disk_write_access() {
+-        policy_sections.push("(deny system-fcntl (fcntl-command 80 110))".to_string());
++        policy_sections.push(
++            "(if (defined? 'system-fcntl)\n\
++               (deny system-fcntl (fcntl-command 80 110)))"
++                .to_string(),
++        );
+     }
+ 
+     let full_policy = policy_sections.join("\n");
+diff --git a/codex-rs/sandboxing/src/seatbelt_daemon.rs b/codex-rs/sandboxing/src/seatbelt_daemon.rs
+index 964144c..f322b06 100644
+--- a/codex-rs/sandboxing/src/seatbelt_daemon.rs
++++ b/codex-rs/sandboxing/src/seatbelt_daemon.rs
+@@ -7,9 +7,13 @@ use std::path::Path;
+ pub(super) fn protection_policy(directory: &Path) -> Result<String, SeatbeltPreparationError> {
+     let quoted = serde_json::to_string(&directory.to_string_lossy())
+         .map_err(|error| SeatbeltPreparationError::FileSystem(error.to_string()))?;
++    // Mavericks rejects pathname filters nested inside `unix-socket`. Use a
++    // broad deny there so privileged daemon sockets remain protected.
+     let mut rules = vec![format!(
+         "(deny file-read* file-write* (literal {quoted}) (subpath {quoted}))\n\
+-         (deny network-outbound (remote unix-socket (subpath {quoted})))"
++         (if (defined? 'ipc-posix-name-prefix)\n\
++           (deny network-outbound (remote unix-socket (subpath {quoted})))\n\
++           (deny network-outbound (remote unix-socket)))"
+     )];
+     // Moving an ancestor would relocate the entire protected subtree beyond
+     // both pathname rules. Only unlink is denied; sibling writes still work.

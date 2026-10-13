@@ -1,0 +1,60 @@
+diff --git a/codex-rs/tui/Cargo.toml b/codex-rs/tui/Cargo.toml
+index 9d61157..ee85d74 100644
+--- a/codex-rs/tui/Cargo.toml
++++ b/codex-rs/tui/Cargo.toml
+@@ -142,7 +142,7 @@ libc = { workspace = true }
+ 
+ [target.'cfg(target_os = "macos")'.dependencies]
+ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSAccessibility", "NSWorkspace"] }
+-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDateFormatter", "NSFormatter", "NSLocale", "NSString"] }
++objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDateFormatter", "NSFormatter", "NSLocale", "NSObjCRuntime", "NSString"] }
+ 
+ [target.'cfg(target_os = "linux")'.dependencies]
+ # Keep the same executor features as the credential store, which also uses zbus.
+diff --git a/codex-rs/tui/src/screen_reader.rs b/codex-rs/tui/src/screen_reader.rs
+index e4bc391..bc78d95 100644
+--- a/codex-rs/tui/src/screen_reader.rs
++++ b/codex-rs/tui/src/screen_reader.rs
+@@ -117,7 +117,18 @@ async fn detect() -> bool {
+         .name("screen-reader".into())
+         .spawn(move || {
+             #[cfg(target_os = "macos")]
+-            let detected = objc2_app_kit::NSWorkspace::sharedWorkspace().isVoiceOverEnabled();
++            let detected = {
++                use objc2_foundation::NSObjectProtocol;
++
++                let workspace = objc2_app_kit::NSWorkspace::sharedWorkspace();
++                // macOS 10.9: NSWorkspace gains isVoiceOverEnabled in 10.13. Sending it on an
++                // older host raises an Objective-C exception that aborts the process, so a host
++                // without the selector reports no screen reader.
++                let selector = objc2_foundation::NSSelectorFromString(
++                    &objc2_foundation::NSString::from_str("isVoiceOverEnabled"),
++                );
++                workspace.respondsToSelector(selector) && workspace.isVoiceOverEnabled()
++            };
+             #[cfg(windows)]
+             let detected = {
+                 use windows_sys::Win32::UI::WindowsAndMessaging::SPI_GETSCREENREADER;
+diff --git a/codex-rs/tui/src/system_motion.rs b/codex-rs/tui/src/system_motion.rs
+index a3c941a..587d2d2 100644
+--- a/codex-rs/tui/src/system_motion.rs
++++ b/codex-rs/tui/src/system_motion.rs
+@@ -21,7 +21,18 @@ pub(crate) fn mode() -> MotionMode {
+ 
+ #[cfg(target_os = "macos")]
+ async fn detect() -> Option<MotionMode> {
++    use objc2_foundation::NSObjectProtocol;
++
+     let workspace = objc2_app_kit::NSWorkspace::sharedWorkspace();
++    // macOS 10.9: NSWorkspace gains accessibilityDisplayShouldReduceMotion in 10.12. Sending it on
++    // an older host raises an Objective-C exception that aborts the process, so a host without the
++    // selector reports no preference.
++    let selector = objc2_foundation::NSSelectorFromString(&objc2_foundation::NSString::from_str(
++        "accessibilityDisplayShouldReduceMotion",
++    ));
++    if !workspace.respondsToSelector(selector) {
++        return None;
++    }
+     Some(if workspace.accessibilityDisplayShouldReduceMotion() {
+         MotionMode::Reduced
+     } else {
