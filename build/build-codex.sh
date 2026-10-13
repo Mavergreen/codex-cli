@@ -36,6 +36,17 @@ sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
 [ -z "$(git -C "$RUST_SOURCE" status --porcelain)" ] || {
   echo "build-codex: pinned Rust checkout is dirty" >&2; exit 1;
 }
+CODEX_CHANNEL=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$SOURCE/codex-rs/rust-toolchain.toml")
+RUST_VERSION=$(tr -d '[:space:]' < "$RUST_SOURCE/UPSTREAM_VERSION")
+[ -n "$CODEX_CHANNEL" ] || {
+  echo "build-codex: no Rust channel in $SOURCE/codex-rs/rust-toolchain.toml" >&2; exit 1;
+}
+[ -n "$RUST_VERSION" ] || {
+  echo "build-codex: no Rust version in $RUST_SOURCE/UPSTREAM_VERSION" >&2; exit 1;
+}
+[ "$CODEX_CHANNEL" = "$RUST_VERSION" ] || {
+  echo "build-codex: Codex wants Rust $CODEX_CHANNEL, mavericks-rust.pin builds $RUST_VERSION" >&2; exit 1;
+}
 
 export MAVERICKS_WORK="$BUILD_ROOT/rust-work"
 case "$MODE" in

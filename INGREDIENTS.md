@@ -2,7 +2,7 @@
 
 | Ingredient | Pin | Use |
 | --- | --- | --- |
-| OpenAI Codex | `UPSTREAM_VERSION` `0.157.1`; `build/codex-revision` `36650394c5b38c2990ccf2a3457165ca3e9d9726` | CLI source and Cargo workspace |
+| OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144` | CLI source and Cargo workspace |
 | Mavergreen Rust | `mavericks-rust.pin` `48cf610771f9e006e79a02b59999200e9e22cc79` | Native and cross Rust compiler, Cargo, and target support |
 | Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2` | SDK, build mode, source fetch, compatibility, and package helpers |
 

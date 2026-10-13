@@ -9,14 +9,15 @@ setup() {
 }
 
 @test "version resolution follows the family upstream and packaging axes" {
+  upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
   run sh "$MAVERGREEN_ROOT/build/versions.sh" auto
   [ "$status" -eq 0 ]
-  [ "$output" = "0.157.1-mavericks.1" ]
+  [ "$output" = "$upstream-mavericks.1" ]
 
-  export MAVERICKS_TAGS="0.157.1-mavericks.1"
+  export MAVERICKS_TAGS="$upstream-mavericks.1"
   run sh "$MAVERGREEN_ROOT/build/versions.sh" local
   [ "$status" -eq 0 ]
-  [ "$output" = "0.157.1-mavericks.2" ]
+  [ "$output" = "$upstream-mavericks.2" ]
 }
 
 @test "build root is host-local and cannot be inside the product source" {
