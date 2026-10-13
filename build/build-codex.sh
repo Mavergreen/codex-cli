@@ -26,73 +26,92 @@ ACTUAL_MODE=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
 
 BUILD_ROOT=$(mavericks_build_root)
 SOURCE=$(sh "$HERE/fetch-codex.sh")
-RUST_REVISION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/mavericks-rust.pin")
-RUST_SOURCE="$BUILD_ROOT/mavergreen-rust-src"
-sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
-  https://github.com/Mavergreen/rust.git main "$RUST_REVISION" "$RUST_SOURCE"
-[ "$(git -C "$RUST_SOURCE" rev-parse HEAD)" = "$RUST_REVISION" ] || {
-  echo "build-codex: Rust checkout does not match mavericks-rust.pin" >&2; exit 1;
-}
-[ -z "$(git -C "$RUST_SOURCE" status --porcelain)" ] || {
-  echo "build-codex: pinned Rust checkout is dirty" >&2; exit 1;
-}
+RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
 CODEX_CHANNEL=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$SOURCE/codex-rs/rust-toolchain.toml")
-RUST_VERSION=$(tr -d '[:space:]' < "$RUST_SOURCE/UPSTREAM_VERSION")
+RUST_UPSTREAM=${RUST_PIN%%-*}
 [ -n "$CODEX_CHANNEL" ] || {
   echo "build-codex: no Rust channel in $SOURCE/codex-rs/rust-toolchain.toml" >&2; exit 1;
 }
-[ -n "$RUST_VERSION" ] || {
-  echo "build-codex: no Rust version in $RUST_SOURCE/UPSTREAM_VERSION" >&2; exit 1;
+[ -n "$RUST_UPSTREAM" ] || {
+  echo "build-codex: no Rust version in components/rust/version" >&2; exit 1;
 }
-[ "$CODEX_CHANNEL" = "$RUST_VERSION" ] || {
-  echo "build-codex: Codex wants Rust $CODEX_CHANNEL, mavericks-rust.pin builds $RUST_VERSION" >&2; exit 1;
+[ "$CODEX_CHANNEL" = "$RUST_UPSTREAM" ] || {
+  echo "build-codex: Codex wants Rust $CODEX_CHANNEL, components/rust/version is $RUST_PIN" >&2; exit 1;
 }
 
-export MAVERICKS_WORK="$BUILD_ROOT/rust-work"
-case "$MODE" in
-  native)
-    RUST_VARIANT=native; export RUST_VARIANT
-    sh "$RUST_SOURCE/build/build-native.sh"
-    RUST_PREFIX="$MAVERICKS_WORK/work-native/stage/usr/local/mavergreen/rust"
-    ;;
-  cross)
-    RUST_VARIANT=cross; export RUST_VARIANT
-    sh "$RUST_SOURCE/build/build-cross.sh"
-    RUST_PREFIX="$MAVERICKS_WORK/work-cross/stage/usr/local/mavergreen/rust-cross"
-    ;;
-esac
+RUST_PREFIX=$(sh "$HERE/fetch-rust.sh")
 [ -x "$RUST_PREFIX/bin/cargo" ] && [ -x "$RUST_PREFIX/bin/rustc" ] || {
-  echo "build-codex: pinned Rust toolchain was not staged at $RUST_PREFIX" >&2; exit 1;
+  echo "build-codex: fetched Rust toolchain is incomplete at $RUST_PREFIX" >&2; exit 1;
 }
 
-SDK=""
-if [ "$MODE" = cross ]; then
-  SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh")
-  export SDKROOT="$SDK"
-elif [ -z "${SDKROOT:-}" ] && command -v xcrun >/dev/null 2>&1; then
-  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  export SDKROOT
+# Both modes compile against shipyard's pinned 10.9 SDK, which is also the SDK the Mavergreen
+# clang-22 product expects at SDKs/MacOSX10.9.sdk beside its bin/.
+SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh")
+export SDKROOT="$SDK"
+
+# C and C++ dependencies compile with Mavergreen/clang-22 (clang22 on 10.9, clang22-cross on Apple
+# Silicon). 10.9's own clang 3.5 cannot assemble aws-lc's AVX-512 code and has no <stdatomic.h>.
+# The target-specific names keep a cross build's aarch64 build scripts on the host compiler.
+case "$MODE" in native) CLANG_PRODUCT=clang22 ;; cross) CLANG_PRODUCT=clang22-cross ;; esac
+CLANG_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/clang-22/version")
+CLANG_PREFIX=$(sh "$HERE/fetch-clang-22.sh" "$CLANG_PRODUCT")
+mkdir -p "$CLANG_PREFIX/../var/$CLANG_PRODUCT/SDKs"
+ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
+[ -x "$CLANG_PREFIX/bin/clang" ] && [ -x "$CLANG_PREFIX/bin/clang++" ] &&
+  [ -d "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk/usr/include" ] || {
+  echo "build-codex: $CLANG_PRODUCT at $CLANG_PREFIX has no compilers or no SDK" >&2; exit 1;
+}
+export CC_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang"
+export CXX_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang++"
+
+# platform: protoc-bin-vendored's macOS protoc needs libc++ symbols 10.9's /usr/lib/libc++ lacks,
+#           and Codex's build script runs it by a fixed path. On 10.9 the cargo process tree runs on
+#           the release's libcxx22, extracted under the build root: inserted, flat namespace, and
+#           found by leaf name so libc++'s own libc++abi dependency resolves there too. It is
+#           build-time only and never reaches the shipped binaries. A cross build's protoc is the
+#           aarch64 one on a modern libc++ and needs none of this.
+PROTOC_RUNTIME=host
+set --
+if [ "$MODE" = native ]; then
+  LIBCXX_PREFIX=$(sh "$HERE/fetch-clang-22.sh" libcxx22)
+  PROTOC_RUNTIME="libcxx22-$CLANG_VERSION"
+  set -- env DYLD_LIBRARY_PATH="$LIBCXX_PREFIX/lib" DYLD_FORCE_FLAT_NAMESPACE=1 \
+    DYLD_INSERT_LIBRARIES="$LIBCXX_PREFIX/lib/libc++abi.1.dylib:$LIBCXX_PREFIX/lib/libc++.1.dylib"
 fi
 
 ARTIFACT="$BUILD_ROOT/codex-$MODE"
 TARGET_DIR="$BUILD_ROOT/codex-$MODE-target"
 mkdir -p "$ARTIFACT" "$TARGET_DIR"
+V8_FILES=$(sh "$HERE/fetch-rusty-v8.sh" "$SOURCE")
+# The version is read from the archive path's rusty-v8-<version>/ directory.
+RUSTY_V8_ARCHIVE=$(printf '%s\n' "$V8_FILES" | sed -n 1p)
+RUSTY_V8_SRC_BINDING_PATH=$(printf '%s\n' "$V8_FILES" | sed -n 2p)
+[ -f "$RUSTY_V8_ARCHIVE" ] && [ -f "$RUSTY_V8_SRC_BINDING_PATH" ] || {
+  echo "build-codex: fetch-rusty-v8.sh did not name an archive and a binding" >&2; exit 1;
+}
+RUSTY_V8_VERSION=$(printf '%s\n' "$RUSTY_V8_ARCHIVE" | sed -n 's,.*/rusty-v8-\([0-9][0-9.]*\)/.*,\1,p')
+[ -n "$RUSTY_V8_VERSION" ] || {
+  echo "build-codex: no V8 version in $RUSTY_V8_ARCHIVE" >&2; exit 1;
+}
+export RUSTY_V8_ARCHIVE RUSTY_V8_SRC_BINDING_PATH
 export CARGO_TARGET_DIR="$TARGET_DIR"
 export CARGO_HOME="$BUILD_ROOT/cargo-home"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
 export MACOSX_DEPLOYMENT_TARGET=10.9
 
-(cd "$SOURCE/codex-rs" && PATH="$RUST_PREFIX/bin:$PATH" \
+(cd "$SOURCE/codex-rs" && PATH="$RUST_PREFIX/bin:$PATH" "$@" \
   "$RUST_PREFIX/bin/cargo" build --locked --release \
-  --target x86_64-apple-darwin -p codex-cli)
+  --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host) || exit 1
 
-cp "$TARGET_DIR/x86_64-apple-darwin/release/codex" "$ARTIFACT/codex"
-chmod 755 "$ARTIFACT/codex"
+for binary in codex codex-code-mode-host; do
+  cp "$TARGET_DIR/x86_64-apple-darwin/release/$binary" "$ARTIFACT/$binary"
+  chmod 755 "$ARTIFACT/$binary"
+done
 VERSION=$(sh "$HERE/versions.sh" auto)
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
-  printf 'source_revision=%s\nrust_revision=%s\n' \
-    "$(cat "$HERE/codex-revision")" "$RUST_REVISION"
-  if [ -n "$SDK" ]; then printf 'sdk=%s\n' "$SDK"; fi
+  printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \
+    "$(cat "$HERE/codex-revision")" "$RUST_PIN" "$RUSTY_V8_VERSION"
+  printf 'clang_version=%s\nprotoc_runtime=%s\nsdk=%s\n' "$CLANG_VERSION" "$PROTOC_RUNTIME" "${SDK##*/}"
 } > "$ARTIFACT/build-manifest"
 printf '%s\n' "$ARTIFACT"

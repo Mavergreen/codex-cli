@@ -14,13 +14,14 @@ case "$SOURCE/" in
   "$PRODUCT_ROOT/"*) echo "transfer-artifact: source must be outside the product tree" >&2; exit 1 ;;
 esac
 [ -x "$SOURCE/codex" ] || { echo "transfer-artifact: missing executable $SOURCE/codex" >&2; exit 1; }
+[ -x "$SOURCE/codex-code-mode-host" ] || { echo "transfer-artifact: missing executable $SOURCE/codex-code-mode-host" >&2; exit 1; }
 [ -f "$SOURCE/build-manifest" ] || { echo "transfer-artifact: missing $SOURCE/build-manifest" >&2; exit 1; }
 
 BUILD_ROOT=$(sh "$HERE/resolve-build-root.sh")
 STAGING="$BUILD_ROOT/transfer-artifact.$$"
 mkdir "$STAGING"
 trap 'rm -rf "$STAGING"' EXIT HUP INT TERM
-tar -cf "$STAGING/codex.tar" -C "$SOURCE" codex build-manifest
+tar -cf "$STAGING/codex.tar" -C "$SOURCE" codex codex-code-mode-host build-manifest
 (cd "$STAGING" && shasum -a 256 codex.tar > codex.tar.sha256)
 
 case "$DESTINATION" in

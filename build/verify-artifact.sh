@@ -31,17 +31,20 @@ actual_hash=$(shasum -a 256 "$ARCHIVE" | awk '{ print $1 }')
 
 members=$(tar -tf "$ARCHIVE") || { echo "verify-artifact: cannot list archive" >&2; exit 1; }
 member_count=$(printf '%s\n' "$members" | awk 'NF { n++ } END { print n+0 }')
-[ "$member_count" -eq 2 ] || { echo "verify-artifact: archive must contain exactly codex and build-manifest" >&2; exit 1; }
+[ "$member_count" -eq 3 ] || { echo "verify-artifact: archive must contain exactly codex, codex-code-mode-host and build-manifest" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx codex || { echo "verify-artifact: archive has no codex executable" >&2; exit 1; }
+printf '%s\n' "$members" | grep -qx codex-code-mode-host || { echo "verify-artifact: archive has no codex-code-mode-host executable" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx build-manifest || { echo "verify-artifact: archive has no build-manifest" >&2; exit 1; }
 
-tar -tvf "$ARCHIVE" | awk '
-  $NF == "codex" {
-    mode = $1
-    if (substr(mode, 4, 1) == "x" || substr(mode, 7, 1) == "x" || substr(mode, 10, 1) == "x") found = 1
-  }
-  END { exit !found }
-' || { echo "verify-artifact: codex executable bit is missing" >&2; exit 1; }
+for member in codex codex-code-mode-host; do
+  tar -tvf "$ARCHIVE" | awk -v member="$member" '
+    $NF == member {
+      mode = $1
+      if (substr(mode, 4, 1) == "x" || substr(mode, 7, 1) == "x" || substr(mode, 10, 1) == "x") found = 1
+    }
+    END { exit !found }
+  ' || { echo "verify-artifact: $member executable bit is missing" >&2; exit 1; }
+done
 
 BUILD_ROOT=$(sh "$HERE/resolve-build-root.sh")
 TMP="$BUILD_ROOT/verify-artifact.$$"
@@ -49,21 +52,28 @@ mkdir "$TMP"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 tar -xOf "$ARCHIVE" build-manifest > "$TMP/build-manifest"
 tar -xOf "$ARCHIVE" codex > "$TMP/codex"
+tar -xOf "$ARCHIVE" codex-code-mode-host > "$TMP/codex-code-mode-host"
 
 field() { sed -n "s/^$1=//p" "$TMP/build-manifest"; }
 target=$(field target)
 deployment_target=$(field deployment_target)
 source_revision=$(field source_revision)
-rust_revision=$(field rust_revision)
+rust_version=$(field rust_version)
+rusty_v8_version=$(field rusty_v8_version)
 [ "$target" = "$EXPECTED_TARGET" ] || { echo "verify-artifact: target mismatch ($target)" >&2; exit 1; }
 [ "$deployment_target" = 10.9 ] || { echo "verify-artifact: deployment target must be 10.9" >&2; exit 1; }
 [ "$source_revision" = "$(tr -d '[:space:]' < "$HERE/codex-revision")" ] || {
   echo "verify-artifact: Codex source revision mismatch" >&2; exit 1;
 }
-[ "$rust_revision" = "$(tr -d '[:space:]' < "$PRODUCT_ROOT/mavericks-rust.pin")" ] || {
-  echo "verify-artifact: Rust toolchain revision mismatch" >&2; exit 1;
+[ "$rust_version" = "$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/rust/version")" ] || {
+  echo "verify-artifact: Rust toolchain version mismatch" >&2; exit 1;
 }
-file "$TMP/codex" | grep -q 'Mach-O 64-bit x86_64 executable' || {
-  echo "verify-artifact: codex is not an x86_64 Mach-O executable" >&2; exit 1;
-}
+case "$rusty_v8_version" in
+  ''|*[!0-9.]*|.*) echo "verify-artifact: malformed rusty_v8_version ($rusty_v8_version)" >&2; exit 1 ;;
+esac
+for member in codex codex-code-mode-host; do
+  file "$TMP/$member" | grep -q 'Mach-O 64-bit x86_64 executable' || {
+    echo "verify-artifact: $member is not an x86_64 Mach-O executable" >&2; exit 1;
+  }
+done
 echo "verify-artifact: ok ($target, macOS $deployment_target)"

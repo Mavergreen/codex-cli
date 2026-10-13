@@ -6,16 +6,18 @@ setup() {
   export MAVERICKS_BUILD_ROOT="$BATS_TEST_TMPDIR/local-build"
   mkdir -p "$MAVERICKS_BUILD_ROOT/codex-native" "$MAVERICKS_BUILD_ROOT/codex-cross"
   source_revision=$(cat "$PRODUCT_ROOT/build/codex-revision")
-  rust_revision=$(cat "$PRODUCT_ROOT/mavericks-rust.pin")
-  printf 'mode=native\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_revision=%s\n' \
-    "$source_revision" "$rust_revision" > "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
-  printf 'mode=cross\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_revision=%s\n' \
-    "$source_revision" "$rust_revision" > "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  rust_version=$(cat "$PRODUCT_ROOT/components/rust/version")
+  clang_version=$(cat "$PRODUCT_ROOT/components/clang-22/version")
+  printf 'mode=native\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_version=%s\nrusty_v8_version=150.4.0\nclang_version=%s\nprotoc_runtime=libcxx22-%s\nsdk=MacOSX10.9.sdk\n' \
+    "$source_revision" "$rust_version" "$clang_version" "$clang_version" > "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  printf 'mode=cross\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_version=%s\nrusty_v8_version=150.4.0\nclang_version=%s\nprotoc_runtime=host\nsdk=MacOSX10.9.sdk\n' \
+    "$source_revision" "$rust_version" "$clang_version" > "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
 }
 
 @test "native and cross manifests agree on pinned source and toolchain" {
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "check-build-manifests: native and cross inputs match" ]
 }
 
 @test "cross manifest must match the committed Codex revision" {
@@ -36,4 +38,51 @@ setup() {
   export MAVERICKS_BUILD_ROOT="$PRODUCT_ROOT/build-output"
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -ne 0 ]
+}
+
+@test "native and cross manifests must agree on the V8 version" {
+  sed -i.bak 's/^rusty_v8_version=.*/rusty_v8_version=150.5.0/' \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "native and cross manifests must agree on the clang-22 version" {
+  sed -i.bak 's/^clang_version=.*/clang_version=22.1.1-mavericks.1/' \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "the native protoc runtime must be the pinned libcxx22" {
+  sed -i.bak 's/^protoc_runtime=.*/protoc_runtime=host/' \
+    "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "the cross protoc runtime must be the host's own" {
+  sed -i.bak "s/^protoc_runtime=.*/protoc_runtime=libcxx22-$clang_version/" \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "native and cross manifests must both name the same SDK" {
+  sed -i.bak 's/^sdk=.*/sdk=MacOSX11.3.sdk/' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"SDK differs"* ]]
+
+  sed -i.bak '/^sdk=/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"missing or malformed sdk"* ]]
+}
+
+@test "every build script with a shebang has it on line 1" {
+  for script in "$PRODUCT_ROOT"/build/*.sh; do
+    grep -q '^#!/bin/sh$' "$script" || continue
+    [ "$(head -n 1 "$script")" = '#!/bin/sh' ] || { echo "no shebang on line 1: $script"; return 1; }
+  done
 }

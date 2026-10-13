@@ -3,26 +3,32 @@
 | Ingredient | Pin | Use |
 | --- | --- | --- |
 | OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144` | CLI source and Cargo workspace |
-| Mavergreen Rust | `mavericks-rust.pin` `48cf610771f9e006e79a02b59999200e9e22cc79` | Native and cross Rust compiler, Cargo, and target support |
+| Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.95.0-mavericks.2`); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning) is wired with the old plan's Task 6. A bump past Codex's `rust-toolchain.toml` channel fails the build at the guard | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
+| Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
 | Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2` | SDK, build mode, source fetch, compatibility, and package helpers |
+| OpenAI prebuilt `rusty_v8` | Derived from Codex's `Cargo.lock` (`v8` package), so a Codex bump moves it with no separate pin and Renovate tracks nothing extra; verified against upstream's published `.sha256` checksums file | Static V8 archive linked into `codex-code-mode-host`; prebuilt because building V8 needs Chromium's toolchain and python3, which a native 10.9 build lacks |
 
 Codex is fetched into a host-local build root with shipyard's `clone_pinned.sh`. The exact Codex
 commit is verified before committed `patches/*.patch` files are applied. `patches/README.md` says
 what each patch changes and why, and `PROVENANCE.md` says where they came from. The `codex/`
-directory is an ignored inspection checkout and is never a build input. The Rust checkout is
-fetched and verified independently from its exact pin. Build and transfer staging directories
+directory is an ignored inspection checkout and is never a build input. The Rust toolchain is
+fetched and verified independently from its release. Build and transfer staging directories
 must remain outside this product source tree; `MAVERICKS_BUILD_ROOT` overrides the default
 `${TMPDIR:-/tmp}/mm-build`.
 
-`build/build-codex.sh native` runs on ultimate-hat (Mac OS X 10.9). It builds the pinned Mavergreen
-Rust toolchain and Codex CLI for `x86_64-apple-darwin`. `build/build-codex.sh cross` runs on modern
-macOS and uses shipyard's pinned 10.9 SDK. Both paths set `MACOSX_DEPLOYMENT_TARGET=10.9`, use
+`build/build-codex.sh native` runs on ultimate-hat (Mac OS X 10.9). It fetches the released Mavergreen
+Rust toolchain and builds Codex CLI for `x86_64-apple-darwin`. `build/build-codex.sh cross` runs on modern
+macOS. Both modes use shipyard's pinned 10.9 SDK, which is also the SDK the clang-22 product compiles against. Both paths set `MACOSX_DEPLOYMENT_TARGET=10.9`, use
 Cargo's locked dependency graph, and set `CARGO_NET_GIT_FETCH_WITH_CLI=true` for nested Git sources.
-Cargo home, target output, Rust work trees, and transfer staging stay under the local build root.
+Cargo home, target output, extracted toolchains, and transfer staging stay under the local build root.
 
-Only `codex-cli` is built and transferred. The package does not include `codex-voice-host`, the
-native voice runtime, or `codex-resources/voice`; voice support is deferred. Native build and CLI
-smoke validation on ultimate-hat remain required out-of-band checks and have not yet been run.
+`codex-cli` and `codex-code-mode-host` are built and transferred together: Codex finds the host as a
+sibling of its own canonicalized executable. The host links V8, so the build fetches OpenAI's prebuilt
+`rusty_v8` archive with `build/fetch-rusty-v8.sh` (the one declared non-Mavergreen input) and records
+`rusty_v8_version` in the build manifest. The package does not include `codex-voice-host`, the
+native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was run on 2026-10-13. It compiles through every dependency, but
+the final links are blocked: see `docs/compatibility-matrix.md`. The CLI smoke checks have not been
+run yet.
 
 ## Compatibility gate implementation
 
