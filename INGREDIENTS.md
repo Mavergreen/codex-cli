@@ -7,10 +7,12 @@
 | Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2` | SDK, build mode, source fetch, compatibility, and package helpers |
 
 Codex is fetched into a host-local build root with shipyard's `clone_pinned.sh`. The exact Codex
-commit is verified before committed `patches/*.patch` files are applied. The `codex/` directory is
-an ignored inspection checkout and is never a build input. The Rust checkout is fetched and verified
-independently from its exact pin. Build and transfer staging directories must remain outside this
-product source tree; `MAVERICKS_BUILD_ROOT` overrides the default `${TMPDIR:-/tmp}/mm-build`.
+commit is verified before committed `patches/*.patch` files are applied. `patches/README.md` says
+what each patch changes and why, and `PROVENANCE.md` says where they came from. The `codex/`
+directory is an ignored inspection checkout and is never a build input. The Rust checkout is
+fetched and verified independently from its exact pin. Build and transfer staging directories
+must remain outside this product source tree; `MAVERICKS_BUILD_ROOT` overrides the default
+`${TMPDIR:-/tmp}/mm-build`.
 
 `build/build-codex.sh native` runs on ultimate-hat (Mac OS X 10.9). It builds the pinned Mavergreen
 Rust toolchain and Codex CLI for `x86_64-apple-darwin`. `build/build-codex.sh cross` runs on modern

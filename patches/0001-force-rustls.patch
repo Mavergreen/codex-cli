@@ -1,0 +1,17 @@
+diff --git a/codex-rs/http-client/src/custom_ca.rs b/codex-rs/http-client/src/custom_ca.rs
+--- a/codex-rs/http-client/src/custom_ca.rs
++++ b/codex-rs/http-client/src/custom_ca.rs
+@@ -291,6 +291,13 @@ fn build_reqwest_client_with_env(
+     env_source: &dyn EnvSource,
+     mut builder: reqwest::ClientBuilder,
+ ) -> Result<reqwest::Client, BuildCustomCaTransportError> {
++    // macOS 10.9: reqwest defaults to Secure Transport, which cannot negotiate modern TLS and
++    // fails with a handshake error. Codex's rustls retry is opt-in and does not cover every API
++    // client, so force the bundled rustls backend (with platform native roots) for every request,
++    // not only the custom-CA path.
++    ensure_rustls_crypto_provider();
++    builder = builder.use_rustls_tls();
++
+     if let Some(bundle) = env_source.configured_ca_bundle() {
+         ensure_rustls_crypto_provider();
+         info!(

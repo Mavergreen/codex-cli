@@ -30,13 +30,27 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "fetch uses the committed upstream revision" {
+@test "fetch applies the committed patch series to the pinned revision" {
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
   source_dir="$MAVERICKS_BUILD_ROOT/codex-src"
   [ "$(git -C "$source_dir" rev-parse HEAD)" = "$(cat "$MAVERGREEN_ROOT/build/codex-revision")" ]
-  [ -z "$(git -C "$source_dir" status --porcelain)" ]
+  expected=$(printf '%s\n' \
+    codex-rs/http-client/src/custom_ca.rs \
+    codex-rs/core/src/config/mod.rs \
+    codex-rs/features/src/lib.rs \
+    codex-rs/user-verification/src/lib.rs \
+    codex-rs/tui/Cargo.toml \
+    codex-rs/tui/src/screen_reader.rs \
+    codex-rs/tui/src/system_motion.rs \
+    codex-rs/sandboxing/src/seatbelt_base_policy.sbpl \
+    codex-rs/sandboxing/src/seatbelt_preferences_policy.sbpl \
+    codex-rs/sandboxing/src/seatbelt_tests.rs \
+    codex-rs/sandboxing/src/seatbelt.rs \
+    codex-rs/sandboxing/src/seatbelt_daemon.rs | sort)
+  [ "$(git -C "$source_dir" diff --name-only | sort)" = "$expected" ]
+  [ -z "$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ')" ]
 }
 
 @test "patch application applies the committed patch series in lexical order" {

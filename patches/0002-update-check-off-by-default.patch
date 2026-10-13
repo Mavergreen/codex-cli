@@ -1,0 +1,15 @@
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -3921,7 +3921,10 @@ impl Config {
+ 
+         let review_model = override_review_model.or(cfg.review_model);
+ 
+-        let check_for_update_on_startup = cfg.check_for_update_on_startup.unwrap_or(true);
++        // This compatibility build targets macOS versions where Codex's detected package manager
++        // may be unavailable. Avoid background update checks unless the user explicitly enables
++        // them, so startup never offers an update path that cannot run on the host.
++        let check_for_update_on_startup = cfg.check_for_update_on_startup.unwrap_or(false);
+         let model_catalog = load_model_catalog(cfg.model_catalog_json.clone())?;
+ 
+         let log_dir = cfg

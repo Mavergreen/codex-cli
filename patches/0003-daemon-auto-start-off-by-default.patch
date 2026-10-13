@@ -1,0 +1,15 @@
+diff --git a/codex-rs/features/src/lib.rs b/codex-rs/features/src/lib.rs
+--- a/codex-rs/features/src/lib.rs
++++ b/codex-rs/features/src/lib.rs
+@@ -941,7 +941,10 @@ pub const FEATURES: &[FeatureSpec] = &[
+         id: Feature::DaemonAutoStart,
+         key: "daemon_auto_start",
+         stage: Stage::Stable,
+-        default_enabled: true,
++        // This compatibility build has no packaged install for the shared background server, and
++        // that server's updater installs upstream builds the host may not run. Start it only when
++        // the user explicitly enables it.
++        default_enabled: false,
+     },
+     FeatureSpec {
+         id: Feature::TranscriptV2,

@@ -1,22 +1,3 @@
-diff --git a/codex-rs/cli/src/debug_sandbox.rs b/codex-rs/cli/src/debug_sandbox.rs
-index 55d71d6..e6e27db 100644
---- a/codex-rs/cli/src/debug_sandbox.rs
-+++ b/codex-rs/cli/src/debug_sandbox.rs
-@@ -413,7 +413,13 @@ async fn run_command_under_sandbox(
-             // for the unsandboxed shell that resumes when Codex exits.
-             match args.as_mut_slice() {
-                 [flag, policy, ..] if flag.as_str() == "-p" => {
--                    policy.push_str("\n(deny file-ioctl (ioctl-command TIOCSTI))");
-+                    // TIOCSTI is 0x80017472 on Darwin, but Mavericks does not
-+                    // expose the symbolic constant to Seatbelt profiles.
-+                    policy.push_str(
-+                        "\n(if (defined? 'TIOCSTI)\n\
-+                         (deny file-ioctl (ioctl-command TIOCSTI))\n\
-+                         (deny file-ioctl (ioctl-command 2147578994)))",
-+                    );
-                 }
-                 _ => anyhow::bail!("Seatbelt command is missing its generated policy"),
-             }
 diff --git a/codex-rs/sandboxing/src/seatbelt.rs b/codex-rs/sandboxing/src/seatbelt.rs
 index 3597649..4a27a56 100644
 --- a/codex-rs/sandboxing/src/seatbelt.rs
