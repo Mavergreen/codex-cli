@@ -37,7 +37,7 @@ write_sums() {
   (cd "$release" && printf '%s  other.pkg\n' "$(printf x | shasum -a 256 | cut -c1-64)" > SHA256SUMS)
   run sh "$PRODUCT_ROOT/build/fetch-rust.sh"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"$pkg"* ]]
+  [[ "$output" == *"$pkg"* ]] || false
   [ ! -e "$dir/root" ]
 }
 

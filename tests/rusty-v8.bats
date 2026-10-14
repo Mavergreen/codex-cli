@@ -27,7 +27,7 @@ write_sums() {
 @test "derives the V8 version from Cargo.lock" {
   run sh "$MAVERGREEN_ROOT/build/fetch-rusty-v8.sh" "$source_dir"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"fetch-rusty-v8: v8 150.4.0"* ]]
+  [[ "$output" == *"fetch-rusty-v8: v8 150.4.0"* ]] || false
   dir="$(sh "$MAVERGREEN_ROOT/build/resolve-build-root.sh")/rusty-v8-150.4.0"
   [ -f "$dir/$archive" ]
   [ -f "$dir/$binding" ]
@@ -40,8 +40,18 @@ $dir/$binding" ]
   (cd "$release" && shasum -a 256 "$binding" > "$sums")
   run sh "$MAVERGREEN_ROOT/build/fetch-rusty-v8.sh" "$source_dir"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"$archive"* ]]
+  [[ "$output" == *"$archive"* ]] || false
   [ ! -e "$MAVERICKS_BUILD_ROOT/rusty-v8-150.4.0/$archive" ]
+}
+
+@test "rejects a checksum that is not all lowercase hex, wherever the bad digit is" {
+  good=$(shasum -a 256 "$release/$archive" | awk '{ print $1 }')
+  for bad in "Z${good#?}" "${good%?}Z" "$(printf '%s' "$good" | tr a-f A-F)"; do
+    (cd "$release" && { printf '%s  %s\n' "$bad" "$archive"; shasum -a 256 "$binding"; } > "$sums")
+    run sh "$MAVERGREEN_ROOT/build/fetch-rusty-v8.sh" "$source_dir"
+    [ "$status" -eq 1 ] || { echo "accepted $bad"; return 1; }
+    [[ "$output" == *"$sums does not list $archive"* ]] || false
+  done
 }
 
 @test "rejects an asset whose bytes do not match" {
@@ -63,7 +73,7 @@ $dir/$binding" ]
 @test "exits 2 with usage when given no source dir" {
   run sh "$MAVERGREEN_ROOT/build/fetch-rusty-v8.sh"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"usage: fetch-rusty-v8.sh SOURCE-DIR"* ]]
+  [[ "$output" == *"usage: fetch-rusty-v8.sh SOURCE-DIR"* ]] || false
 }
 
 @test "re-verifies a cached archive" {

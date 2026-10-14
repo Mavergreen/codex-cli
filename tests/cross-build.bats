@@ -72,12 +72,12 @@ setup() {
   sed -i.bak 's/^sdk=.*/sdk=MacOSX11.3.sdk/' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"SDK differs"* ]]
+  [[ "$output" == *"SDK differs"* ]] || false
 
   sed -i.bak '/^sdk=/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"missing or malformed sdk"* ]]
+  [[ "$output" == *"missing or malformed sdk"* ]] || false
 }
 
 @test "every build script with a shebang has it on line 1" {

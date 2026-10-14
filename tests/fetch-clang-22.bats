@@ -60,7 +60,7 @@ fake_release() {
   (cd "$release" && printf '%s  other.pkg\n' "$(printf x | shasum -a 256 | cut -c1-64)" > SHA256SUMS)
   run sh "$PRODUCT_ROOT/build/fetch-clang-22.sh" libcxx22
   [ "$status" -ne 0 ]
-  [[ "$output" == *"libcxx22-$version.pkg"* ]]
+  [[ "$output" == *"libcxx22-$version.pkg"* ]] || false
   [ ! -e "$build_root/toolchain/libcxx22-$version/root" ]
 }
 

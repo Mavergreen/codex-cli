@@ -22,10 +22,11 @@ sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
   echo "fetch-codex: checkout does not match build/codex-revision" >&2; exit 1;
 }
 
-# A prepared checkout is reused only while it is exactly what this script last left there, so a
-# rebuild keeps the source mtimes Cargo's fingerprints depend on. The stamp lives under .git/, out
-# of the worktree, and names both every input to the preparation and the resulting tree state,
-# ignored files included.
+# spec: tests/build-inputs.bats "fetch reuses its own prepared checkout without touching it" -- a
+#       rebuild must keep the source mtimes Cargo's fingerprints depend on, so a prepared checkout
+#       is reused only while it is exactly what this script last left there. The stamp lives under
+#       .git/, out of the worktree, and names every input to the preparation and the resulting
+#       tree state, ignored files included.
 STAMP="$DEST/.git/mavergreen-prepared"
 inputs_id() {
   cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/UPSTREAM_VERSION" \
@@ -45,10 +46,10 @@ rm -f "$STAMP"
 
 mavericks_apply_patches "$DEST" "$MAVERICKS_ROOT/patches"
 
-# The rust-v tag sets [workspace.package] version, but its Cargo.lock still records 0.0.0 for every
-# workspace member, so `cargo build --locked` refuses the tree as shipped. Only those entries -- the
-# lock's path packages (no `source`) at 0.0.0 -- get the workspace version; --locked still rejects
-# any other difference between the lock and the manifests.
+# platform: the rust-v tag sets [workspace.package] version, but its Cargo.lock still records 0.0.0
+#           for every workspace member, so `cargo build --locked` refuses the tree as shipped. Only
+#           the lock's path packages (no `source`) at 0.0.0 get the workspace version; --locked
+#           still rejects any other difference between the lock and the manifests.
 LOCK="$DEST/codex-rs/Cargo.lock"
 WORKSPACE_VERSION=$(awk '
   /^\[workspace\.package\]$/ { want = 1; next }

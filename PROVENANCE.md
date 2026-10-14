@@ -1,8 +1,9 @@
 # Provenance
 
-Patches 0001 to 0007 in `patches/` are Wowfunhappy's work, made against Codex 0.161.0 and tested by
-building it natively on Mac OS X 10.9. They are CC0 and used with Wowfunhappy's permission. Later
-patches are this product's own.
+Patches 0001 to 0007 in `patches/` are Wowfunhappy's work. The received patch files are named for
+Codex 0.151.0 and 0.157.0 (see the table); the patches were carried to Codex 0.161.0 and measured
+there, by building it natively on Mac OS X 10.9. They are CC0 and used with Wowfunhappy's
+permission. Later patches are this product's own.
 
 | Received file | Where it is now | How it changed |
 |---|---|---|

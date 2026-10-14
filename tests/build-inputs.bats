@@ -23,7 +23,7 @@ setup() {
 @test "build root is host-local and cannot be inside the product source" {
   run sh "$MAVERGREEN_ROOT/build/resolve-build-root.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == "$MAVERICKS_BUILD_ROOT" ]]
+  [ "$output" = "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)" ]
 
   export MAVERICKS_BUILD_ROOT="$MAVERGREEN_ROOT/build-output"
   run sh "$MAVERGREEN_ROOT/build/resolve-build-root.sh"
@@ -51,8 +51,10 @@ setup() {
     codex-rs/sandboxing/src/seatbelt.rs \
     codex-rs/sandboxing/src/seatbelt_daemon.rs \
     codex-rs/utils/pty/src/posix_child.rs | sort)
-  [ "$(git -C "$source_dir" diff --name-only | sort)" = "$expected" ]
-  [ -z "$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ')" ]
+  changed=$(git -C "$source_dir" diff --name-only | sort)
+  [ "$changed" = "$expected" ] || { printf 'expected changes:\n%s\nchanged:\n%s\n' "$expected" "$changed"; return 1; }
+  others=$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ' || true)
+  [ -z "$others" ] || { printf 'status beyond the modified files:\n%s\n' "$others"; return 1; }
 }
 
 @test "fetch records the workspace version for every path package in Cargo.lock" {
@@ -61,7 +63,7 @@ setup() {
   [ "$status" -eq 0 ]
   source_dir="$MAVERICKS_BUILD_ROOT/codex-src"
   upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
-  changed=$(git -C "$source_dir" diff -U0 codex-rs/Cargo.lock | grep '^[-+][^-+]' | sort -u)
+  changed=$(git -C "$source_dir" diff -U0 codex-rs/Cargo.lock | grep '^[-+][^-+]' | LC_ALL=C sort -u)
   [ "$changed" = "$(printf '+version = "%s"\n-version = "0.0.0"' "$upstream")" ]
   [ "$(grep -c '^version = "0.0.0"$' "$source_dir/codex-rs/Cargo.lock")" -eq 0 ]
 }
@@ -106,7 +108,7 @@ index 0000000..9daeafb
 PATCH
   run sh "$product/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"discarding a stale prepared checkout"* ]]
+  [[ "$output" == *"discarding a stale prepared checkout"* ]] || false
   [ -f "$source_dir/codex-rs/mavergreen-series-probe.txt" ]
 
   rm "$product/patches/0099-series-probe.patch"
@@ -123,7 +125,7 @@ PATCH
   printf '0.0.1\n' > "$product/UPSTREAM_VERSION"
   run sh "$product/build/fetch-codex.sh"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"workspace version"*"is not 0.0.1"* ]]
+  [[ "$output" == *"workspace version"*"is not 0.0.1"* ]] || false
 }
 
 @test "fetch discards a checkout it did not prepare and applies the series again" {

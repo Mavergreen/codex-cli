@@ -1,4 +1,6 @@
 #!/usr/bin/env bats
+# platform: macOS-only -- verify-artifact.sh reads load commands with otool, and some fixtures are
+#           compiled with cc and edited with install_name_tool
 
 setup() {
   export PRODUCT_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
@@ -41,6 +43,25 @@ make_archive() {
 @test "verifies a matching x86_64 Mavericks artifact" {
   run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
   [ "$status" -eq 0 ]
+}
+
+# Apple's /usr/bin/file spells the type "Mach-O 64-bit executable x86_64", not upstream's
+# "Mach-O 64-bit x86_64 executable". Putting /usr/bin first keeps a host's pkgsrc or Homebrew
+# file(1) from answering for it.
+@test "verifies a matching artifact with Apple's file(1)" {
+  [ -x /usr/bin/file ] || skip "no /usr/bin/file"
+  PATH="/usr/bin:/bin:$PATH" run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -eq 0 ]
+  [ "$output" = "verify-artifact: ok (x86_64-apple-darwin, macOS 10.9)" ]
+}
+
+@test "rejects an arm64 codex with Apple's file(1)" {
+  [ -x /usr/bin/file ] || skip "no /usr/bin/file"
+  make_binary arm64 "$CODEX_ARTIFACT"
+  make_archive
+  PATH="/usr/bin:/bin:$PATH" run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -eq 1 ]
+  [ "$output" = "verify-artifact: codex is not an x86_64 Mach-O executable" ]
 }
 
 @test "rejects an archive whose bytes no longer match its checksum" {
@@ -90,6 +111,31 @@ make_archive() {
   make_archive
   run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
   [ "$status" -ne 0 ]
+}
+
+# make_leaky_binary PATH: an x86_64 executable with an LC_RPATH into /opt/pkg
+make_leaky_binary() {
+  printf 'int main(void) { return 0; }\n' > "$BATS_TEST_TMPDIR/stub.c"
+  cc -arch x86_64 -o "$1" "$BATS_TEST_TMPDIR/stub.c" -Wl,-headerpad_max_install_names
+  install_name_tool -add_rpath /opt/pkg/lib "$1"
+}
+
+@test "rejects a codex that loads from outside the OS" {
+  make_leaky_binary "$CODEX_ARTIFACT"
+  make_archive
+  run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "verify-artifact: a member loads a library from outside the OS" ]
+  [[ "${lines[0]}" == *"/codex: LC_RPATH /opt/pkg/lib"* ]] || false
+}
+
+@test "rejects a codex-code-mode-host that loads from outside the OS" {
+  make_leaky_binary "$HOST_ARTIFACT"
+  make_archive
+  run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "verify-artifact: a member loads a library from outside the OS" ]
+  [[ "${lines[0]}" == *"/codex-code-mode-host: LC_RPATH /opt/pkg/lib"* ]] || false
 }
 
 @test "rejects a manifest without a well-formed rusty_v8_version" {

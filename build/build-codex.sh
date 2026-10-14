@@ -26,23 +26,43 @@ ACTUAL_MODE=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
 
 BUILD_ROOT=$(mavericks_build_root)
 SOURCE=$(sh "$HERE/fetch-codex.sh")
+sh "$HERE/check-rust-pin.sh" "$SOURCE"
 RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
-CODEX_CHANNEL=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$SOURCE/codex-rs/rust-toolchain.toml")
-sh "$HERE/check-rust-pin.sh" "$CODEX_CHANNEL" "$RUST_PIN"
 
 RUST_PREFIX=$(sh "$HERE/fetch-rust.sh")
 [ -x "$RUST_PREFIX/bin/cargo" ] && [ -x "$RUST_PREFIX/bin/rustc" ] || {
   echo "build-codex: fetched Rust toolchain is incomplete at $RUST_PREFIX" >&2; exit 1;
 }
 
-# Both modes compile against shipyard's pinned 10.9 SDK, which is also the SDK the Mavergreen
-# clang-22 product expects at SDKs/MacOSX10.9.sdk beside its bin/.
+# platform: both modes build against shipyard's pinned 10.9 SDK. The Mavergreen clang-22 product
+#           expects it at SDKs/MacOSX10.9.sdk beside its bin/, and its cfg passes -isysroot there
+#           for every target C and C++ compile; this host's xcrun --show-sdk-path prints nothing.
 SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh")
-export SDKROOT="$SDK"
+# platform: cargo uses RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS from the caller in place of the
+#           target rustflags that cross sets below, so neither reaches either mode.
+unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
+case "$MODE" in
+  # platform: natively host and target are both 10.9 x86_64, so SDKROOT may reach build scripts
+  #           too. The 2026-10-14 native builds were measured with it set.
+  native) export SDKROOT="$SDK" ;;
+  # platform: in cross, SDKROOT would also reach the aarch64 build scripts and proc macros, which
+  #           cannot link against the 10.9 SDK (as ../mavergreen-rg and ../mavergreen-fd's
+  #           build/build.sh say). target.x86_64-apple-darwin rustflags reach only the target's
+  #           links, and cargo splits them on whitespace. Not yet measured on an arm64 host.
+  cross)
+    case "$SDK" in *[[:space:]]*)
+      echo "build-codex: the SDK path $SDK contains whitespace, which cargo would split inside its rustflags" >&2
+      exit 1 ;;
+    esac
+    unset SDKROOT
+    CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS="-C link-arg=-isysroot -C link-arg=$SDK"
+    export CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS ;;
+esac
 
-# C and C++ dependencies compile with Mavergreen/clang-22 (clang22 on 10.9, clang22-cross on Apple
-# Silicon). 10.9's own clang 3.5 cannot assemble aws-lc's AVX-512 code and has no <stdatomic.h>.
-# The target-specific names keep a cross build's aarch64 build scripts on the host compiler.
+# platform: 10.9's own clang 3.5 cannot assemble aws-lc's AVX-512 code and has no <stdatomic.h>,
+#           so C and C++ dependencies compile with Mavergreen/clang-22 (clang22 on 10.9,
+#           clang22-cross on Apple Silicon). The target-specific names keep a cross build's
+#           aarch64 build scripts on the host compiler.
 case "$MODE" in native) CLANG_PRODUCT=clang22 ;; cross) CLANG_PRODUCT=clang22-cross ;; esac
 CLANG_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/clang-22/version")
 CLANG_PREFIX=$(sh "$HERE/fetch-clang-22.sh" "$CLANG_PRODUCT")
@@ -54,10 +74,11 @@ ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
 }
 export CC_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang"
 export CXX_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang++"
-# The same clang++ links. 10.9's cc overflows posix_spawn's argv on codex-code-mode-host's ~1355
-# LTO objects; clang-22 hands lld a response file and links V8's static libc++. Its cfg links
-# librecaulk.a, so Mavergreen/rust's rustc (from 1.99.0-mavericks.2) adds no back-fill of its own.
-# The manifest needs no field for it: it follows clang_version, which both modes must match.
+# platform: 10.9's cc overflows posix_spawn's argv on codex-code-mode-host's ~1355 LTO objects, so
+#           the same clang++ links: it hands lld a response file. Its cfg links librecaulk.a, so
+#           Mavergreen/rust's rustc (from 1.99.0-mavericks.2) adds no back-fill of its own. The
+#           manifest needs no linker field: the linker follows clang_version, which both modes
+#           must match.
 export CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$CLANG_PREFIX/bin/clang++"
 # platform: no host pkg-config answers for the 10.9 target. ultimate-hat's pkgsrc one made lzma-sys
 #           link /opt/pkg/lib/liblzma.5.dylib (and, through its -L, /opt/pkg's libiconv) into codex,
@@ -84,7 +105,7 @@ ARTIFACT="$BUILD_ROOT/codex-$MODE"
 TARGET_DIR="$BUILD_ROOT/codex-$MODE-target"
 mkdir -p "$ARTIFACT" "$TARGET_DIR"
 V8_FILES=$(sh "$HERE/fetch-rusty-v8.sh" "$SOURCE")
-# The version is read from the archive path's rusty-v8-<version>/ directory.
+# spec: build/fetch-rusty-v8.sh -- it stores the archive under rusty-v8-<Cargo.lock's v8 version>/.
 RUSTY_V8_ARCHIVE=$(printf '%s\n' "$V8_FILES" | sed -n 1p)
 RUSTY_V8_SRC_BINDING_PATH=$(printf '%s\n' "$V8_FILES" | sed -n 2p)
 [ -f "$RUSTY_V8_ARCHIVE" ] && [ -f "$RUSTY_V8_SRC_BINDING_PATH" ] || {

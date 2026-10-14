@@ -107,5 +107,13 @@ says where each came from. 0008 is this product's own.
 - **Invariant kept:** on 10.15 and later, the lookup finds the function and native spawning
   behaves exactly as upstream's. On 10.9 every native spawn takes the compatibility fallback that
   upstream already uses for glibc without the function.
+- **Why widening the fallback is safe:** 10.9 also lacks `POSIX_SPAWN_SETSID` (macOS 10.15), so
+  every `NativeChild` spawn would need a fallback there, not only spawns with a cwd. The lookup
+  fails before the cwd is looked at, so all of them take upstream's existing Tokio/std path,
+  rather than a native one that 10.9 cannot run.
+- **What changes on 10.9:** callers that ask for `SpawnFallback::ReturnError`, and hook spawns,
+  also go through Tokio's or std's `Command`, so they get the executable-text and `PATH`
+  fallbacks they otherwise avoid. Upstream's tests that expect a native child (pty
+  `macos_child_tests.rs`, hooks `command_runner_tests.rs`) are valid only on 10.15 and later.
 - **When to reconsider:** when the floor rises to 10.15, or upstream looks the function up at
   runtime itself.

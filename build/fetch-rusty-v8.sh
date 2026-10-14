@@ -41,7 +41,7 @@ fetch_asset() {
   name=$1
   sha=$(awk -v n="$name" '$2 == n { print $1 }' "$SUMS_FILE")
   case "$sha" in
-    ?*[!0-9a-f]*|'') echo "fetch-rusty-v8: $SUMS does not list $name" >&2; exit 1 ;;
+    ''|*[!0-9a-f]*) echo "fetch-rusty-v8: $SUMS does not list $name" >&2; exit 1 ;;
   esac
   [ "${#sha}" -eq 64 ] || { echo "fetch-rusty-v8: $SUMS does not list $name" >&2; exit 1; }
   cached=no

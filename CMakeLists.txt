@@ -46,5 +46,8 @@ add_custom_target(codex_compat ALL
     "MAVERICKS_DEVIATIONS_ROOT=${CMAKE_SOURCE_DIR}"
     "MAVERICKS_ALLOW_ARCHS=x86_64"
     sh "${MavericksShipyard_SCRIPTS}/assert_binary_compatible.sh" "$<TARGET_FILE:codex-code-mode-host>"
+  # Interim, until shipyard's guard checks load paths: it passed a codex that loaded /opt/pkg dylibs.
+  COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-load-paths.sh"
+    "$<TARGET_FILE:codex>" "$<TARGET_FILE:codex-code-mode-host>"
   VERBATIM
   COMMENT "Checking the imported Codex executables for Mavericks compatibility")

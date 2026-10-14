@@ -46,7 +46,9 @@ check_manifest() {
   [ "$(field rusty_v8_version "$manifest")" = "$RUSTY_V8_NATIVE" ] || {
     echo "check-build-manifests: V8 version differs from native in $manifest" >&2; exit 1;
   }
-  # The SDK is named, not pathed: each host caches shipyard's pinned SDK in its own place.
+  # platform: the SDK is named, not pathed: each host caches shipyard's pinned SDK in its own
+  #           place. How it reaches the target (SDKROOT natively, target rustflags in cross, for
+  #           the reason build-codex.sh gives) follows from mode, so it needs no field of its own.
   case "$(field sdk "$manifest")" in
     MacOSX*.sdk) ;;
     *) echo "check-build-manifests: missing or malformed sdk in $manifest" >&2; exit 1 ;;

@@ -1,5 +1,4 @@
 #!/bin/sh
-# Shared Mavergreen shell helpers are consumed from the installed shipyard scripts.
 set -eu
 BUILD_DIR=${MAVERICKS_BUILD_DIR:?set MAVERICKS_BUILD_DIR before sourcing build/lib.sh}
 MAVERICKS_ROOT=$(CDPATH= cd -- "$BUILD_DIR/.." && pwd)

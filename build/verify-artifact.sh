@@ -72,8 +72,14 @@ case "$rusty_v8_version" in
   ''|*[!0-9.]*|.*) echo "verify-artifact: malformed rusty_v8_version ($rusty_v8_version)" >&2; exit 1 ;;
 esac
 for member in codex codex-code-mode-host; do
-  file "$TMP/$member" | grep -q 'Mach-O 64-bit x86_64 executable' || {
+  # platform: upstream file(1), as pkgsrc ships it, prints "Mach-O 64-bit x86_64 executable".
+  #           Apple's /usr/bin/file, on 10.9 and on modern macOS, prints "Mach-O 64-bit
+  #           executable x86_64".
+  file -b "$TMP/$member" | grep -Eq 'Mach-O 64-bit (x86_64 executable|executable x86_64)' || {
     echo "verify-artifact: $member is not an x86_64 Mach-O executable" >&2; exit 1;
   }
 done
+sh "$HERE/check-load-paths.sh" "$TMP/codex" "$TMP/codex-code-mode-host" || {
+  echo "verify-artifact: a member loads a library from outside the OS" >&2; exit 1;
+}
 echo "verify-artifact: ok ($target, macOS $deployment_target)"
