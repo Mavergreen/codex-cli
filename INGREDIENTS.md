@@ -26,9 +26,9 @@ Cargo home, target output, extracted toolchains, and transfer staging stay under
 sibling of its own canonicalized executable. The host links V8, so the build fetches OpenAI's prebuilt
 `rusty_v8` archive with `build/fetch-rusty-v8.sh` (the one declared non-Mavergreen input) and records
 `rusty_v8_version` in the build manifest. The package does not include `codex-voice-host`, the
-native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-14. `codex-code-mode-host` links and passes
-its smoke checks; `codex` does not link yet (an undefined `posix_spawn_file_actions_addchdir_np`):
-see `docs/compatibility-matrix.md`.
+native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-14,
+in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Both
+binaries link and pass the non-interactive smoke checks: see `docs/compatibility-matrix.md`.
 
 ## Compatibility gate implementation
 

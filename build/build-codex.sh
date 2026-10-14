@@ -59,6 +59,11 @@ export CXX_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang++"
 # librecaulk.a, so Mavergreen/rust's rustc (from 1.99.0-mavericks.2) adds no back-fill of its own.
 # The manifest needs no field for it: it follows clang_version, which both modes must match.
 export CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$CLANG_PREFIX/bin/clang++"
+# platform: no host pkg-config answers for the 10.9 target. ultimate-hat's pkgsrc one made lzma-sys
+#           link /opt/pkg/lib/liblzma.5.dylib (and, through its -L, /opt/pkg's libiconv) into codex,
+#           and a modern Mac's Homebrew one would do the same. With every probe failing, lzma-sys
+#           and aws-lc-sys build their bundled sources with clang-22, as the other -sys crates do.
+export PKG_CONFIG_x86_64_apple_darwin=/usr/bin/false
 
 # platform: protoc-bin-vendored's macOS protoc needs libc++ symbols 10.9's /usr/lib/libc++ lacks,
 #           and Codex's build script runs it by a fixed path. On 10.9 the cargo process tree runs on
