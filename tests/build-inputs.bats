@@ -49,7 +49,8 @@ setup() {
     codex-rs/sandboxing/src/seatbelt_preferences_policy.sbpl \
     codex-rs/sandboxing/src/seatbelt_tests.rs \
     codex-rs/sandboxing/src/seatbelt.rs \
-    codex-rs/sandboxing/src/seatbelt_daemon.rs | sort)
+    codex-rs/sandboxing/src/seatbelt_daemon.rs \
+    codex-rs/utils/pty/src/posix_child.rs | sort)
   [ "$(git -C "$source_dir" diff --name-only | sort)" = "$expected" ]
   [ -z "$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ')" ]
 }

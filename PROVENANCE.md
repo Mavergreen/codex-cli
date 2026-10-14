@@ -1,7 +1,8 @@
 # Provenance
 
-The patch series in `patches/` is Wowfunhappy's work, made against Codex 0.161.0 and tested by
-building it natively on Mac OS X 10.9. It is CC0 and used with Wowfunhappy's permission.
+Patches 0001 to 0007 in `patches/` are Wowfunhappy's work, made against Codex 0.161.0 and tested by
+building it natively on Mac OS X 10.9. They are CC0 and used with Wowfunhappy's permission. Later
+patches are this product's own.
 
 | Received file | Where it is now | How it changed |
 |---|---|---|

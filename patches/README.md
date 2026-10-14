@@ -3,8 +3,8 @@
 `build/fetch-codex.sh` applies every `*.patch` here, in lexical order, to the Codex commit in
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
-incompatibility measured on Mac OS X 10.9. All seven patches are Wowfunhappy's; `PROVENANCE.md`
-says where each came from.
+incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's; `PROVENANCE.md`
+says where each came from. 0008 is this product's own.
 
 ## 0001-force-rustls.patch
 
@@ -94,3 +94,18 @@ says where each came from.
 - **Trimmed:** Wowfunhappy's runtime patch also changed `codex-rs/cli/src/debug_sandbox.rs` to
   deny TIOCSTI by number. That section is dropped. At `build/codex-revision`, `debug_sandbox.rs`
   already writes the deny with the numeric `libc::TIOCSTI`, and the old hunk no longer applies.
+
+## 0008-pty-addchdir-runtime-lookup.patch
+
+- **What:** `codex-rs/utils/pty/src/posix_child.rs` looks up `posix_spawn_file_actions_addchdir_np`
+  with `dlsym` on macOS, as it already does on glibc, instead of declaring it as a hard `extern`.
+  When the lookup fails, `NativeChild::spawn` returns `Ok(None)`, and the caller falls back to
+  `tokio::process::Command`. Only Rust's bundled musl keeps the hard `extern`.
+- **Why:** the function is new in macOS 10.15. As a hard `extern` it makes `codex` and
+  `logs_client` fail to link against 10.9's libSystem (`undefined symbol:
+  posix_spawn_file_actions_addchdir_np`), and Recaulk does not back-fill it.
+- **Invariant kept:** on 10.15 and later, the lookup finds the function and native spawning
+  behaves exactly as upstream's. On 10.9 every native spawn takes the compatibility fallback that
+  upstream already uses for glibc without the function.
+- **When to reconsider:** when the floor rises to 10.15, or upstream looks the function up at
+  runtime itself.

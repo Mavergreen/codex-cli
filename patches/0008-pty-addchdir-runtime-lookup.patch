@@ -1,0 +1,35 @@
+diff --git a/codex-rs/utils/pty/src/posix_child.rs b/codex-rs/utils/pty/src/posix_child.rs
+index abf46c28aa..40fd6b7126 100644
+--- a/codex-rs/utils/pty/src/posix_child.rs
++++ b/codex-rs/utils/pty/src/posix_child.rs
+@@ -35,9 +35,9 @@ use libc::POSIX_SPAWN_SETSID;
+ #[cfg(target_os = "macos")]
+ const POSIX_SPAWN_SETSID: libc::c_int = 0x0400;
+ 
+-// Available since macOS 10.15 and in Rust's bundled musl. Older glibc needs
+-// runtime detection so this optimization does not raise our minimum libc version.
+-#[cfg(any(target_os = "macos", target_env = "musl"))]
++// Available in Rust's bundled musl. Older glibc and macOS before 10.15 need
++// runtime detection so this optimization does not raise our minimum OS version.
++#[cfg(target_env = "musl")]
+ unsafe extern "C" {
+     fn posix_spawn_file_actions_addchdir_np(
+         actions: *mut libc::posix_spawn_file_actions_t,
+@@ -110,7 +110,7 @@ impl NativeChild {
+             ChildDropPolicy::ReapOnly => Some(reaper::sender()?),
+         };
+ 
+-        #[cfg(all(target_os = "linux", target_env = "gnu"))]
++        #[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "macos"))]
+         let addchdir = {
+             // SAFETY: dlsym returns the documented function signature when present.
+             let symbol = unsafe {
+@@ -132,7 +132,7 @@ impl NativeChild {
+                 >(symbol)
+             }
+         };
+-        #[cfg(any(target_os = "macos", target_env = "musl"))]
++        #[cfg(target_env = "musl")]
+         let addchdir = posix_spawn_file_actions_addchdir_np;
+ 
+         // Subscribe before spawning so a child that exits immediately cannot be missed.
