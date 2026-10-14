@@ -28,16 +28,7 @@ BUILD_ROOT=$(mavericks_build_root)
 SOURCE=$(sh "$HERE/fetch-codex.sh")
 RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
 CODEX_CHANNEL=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$SOURCE/codex-rs/rust-toolchain.toml")
-RUST_UPSTREAM=${RUST_PIN%%-*}
-[ -n "$CODEX_CHANNEL" ] || {
-  echo "build-codex: no Rust channel in $SOURCE/codex-rs/rust-toolchain.toml" >&2; exit 1;
-}
-[ -n "$RUST_UPSTREAM" ] || {
-  echo "build-codex: no Rust version in components/rust/version" >&2; exit 1;
-}
-[ "$CODEX_CHANNEL" = "$RUST_UPSTREAM" ] || {
-  echo "build-codex: Codex wants Rust $CODEX_CHANNEL, components/rust/version is $RUST_PIN" >&2; exit 1;
-}
+sh "$HERE/check-rust-pin.sh" "$CODEX_CHANNEL" "$RUST_PIN"
 
 RUST_PREFIX=$(sh "$HERE/fetch-rust.sh")
 [ -x "$RUST_PREFIX/bin/cargo" ] && [ -x "$RUST_PREFIX/bin/rustc" ] || {
@@ -63,6 +54,11 @@ ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
 }
 export CC_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang"
 export CXX_x86_64_apple_darwin="$CLANG_PREFIX/bin/clang++"
+# The same clang++ links. 10.9's cc overflows posix_spawn's argv on codex-code-mode-host's ~1355
+# LTO objects; clang-22 hands lld a response file and links V8's static libc++. Its cfg links
+# librecaulk.a, so Mavergreen/rust's rustc (from 1.99.0-mavericks.2) adds no back-fill of its own.
+# The manifest needs no field for it: it follows clang_version, which both modes must match.
+export CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$CLANG_PREFIX/bin/clang++"
 
 # platform: protoc-bin-vendored's macOS protoc needs libc++ symbols 10.9's /usr/lib/libc++ lacks,
 #           and Codex's build script runs it by a fixed path. On 10.9 the cargo process tree runs on
