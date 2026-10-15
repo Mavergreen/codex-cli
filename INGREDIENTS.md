@@ -91,6 +91,30 @@ and byte-identical to the artifact's.
 - **Codex is not built by CMake.** The CMake project imports the two executables that
   `build/build-codex.sh` made, so the product is packaged by `packaging/build-pkg.sh` from that output
   rather than from CMake install rules.
+- **No voice.** The package ships no `codex-voice-host` and no `codex-resources/voice`, so Codex's
+  voice features are unsupported. `packaging/build-pkg.sh` refuses an artifact that has either and
+  `tests/package-test.sh` checks the payload has neither. Voice is deferred, not dropped:
+  nobody has yet tried building `codex-voice-host` on 10.9, so what it needs is unmeasured.
+- **Only `codex` is exported to the link farm.** `codex-code-mode-host` stays in the product tree
+  beside it, because Codex runs it as a sibling and it is not a command to run by hand; patch 0009
+  makes the symlinked `codex` find it.
+- **Native TLS is replaced by rustls.** Patch 0001 puts every HTTPS client on rustls, because native-tls
+  (Secure Transport) cannot complete a handshake on 10.9, even with AquaTransport installed. The
+  trust store is the keychain's, so a stock 10.9 needs AquaTransport's ModernRootCertificates to
+  reach OpenAI. `patches/README.md` has the reasons and what ends the patch.
+- **Three defaults differ from upstream's.** Each can be turned on in config, except verification.
+  The startup update check (0002) is off because the package manager Codex detects (notably
+  Homebrew) may be absent or unable to run, so startup would offer an update path that cannot work.
+  The shared background daemon (0003) is off because it runs from a packaged install that a cargo
+  build lacks, and its updater installs upstream builds the host may not run; the TUI hosts the
+  app server in-process instead. Biometric user verification (0004) reports unsupported because it
+  needs LocalAuthentication and Secure Enclave APIs, which 10.9 lacks. Updates come from this
+  product's own Sparkle updater.
+
+## Conformance deviations
+
+(The section is empty: `check-family-conventions.sh` passes with no check-level exceptions. The
+items under "Deviations" are product facts, not exceptions to a family check.)
 
 ## Releasing
 
