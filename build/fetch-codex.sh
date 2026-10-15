@@ -28,6 +28,7 @@ sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
 #       .git/, out of the worktree, and names every input to the preparation and the resulting
 #       tree state, ignored files included.
 STAMP="$DEST/.git/mavergreen-prepared"
+KEEP=
 inputs_id() {
   cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/UPSTREAM_VERSION" \
     "$HERE/codex-revision" | shasum -a 256 | awk '{ print $1 }'
@@ -39,6 +40,18 @@ if [ -n "$(tree_status)" ]; then
     printf '%s\n' "$DEST"; exit 0
   fi
   echo "fetch-codex: discarding a stale prepared checkout in $DEST" >&2
+  # spec: tests/build-inputs.bats "re-preparing keeps the mtime of a file it prepares the same" --
+  #       Cargo rebuilds a crate when one of its sources is newer than its last build, so a file the
+  #       new preparation leaves as it was keeps its old mtime. Without this, editing one patch
+  #       rebuilds every patched crate and everything above them.
+  KEEP="$BUILD_ROOT/codex-src-kept"
+  rm -rf "$KEEP"
+  mkdir -p "$KEEP"
+  { git -C "$DEST" diff --name-only; git -C "$DEST" ls-files --others --exclude-standard; } |
+    while IFS= read -r path; do
+      mkdir -p "$KEEP/$(dirname "$path")"
+      cp -p "$DEST/$path" "$KEEP/$path"
+    done
   git -C "$DEST" checkout -q -- .
   git -C "$DEST" clean -q -f -d -x
 fi
@@ -81,5 +94,13 @@ REWRITTEN=$(awk -v v="$WORKSPACE_VERSION" -v out="$LOCK.tmp" '
 mv "$LOCK.tmp" "$LOCK"
 
 git -C "$DEST" diff --check
+if [ -n "${KEEP:-}" ]; then
+  (cd "$KEEP" && find . -type f) | while IFS= read -r path; do
+    if [ -f "$DEST/$path" ] && cmp -s "$KEEP/$path" "$DEST/$path"; then
+      touch -r "$KEEP/$path" "$DEST/$path"
+    fi
+  done
+  rm -rf "$KEEP"
+fi
 printf '%s %s\n' "$(inputs_id)" "$(tree_id)" > "$STAMP"
 printf '%s\n' "$DEST"

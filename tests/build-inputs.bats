@@ -127,6 +127,33 @@ PATCH
   [ ! -e "$source_dir/codex-rs/mavergreen-series-probe.txt" ]
 }
 
+@test "re-preparing keeps the mtime of a file it prepares the same" {
+  export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
+  copy_product
+  run sh "$product/build/fetch-codex.sh"
+  [ "$status" -eq 0 ]
+  source_dir="$MAVERICKS_BUILD_ROOT/codex-src"
+  patched="$source_dir/codex-rs/tui/src/system_motion.rs"
+  touch -t 200001010000 "$patched" "$source_dir/codex-rs/Cargo.lock"
+  before=$(stat -f %m "$patched")
+  cat > "$product/patches/0099-series-probe.patch" <<'PATCH'
+diff --git a/codex-rs/mavergreen-series-probe.txt b/codex-rs/mavergreen-series-probe.txt
+new file mode 100644
+index 0000000..9daeafb
+--- /dev/null
++++ b/codex-rs/mavergreen-series-probe.txt
+@@ -0,0 +1 @@
++test
+PATCH
+  run sh "$product/build/fetch-codex.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"discarding a stale prepared checkout"* ]] || false
+  [ -f "$source_dir/codex-rs/mavergreen-series-probe.txt" ]
+  [ "$(stat -f %m "$patched")" = "$before" ]
+  [ "$(stat -f %m "$source_dir/codex-rs/Cargo.lock")" = "$before" ]
+  [ ! -e "$MAVERICKS_BUILD_ROOT/codex-src-kept" ]
+}
+
 @test "fetch refuses a Codex workspace version other than UPSTREAM_VERSION" {
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   copy_product
