@@ -38,13 +38,23 @@ setup() {
   [ "$(git -C "$source_dir" rev-parse HEAD)" = "$(cat "$MAVERGREEN_ROOT/build/codex-revision")" ]
   expected=$(printf '%s\n' \
     codex-rs/Cargo.lock \
+    codex-rs/http-client/src/client_builder.rs \
     codex-rs/http-client/src/custom_ca.rs \
+    codex-rs/http-client/src/lib.rs \
+    codex-rs/http-client/src/route_aware_client_pool_tests.rs \
+    codex-rs/http-client/src/route_aware_tls_fallback_tests.rs \
     codex-rs/core/src/config/mod.rs \
+    codex-rs/core/tests/suite/mcp_optional_startup_grace.rs \
+    codex-rs/otel/src/metrics/client.rs \
+    codex-rs/otel/src/otlp.rs \
+    codex-rs/otel/src/provider.rs \
+    codex-rs/responses-api-proxy/src/lib.rs \
     codex-rs/features/src/lib.rs \
     codex-rs/user-verification/src/lib.rs \
     codex-rs/tui/Cargo.toml \
     codex-rs/tui/src/screen_reader.rs \
     codex-rs/tui/src/system_motion.rs \
+    codex-rs/tui/tests/suite/focus_palette.rs \
     codex-rs/sandboxing/src/seatbelt_base_policy.sbpl \
     codex-rs/sandboxing/src/seatbelt_preferences_policy.sbpl \
     codex-rs/sandboxing/src/seatbelt_tests.rs \

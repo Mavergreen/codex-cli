@@ -52,3 +52,18 @@ Measured on 2026-10-14 on an arm64 Mac running macOS 27.0.1, at the same source 
 | CMake `codex_compat` (both compat guards and `check-load-paths.sh`) | passed for both cross binaries |
 | `otool -L`, minos and SDK of the cross binaries | the same OS libraries as native, `LC_VERSION_MIN_MACOSX 10.9` and SDK 10.9, no `LC_RPATH`, no `/opt/pkg` string |
 | The cross binaries on 10.9 | passed: `codex --version`, `codex-code-mode-host --help`, the two `codex sandbox` runs, and the app-server `command/exec` with a `cwd`, as in the native table above |
+
+## Codex's own tests
+
+`just test -p codex-sandboxing -p codex-user-verification -p codex-tui -p codex-http-client -p
+codex-features -p codex-core -p codex-utils-pty -p codex-hooks`, the crates the patches touch, run
+on 2026-10-15 on the same arm64 Mac (Codex's channel 1.95.0, cargo-nextest). These tests do not run
+on 10.9.
+
+| Check | Result |
+|---|---|
+| The patched tree compared with unpatched upstream | no failure caused by the patches. Every failure also fails on upstream there: 366 come from that Mac's environment, and the rest are tests that fail on both trees when the machine is loaded |
+| `codex-http-client` | 119 passed. The 6 tests of upstream's native-TLS retry are ignored by 0001 |
+| `suite::mcp_optional_startup_grace`, one test at a time | 6 of 6 pass, 3 of 3 runs: about 4.0 s, against upstream's 2.35 s, for the first client's root load |
+| The same 6 tests started together | fail on both trees: loading the roots slows down with concurrent processes (about 160 ms alone, 390 ms each for 6) |
+| `cargo fmt` with upstream's options, and `cargo clippy -p codex-http-client --tests` | clean |

@@ -131,3 +131,19 @@ index de53e2d..3625e9d 100644
  #[test]
  fn seatbelt_allows_semaphore_limit_sysconf() {
      let workspace = TempDir::new().expect("temp workspace");
+@@ -178,10 +204,11 @@ fn seatbelt_allows_semaphore_limit_sysconf() {
+ 
+ #[test]
+ fn base_policy_allows_kmp_registration_shm_read_create_and_unlink() {
+-    let expected = r##"(allow ipc-posix-shm-read-data
+-  ipc-posix-shm-write-create
+-  ipc-posix-shm-write-unlink
+-  (ipc-posix-name-regex #"^/__KMP_REGISTERED_LIB_[0-9]+$"))"##;
++    let expected = r##"(if (defined? 'ipc-posix-name-regex)
++  (allow ipc-posix-shm-read-data
++    ipc-posix-shm-write-create
++    ipc-posix-shm-write-unlink
++    (ipc-posix-name-regex #"^/__KMP_REGISTERED_LIB_[0-9]+$")))"##;
+ 
+     assert!(
+         MACOS_SEATBELT_BASE_POLICY.contains(expected),

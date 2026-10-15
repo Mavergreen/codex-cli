@@ -7,10 +7,10 @@ permission. Later patches are this product's own.
 
 | Received file | Where it is now | How it changed |
 |---|---|---|
-| `test-builds.sh` | `patches/0001-force-rustls.patch`, `0002-update-check-off-by-default.patch`, `0003-daemon-auto-start-off-by-default.patch` | extracted byte for byte from the heredocs `CODEX_RUSTLS_TLS_PATCH`, `CODEX_DISABLE_UPDATE_CHECK_PATCH` and `CODEX_DISABLE_DAEMON_AUTO_START_PATCH`. The fourth heredoc, `CODEX_MAVERICKS_SEATBELT_PATCH`, is not kept: its hunks are a subset of 0006, and the script skips it once 0006 has applied. The script itself is not kept; its native-build knowledge is carried in `docs/compatibility-matrix.md` |
+| `test-builds.sh` | `patches/0001-force-rustls.patch`, `0002-update-check-off-by-default.patch`, `0003-daemon-auto-start-off-by-default.patch` | extracted byte for byte from the heredocs `CODEX_RUSTLS_TLS_PATCH`, `CODEX_DISABLE_UPDATE_CHECK_PATCH` and `CODEX_DISABLE_DAEMON_AUTO_START_PATCH`. 0001 was later rewritten here: it keeps the idea of forcing rustls for every client, but now does it in `client_builder.rs` with one shared config and marks the native-TLS retry tests ignored. 0003 was then given a hunk that updates the two TUI tests relying on the old default. The fourth heredoc, `CODEX_MAVERICKS_SEATBELT_PATCH`, is not kept: its hunks are a subset of 0006, and the script skips it once 0006 has applied. The script itself is not kept; its native-build knowledge is carried in `docs/compatibility-matrix.md` |
 | `codex-0.157.0-mavericks-user-verification.patch` | `patches/0004-user-verification-unsupported.patch` | unchanged |
 | `codex-0.157.0-mavericks-accessibility-probes.patch` | `patches/0005-accessibility-selector-guards.patch` | unchanged |
-| `codex-0.151.0-mavericks-seatbelt.patch` | `patches/0006-seatbelt-policies.patch` | unchanged |
+| `codex-0.151.0-mavericks-seatbelt.patch` | `patches/0006-seatbelt-policies.patch` | kept byte for byte, with one hunk added at the end that updates the KMP test to the guarded rule |
 | `codex-0.157.0-mavericks-seatbelt-runtime.patch` | `patches/0007-seatbelt-runtime-policy.patch` | trimmed to `codex-rs/sandboxing/`: the `seatbelt.rs` and `seatbelt_daemon.rs` sections are kept byte for byte and the `codex-rs/cli/src/debug_sandbox.rs` section is dropped, as Wowfunhappy's script did with `git apply --include='codex-rs/sandboxing/**'` |
 
 ## Received files

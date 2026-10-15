@@ -3,19 +3,57 @@
 `build/fetch-codex.sh` applies every `*.patch` here, in lexical order, to the Codex commit in
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
-incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's; `PROVENANCE.md`
-says where each came from. 0008 is this product's own.
+incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has
+since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is this product's own.
 
 ## 0001-force-rustls.patch
 
-- **What:** `codex-rs/http-client/src/custom_ca.rs` makes every reqwest client use the bundled
-  rustls backend, with the platform's native roots, instead of only the custom-CA path.
-- **Why:** reqwest's default backend is native-tls (Secure Transport). On 10.9 it cannot negotiate
-  modern TLS, so "Sign in with ChatGPT" fails with a handshake error. Codex's rustls retry is
-  opt-in and not every API client turns it on.
-- **Invariant kept:** the custom-CA handling that follows is unchanged.
-- **When to reconsider:** when upstream defaults reqwest to rustls, or its rustls path covers
-  every client.
+- **What:** `codex-rs/http-client/src/client_builder.rs` makes every client it builds use the
+  bundled rustls backend instead of native-tls. A client with its own root certificate or client
+  identity gets reqwest's rustls, which honors them. Every other client gets one rustls config
+  shared by the process, from `custom_ca.rs`. That config trusts the platform's native roots and
+  offers `h2` and `http/1.1` by ALPN, as reqwest's own would. `custom_ca.rs` also loads the native
+  roots once per process, and its websocket config reuses them. The six `http-client` tests of
+  upstream's native-TLS-to-rustls retry are marked ignored, with the reason. In
+  `core/tests/suite/mcp_optional_startup_grace.rs`, the "zero grace respects server startup
+  timeout" case gives the server 1 s to start instead of 250 ms, because the first client's root
+  load does not fit in 250 ms.
+- **Why:** reqwest's default backend is native-tls (Secure Transport). On a stock 10.9 it cannot
+  negotiate modern TLS (`-9824`, handshake failure). With AquaTransport installed, the handshake
+  completes, but native-tls then checks the server's certificates itself: it breaks the handshake
+  for server authentication and asks for the peer trust. `SSLCopyPeerTrust` returns `-909`
+  (errSecBadReq) at that point, so every native-tls request still fails, and "Sign in with
+  ChatGPT" fails with "error sending request". Measured on 2026-10-14 with AquaTransport
+  2026.09.21. Codex's rustls retry is opt-in and not every API client turns it on.
+- **Why shared:** loading the native roots takes about 450 ms on 10.9 (214 roots, measured on
+  2026-10-14), and reqwest's own rustls loads them again for every client it builds. One `codex
+  exec` built 10 clients that way, and upstream tests that build many clients ran past their time
+  limits.
+- **Roots:** rustls trusts the roots in the keychain's trust settings. A stock 10.9 lacks ISRG
+  Root X1 there. AquaTransport's ModernRootCertificates package adds it, which is enough for
+  auth.openai.com, chatgpt.com and api.openai.com.
+- **Invariant kept:** a client's own root certificate and client identity are honored as before.
+  With `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE` set, upstream's custom-CA path is unchanged: it
+  still builds reqwest's rustls for each client, so it still loads the roots each time.
+- **Cost:** a change to the keychain's trust settings reaches a running Codex only after it
+  restarts. The process's first client still pays the one root load, about 450 ms on 10.9. An MCP
+  server configured with a `startup_timeout_sec` below about half a second can time out when it
+  builds that first client; the default is 30 s.
+- **Clients outside `HttpClientBuilder`:** four reqwest clients are built elsewhere, and 0001
+  puts each on rustls too. The blocking OTLP client (`otel/src/otlp.rs`) shares the config, or
+  uses reqwest's rustls when it has its own CA or client identity. The log, trace and metrics
+  exporters (`otel/src/provider.rs`, `otel/src/metrics/client.rs`) passed that client only when a
+  `tls` table was configured; otherwise opentelemetry-otlp built its own, with native-tls. They
+  now always pass it. `codex-responses-api-proxy` (`responses-api-proxy/src/lib.rs`) uses
+  reqwest's rustls: that crate does not depend on `codex-http-client`, and adding the dependency
+  would change `Cargo.lock`. `client_builder.rs`'s
+  last-resort client tries the shared config before falling back to `reqwest::Client::new()`. The
+  reqwest 0.13 that `rmcp` depends on is built with no TLS backend, so Codex gives it its own
+  clients. Every other reqwest client in the workspace is in a test or the custom-CA test probe.
+- **When to reconsider:** when upstream defaults reqwest to rustls, its rustls path covers every
+  client, or AquaTransport returns a peer trust after a server-authentication break. That last
+  would let native-tls work on 10.9 for every client, including any a later Codex adds, so
+  forcing rustls in each place would no longer be needed.
 
 ## 0002-update-check-off-by-default.patch
 
@@ -30,7 +68,10 @@ says where each came from. 0008 is this product's own.
 ## 0003-daemon-auto-start-off-by-default.patch
 
 - **What:** `codex-rs/features/src/lib.rs` changes the default of the `daemon_auto_start` feature
-  from enabled to disabled.
+  from enabled to disabled. The two TUI tests in `tests/suite/focus_palette.rs` that relied on
+  the old default (`no_daemon_skips_startup_and_discovery` and
+  `auto_daemon_start_failure_exits_with_manual_fallback_hint`) now set
+  `features.daemon_auto_start = true` themselves.
 - **Why:** the shared background app-server daemon runs from a packaged install, which a cargo
   build lacks, so it fails with "this CLI has no complete local package". Its updater also
   installs upstream builds the host may not run. The TUI hosts the app server in-process instead,
@@ -69,6 +110,8 @@ says where each came from. 0008 is this product's own.
   `seatbelt_preferences_policy.sbpl` are rewritten so 10.9's Seatbelt can parse them, and
   `seatbelt_tests.rs` gains `generated_seatbelt_profile_is_accepted_by_sandbox_exec`, which runs
   the generated profile through `sandbox-exec`.
+  `base_policy_allows_kmp_registration_shm_read_create_and_unlink` now expects the guarded KMP
+  rule.
 - **Why:** 10.9 rejects a target filter on `process-info*` and on `process-info-listpids`, and has
   no `sysctl-name`, `ipc-posix-name-regex` or `ipc-posix-name-prefix` filter and no
   `iokit-registry-entry-class`. Rust executables need `sysctl-read` at startup.
