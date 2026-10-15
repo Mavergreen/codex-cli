@@ -51,3 +51,19 @@ add_custom_target(codex_compat ALL
     "$<TARGET_FILE:codex>" "$<TARGET_FILE:codex-code-mode-host>"
   VERBATIM
   COMMENT "Checking the imported Codex executables for Mavericks compatibility")
+
+option(CODEX_BUILD_UPDATER "Build the Sparkle updater (needs codex-cli in the installed shipyard's product registry)" OFF)
+
+if(CODEX_BUILD_UPDATER)
+  # The updater is the only compiled code here; the Codex binaries are imported.
+  enable_language(OBJC)
+  include(MavericksSparkle)
+  # spec: updater/ICON-CREDIT.txt -- the generic icon on purpose, with its reason and its exit
+  mavericks_add_updater_app(
+    PRODUCT codex-cli
+    PRODUCT_NAME "Mavericks Codex CLI"
+    ALLOW_GENERIC
+    VERSION "${MAVERICKS_CODEX_VERSION}"
+    CONFIRM_TITLE "Codex CLI for Mavericks updated"
+    CONFIRM_BODY "codex was updated. New shells and agents get the new version.")
+endif()

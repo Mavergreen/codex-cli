@@ -1,0 +1,9 @@
+Updater icon: NONE. codex-cli-updater ships the standard macOS application icon by explicit opt-in
+(ALLOW_GENERIC), so no artwork is embedded.
+
+Deliberate: the Codex mark is OpenAI's, and this product is an unofficial community build of OpenAI's
+Codex CLI that must not read as official. A stand-in .icns would be exactly the placeholder the icon
+gate rejects, and a copy of OpenAI's mark would imply an endorsement that does not exist.
+
+Exit: when an original Mavergreen mark for this product exists, add updater/codex-cli.icns, pass ICON
+to mavericks_add_updater_app, and drop ALLOW_GENERIC.

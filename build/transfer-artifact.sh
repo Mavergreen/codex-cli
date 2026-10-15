@@ -16,12 +16,15 @@ esac
 [ -x "$SOURCE/codex" ] || { echo "transfer-artifact: missing executable $SOURCE/codex" >&2; exit 1; }
 [ -x "$SOURCE/codex-code-mode-host" ] || { echo "transfer-artifact: missing executable $SOURCE/codex-code-mode-host" >&2; exit 1; }
 [ -f "$SOURCE/build-manifest" ] || { echo "transfer-artifact: missing $SOURCE/build-manifest" >&2; exit 1; }
+for notice in LICENSE NOTICE; do
+  [ -s "$SOURCE/$notice" ] || { echo "transfer-artifact: missing $SOURCE/$notice" >&2; exit 1; }
+done
 
 BUILD_ROOT=$(sh "$HERE/resolve-build-root.sh")
 STAGING="$BUILD_ROOT/transfer-artifact.$$"
 mkdir "$STAGING"
 trap 'rm -rf "$STAGING"' EXIT HUP INT TERM
-tar -cf "$STAGING/codex.tar" -C "$SOURCE" codex codex-code-mode-host build-manifest
+tar -cf "$STAGING/codex.tar" -C "$SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE
 (cd "$STAGING" && shasum -a 256 codex.tar > codex.tar.sha256)
 
 case "$DESTINATION" in

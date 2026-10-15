@@ -31,10 +31,13 @@ actual_hash=$(shasum -a 256 "$ARCHIVE" | awk '{ print $1 }')
 
 members=$(tar -tf "$ARCHIVE") || { echo "verify-artifact: cannot list archive" >&2; exit 1; }
 member_count=$(printf '%s\n' "$members" | awk 'NF { n++ } END { print n+0 }')
-[ "$member_count" -eq 3 ] || { echo "verify-artifact: archive must contain exactly codex, codex-code-mode-host and build-manifest" >&2; exit 1; }
+[ "$member_count" -eq 5 ] || { echo "verify-artifact: archive must contain exactly codex, codex-code-mode-host, build-manifest, LICENSE and NOTICE" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx codex || { echo "verify-artifact: archive has no codex executable" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx codex-code-mode-host || { echo "verify-artifact: archive has no codex-code-mode-host executable" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx build-manifest || { echo "verify-artifact: archive has no build-manifest" >&2; exit 1; }
+for notice in LICENSE NOTICE; do
+  printf '%s\n' "$members" | grep -qx "$notice" || { echo "verify-artifact: archive has no $notice" >&2; exit 1; }
+done
 
 for member in codex codex-code-mode-host; do
   tar -tvf "$ARCHIVE" | awk -v member="$member" '

@@ -26,6 +26,10 @@ ACTUAL_MODE=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
 
 BUILD_ROOT=$(mavericks_build_root)
 SOURCE=$(sh "$HERE/fetch-codex.sh")
+# spec: INGREDIENTS.md "License notices" -- Apache-2.0 section 4 needs both files to travel with the binaries
+for notice in LICENSE NOTICE; do
+  [ -s "$SOURCE/$notice" ] || { echo "build-codex: no $SOURCE/$notice" >&2; exit 1; }
+done
 sh "$HERE/check-rust-pin.sh" "$SOURCE"
 RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
 
@@ -128,6 +132,10 @@ export MACOSX_DEPLOYMENT_TARGET=10.9
 for binary in codex codex-code-mode-host; do
   cp "$TARGET_DIR/x86_64-apple-darwin/release/$binary" "$ARTIFACT/$binary"
   chmod 755 "$ARTIFACT/$binary"
+done
+for notice in LICENSE NOTICE; do
+  cp "$SOURCE/$notice" "$ARTIFACT/$notice"
+  chmod 644 "$ARTIFACT/$notice"
 done
 VERSION=$(sh "$HERE/versions.sh" auto)
 {

@@ -25,6 +25,8 @@ setup() {
   source_dir="$BATS_TEST_TMPDIR/codex-src"
   mkdir -p "$source_dir/codex-rs"
   printf '[toolchain]\nchannel = "1.95.0"\n' > "$source_dir/codex-rs/rust-toolchain.toml"
+  echo "Apache License" > "$source_dir/LICENSE"
+  echo "Copyright OpenAI" > "$source_dir/NOTICE"
   printf '#!/bin/sh\necho "%s"\n' "$source_dir" > "$product/build/fetch-codex.sh"
 
   rust="$BATS_TEST_TMPDIR/rust"
@@ -111,5 +113,21 @@ build() {
   run build cross
   [ "$status" -eq 1 ]
   [[ "$output" == *"build-codex: the SDK path $spaced contains whitespace"* ]] || false
+  [ ! -e "$cargo_env" ]
+}
+
+@test "a build puts the source's LICENSE and NOTICE in the artifact" {
+  run build native
+  [ "$status" -eq 0 ]
+  root="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native"
+  cmp "$source_dir/LICENSE" "$root/LICENSE"
+  cmp "$source_dir/NOTICE" "$root/NOTICE"
+}
+
+@test "a build refuses a source without NOTICE" {
+  rm "$source_dir/NOTICE"
+  run build native
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"build-codex: no $source_dir/NOTICE"* ]] || false
   [ ! -e "$cargo_env" ]
 }

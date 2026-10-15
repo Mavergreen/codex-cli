@@ -16,6 +16,8 @@ setup() {
     "$(cat "$PRODUCT_ROOT/components/rust/version")"
   make_binary x86_64 "$CODEX_ARTIFACT"
   make_binary x86_64 "$HOST_ARTIFACT"
+  echo "Apache License" > "$MAVERICKS_BUILD_ROOT/input/LICENSE"
+  echo "Copyright OpenAI" > "$MAVERICKS_BUILD_ROOT/input/NOTICE"
   make_archive
 }
 
@@ -36,7 +38,7 @@ make_binary() {
 }
 
 make_archive() {
-  tar -cf "$ARCHIVE" -C "$(dirname "$CODEX_ARTIFACT")" codex codex-code-mode-host build-manifest
+  tar -cf "$ARCHIVE" -C "$(dirname "$CODEX_ARTIFACT")" codex codex-code-mode-host build-manifest LICENSE NOTICE
   (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
 }
 
@@ -92,8 +94,16 @@ make_archive() {
   [ "$status" -ne 0 ]
 }
 
+@test "rejects an archive missing NOTICE" {
+  tar -cf "$ARCHIVE" -C "$(dirname "$CODEX_ARTIFACT")" codex codex-code-mode-host build-manifest LICENSE
+  (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
+  run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"LICENSE and NOTICE"* ]] || false
+}
+
 @test "rejects an archive missing codex-code-mode-host" {
-  tar -cf "$ARCHIVE" -C "$(dirname "$CODEX_ARTIFACT")" codex build-manifest
+  tar -cf "$ARCHIVE" -C "$(dirname "$CODEX_ARTIFACT")" codex build-manifest LICENSE NOTICE
   (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
   run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
   [ "$status" -ne 0 ]
