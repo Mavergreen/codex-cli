@@ -41,11 +41,12 @@ binaries link and pass the non-interactive smoke checks: see `docs/compatibility
 ## Compatibility gate implementation
 
 Both imported Rust executables, `codex` and `codex-code-mode-host`, are checked by shipyard's
-`assert_binary_compatible.sh` from the CMake custom target `codex_compat`. Shipyard's
-`mavericks_assert_binary_compatible()` attaches a `POST_BUILD` command to a compiled target, while
-CMake does not permit that command on an imported executable. The custom target therefore invokes
-the same shipyard checker on each exact imported file. It then runs `build/check-load-paths.sh` on
-both, which refuses any library outside `/usr/lib/` and `/System/Library/` and any `LC_RPATH`:
+`assert_binary_compatible.sh` as CTest tests (`compat_guard_codex`, `compat_guard_codex-code-mode-host`), run by
+`shipyard-ctest --preset native|cross`, as mavergreen-gh does. They are not a build-time step.
+Shipyard's `mavericks_assert_binary_compatible()` attaches a `POST_BUILD` command to a compiled
+target, while CMake does not permit that command on an imported executable. The tests therefore
+invoke the same shipyard checker on each exact imported file. The tests `load_paths_codex` and
+`load_paths_codex-code-mode-host` run `build/check-load-paths.sh` on each, which refuses any library outside `/usr/lib/` and `/System/Library/` and any `LC_RPATH`:
 shipyard's checker does not look at load paths, and it passed a `codex` that loaded pkgsrc's
 `/opt/pkg` dylibs. `build/verify-artifact.sh` runs the same load-path check on a transferred
 artifact. It is interim, until shipyard's family guard checks load paths.
@@ -140,7 +141,7 @@ unsupported rather than mapped. Follow-up: one file holding both (`<sha> # <vers
 manager on `UPSTREAM_VERSION` for the same dependency) would close the gap; it needs the readers
 updated and shipyard's convention confirmed for two files.
 
-`release.yml` mirrors mavergreen-gh's: a `build` job on `macos-26` (cross build, compat guard, updater,
+`release.yml` mirrors mavergreen-gh's: a `build` job on `macos-26` (cross build, updater, compat guard tests,
 repo tests, pkg, package test, notes, feeds, conformance), `on-mavericks` (installs the cross-built pkg
 in a real 10.9 VM and runs `codex --version`, `codex --help`, `codex-code-mode-host --help`, the link
 farm's symlinked `codex`, and `codex sandbox -- /usr/bin/true`; no login and no secrets beyond the VM

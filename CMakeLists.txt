@@ -43,22 +43,23 @@ foreach(_codex_name codex codex-code-mode-host)
   set_target_properties(${_codex_name} PROPERTIES IMPORTED_LOCATION "${_codex_path}")
 endforeach()
 
-# The shipyard helper attaches POST_BUILD to compiled targets; CMake forbids that on an imported
-# executable. Run the same shipyard guard directly against each exact imported Codex artifact.
-add_custom_target(codex_compat ALL
-  COMMAND "${CMAKE_COMMAND}" -E env
-    "MAVERICKS_DEVIATIONS_ROOT=${CMAKE_SOURCE_DIR}"
-    "MAVERICKS_ALLOW_ARCHS=x86_64"
-    sh "${MavericksShipyard_SCRIPTS}/assert_binary_compatible.sh" "$<TARGET_FILE:codex>"
-  COMMAND "${CMAKE_COMMAND}" -E env
-    "MAVERICKS_DEVIATIONS_ROOT=${CMAKE_SOURCE_DIR}"
-    "MAVERICKS_ALLOW_ARCHS=x86_64"
-    sh "${MavericksShipyard_SCRIPTS}/assert_binary_compatible.sh" "$<TARGET_FILE:codex-code-mode-host>"
+enable_testing()
+
+# platform: shipyard's mavericks_assert_binary_compatible() attaches POST_BUILD to a compiled target,
+#           which CMake forbids on an imported executable. Run the same shipyard guard as a CTest
+#           test against each exact imported Codex artifact, as mavergreen-gh does (compat_guard_gh).
+#           It runs once, under `shipyard-ctest`, not also at build time.
+foreach(_codex_name codex codex-code-mode-host)
+  add_test(NAME compat_guard_${_codex_name}
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "MAVERICKS_DEVIATIONS_ROOT=${CMAKE_SOURCE_DIR}"
+      "MAVERICKS_ALLOW_ARCHS=x86_64"
+      sh "${MavericksShipyard_SCRIPTS}/assert_binary_compatible.sh" "$<TARGET_FILE:${_codex_name}>")
   # Interim, until shipyard's guard checks load paths: it passed a codex that loaded /opt/pkg dylibs.
-  COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-load-paths.sh"
-    "$<TARGET_FILE:codex>" "$<TARGET_FILE:codex-code-mode-host>"
-  VERBATIM
-  COMMENT "Checking the imported Codex executables for Mavericks compatibility")
+  add_test(NAME load_paths_${_codex_name}
+    COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-load-paths.sh" "$<TARGET_FILE:${_codex_name}>")
+endforeach()
+
 
 option(CODEX_BUILD_UPDATER "Build the Sparkle updater (needs codex-cli in the installed shipyard's product registry)" OFF)
 

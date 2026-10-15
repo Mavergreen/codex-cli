@@ -93,7 +93,7 @@ jobs:
 
       # CODEX_CROSS_ONLY_MANIFEST: CI has no native build to compare with, so the cross manifest is checked
       # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
-      - name: Configure, build the updater, then the compat guard
+      - name: Configure, build the updater, then run the compat guard tests
         run: |
           shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
           shipyard-cmake --build --preset cross

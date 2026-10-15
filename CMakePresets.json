@@ -10,5 +10,9 @@
   "buildPresets": [
     { "name": "native", "configurePreset": "native" },
     { "name": "cross", "configurePreset": "cross" }
+  ],
+  "testPresets": [
+    { "name": "native", "configurePreset": "native", "output": { "outputOnFailure": true } },
+    { "name": "cross", "configurePreset": "cross", "output": { "outputOnFailure": true } }
   ]
 }
