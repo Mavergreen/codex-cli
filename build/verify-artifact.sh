@@ -32,6 +32,8 @@ actual_hash=$(shasum -a 256 "$ARCHIVE" | awk '{ print $1 }')
 members=$(tar -tf "$ARCHIVE") || { echo "verify-artifact: cannot list archive" >&2; exit 1; }
 # spec: a `._` AppleDouble member (made by bsdtar on macOS 27) is a sixth member, so this count and the
 #       five named checks below already refuse it; no separate `._` check is needed.
+#       This holds where the verifying tar lists `._` members, as 10.9's does; macOS 27's tar folds them
+#       when listing, and archives made there are verified by 10.9's tar.
 member_count=$(printf '%s\n' "$members" | awk 'NF { n++ } END { print n+0 }')
 [ "$member_count" -eq 5 ] || { echo "verify-artifact: archive must contain exactly codex, codex-code-mode-host, build-manifest, LICENSE and NOTICE" >&2; exit 1; }
 printf '%s\n' "$members" | grep -qx codex || { echo "verify-artifact: archive has no codex executable" >&2; exit 1; }

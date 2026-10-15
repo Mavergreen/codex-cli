@@ -190,7 +190,7 @@ SPY
   [ "$(wc -l < "$BATS_TEST_TMPDIR/members" | tr -d '[:space:]')" -eq 5 ]
   run grep -q '\._' "$BATS_TEST_TMPDIR/members"
   [ "$status" -eq 1 ]
-  [ "$(sort "$BATS_TEST_TMPDIR/members" | tr '\n' ' ')" = "LICENSE NOTICE build-manifest codex codex-code-mode-host " ]
+  [ "$(LC_ALL=C sort "$BATS_TEST_TMPDIR/members" | tr '\n' ' ')" = "LICENSE NOTICE build-manifest codex codex-code-mode-host " ]
 }
 
 @test "transfer-artifact.sh passes --no-xattrs only to a tar that accepts it" {
@@ -209,11 +209,17 @@ SPY
 
 @test "rejects an archive with an AppleDouble member" {
   make_transfer_source
-  printf junk > "$TRANSFER_SOURCE/._codex"
-  tar -cf "$ARCHIVE" -C "$TRANSFER_SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE ._codex
-  # platform: 10.9's tar folds a `._codex` member into codex and does not list it, so only a tar that
-  #           lists it (macOS 27's) can exercise the refusal.
-  tar -tf "$ARCHIVE" | grep -q '^\._codex$' || skip "this host's tar does not list AppleDouble members"
+  # An AppleDouble-sized file, so a tar that lists the member does not trip over its contents.
+  dd if=/dev/zero of="$TRANSFER_SOURCE/._codex" bs=512 count=1 2>/dev/null
+  # COPYFILE_DISABLE=1: by default bsdtar folds a literal `._codex` into codex at create time (measured
+  #           on macOS 27), so the member would never reach the archive.
+  COPYFILE_DISABLE=1 tar -cf "$ARCHIVE" -C "$TRANSFER_SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE ._codex
+  # platform: 10.9's tar lists a `._codex` member, so verify-artifact.sh's member count refuses it. macOS 27's
+  #           `tar -tf` treats `._X` as AppleDouble metadata for the entry that follows it: with `._codex`
+  #           last it lists six names, then fails with "Truncated input file" (rc 1); elsewhere it folds
+  #           the member silently and lists five. Skip unless the local tar lists it and succeeds.
+  tar -tf "$ARCHIVE" > "$BATS_TEST_TMPDIR/listing" 2>/dev/null && grep -q '^\._codex$' "$BATS_TEST_TMPDIR/listing" ||
+    skip "this host's tar folds AppleDouble members when listing, so it cannot list the ._codex member"
   (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
   run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
   [ "$status" -ne 0 ]

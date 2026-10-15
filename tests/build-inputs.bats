@@ -65,8 +65,8 @@ RELEASE=yes" ]
     codex-rs/sandboxing/src/seatbelt_tests.rs \
     codex-rs/sandboxing/src/seatbelt.rs \
     codex-rs/sandboxing/src/seatbelt_daemon.rs \
-    codex-rs/utils/pty/src/posix_child.rs | sort)
-  changed=$(git -C "$source_dir" diff --name-only | sort)
+    codex-rs/utils/pty/src/posix_child.rs | LC_ALL=C sort)
+  changed=$(git -C "$source_dir" diff --name-only | LC_ALL=C sort)
   [ "$changed" = "$expected" ] || { printf 'expected changes:\n%s\nchanged:\n%s\n' "$expected" "$changed"; return 1; }
   others=$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ' || true)
   [ -z "$others" ] || { printf 'status beyond the modified files:\n%s\n' "$others"; return 1; }
