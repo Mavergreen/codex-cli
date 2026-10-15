@@ -155,3 +155,67 @@ make_leaky_binary() {
   run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
   [ "$status" -ne 0 ]
 }
+
+# platform: macOS 27's bsdtar adds `._` AppleDouble members and pax xattr headers for the
+#           com.apple.provenance xattr, which 10.9's tar cannot read. A provenance xattr cannot be
+#           made on 10.9, so these tests check what transfer-artifact.sh asks tar to do and what it
+#           writes, not the xattr handling itself.
+make_transfer_source() {
+  export TRANSFER_SOURCE="$BATS_TEST_TMPDIR/source"
+  mkdir -p "$TRANSFER_SOURCE"
+  cp "$CODEX_ARTIFACT" "$HOST_ARTIFACT" "$BUILD_MANIFEST" \
+    "$MAVERICKS_BUILD_ROOT/input/LICENSE" "$MAVERICKS_BUILD_ROOT/input/NOTICE" "$TRANSFER_SOURCE/"
+}
+
+# A tar that records COPYFILE_DISABLE and its arguments, then runs the real one.
+make_tar_spy() {
+  mkdir -p "$BATS_TEST_TMPDIR/spy"
+  real_tar=$(command -v tar)
+  cat > "$BATS_TEST_TMPDIR/spy/tar" <<SPY
+#!/bin/sh
+printf 'COPYFILE_DISABLE=%s ARGS=%s\n' "\${COPYFILE_DISABLE-unset}" "\$*" >> "$BATS_TEST_TMPDIR/tar-calls"
+exec "$real_tar" "\$@"
+SPY
+  chmod +x "$BATS_TEST_TMPDIR/spy/tar"
+}
+
+@test "transfer-artifact.sh archives with COPYFILE_DISABLE=1 and no AppleDouble member" {
+  make_transfer_source
+  make_tar_spy
+  PATH="$BATS_TEST_TMPDIR/spy:$PATH" run sh "$PRODUCT_ROOT/build/transfer-artifact.sh" \
+    "$TRANSFER_SOURCE" "$BATS_TEST_TMPDIR/dest"
+  [ "$status" -eq 0 ]
+  grep -q 'COPYFILE_DISABLE=1 ARGS=.*-cf .*codex.tar' "$BATS_TEST_TMPDIR/tar-calls"
+  tar -tf "$BATS_TEST_TMPDIR/dest/codex.tar" > "$BATS_TEST_TMPDIR/members"
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/members" | tr -d '[:space:]')" -eq 5 ]
+  run grep -q '\._' "$BATS_TEST_TMPDIR/members"
+  [ "$status" -eq 1 ]
+  [ "$(sort "$BATS_TEST_TMPDIR/members" | tr '\n' ' ')" = "LICENSE NOTICE build-manifest codex codex-code-mode-host " ]
+}
+
+@test "transfer-artifact.sh passes --no-xattrs only to a tar that accepts it" {
+  make_transfer_source
+  make_tar_spy
+  PATH="$BATS_TEST_TMPDIR/spy:$PATH" run sh "$PRODUCT_ROOT/build/transfer-artifact.sh" \
+    "$TRANSFER_SOURCE" "$BATS_TEST_TMPDIR/dest"
+  [ "$status" -eq 0 ]
+  if tar --no-xattrs -cf /dev/null /dev/null 2>/dev/null; then
+    grep -q -- '--no-xattrs .*-cf .*codex.tar' "$BATS_TEST_TMPDIR/tar-calls"
+  else
+    run grep -q -- 'ARGS=--no-xattrs .*codex.tar' "$BATS_TEST_TMPDIR/tar-calls"
+    [ "$status" -eq 1 ]
+  fi
+}
+
+@test "rejects an archive with an AppleDouble member" {
+  make_transfer_source
+  printf junk > "$TRANSFER_SOURCE/._codex"
+  tar -cf "$ARCHIVE" -C "$TRANSFER_SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE ._codex
+  # platform: 10.9's tar folds a `._codex` member into codex and does not list it, so only a tar that
+  #           lists it (macOS 27's) can exercise the refusal.
+  tar -tf "$ARCHIVE" | grep -q '^\._codex$' || skip "this host's tar does not list AppleDouble members"
+  (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
+  run sh "$PRODUCT_ROOT/build/verify-artifact.sh" "$ARCHIVE" "$CHECKSUM" x86_64-apple-darwin
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"exactly codex"* ]] || false
+}

@@ -24,7 +24,20 @@ BUILD_ROOT=$(sh "$HERE/resolve-build-root.sh")
 STAGING="$BUILD_ROOT/transfer-artifact.$$"
 mkdir "$STAGING"
 trap 'rm -rf "$STAGING"' EXIT HUP INT TERM
-tar -cf "$STAGING/codex.tar" -C "$SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE
+# platform: macOS 27 stamps every file with a com.apple.provenance xattr that `xattr -cr` cannot
+#           remove, and its bsdtar writes `._` AppleDouble members and pax xattr headers for it.
+#           10.9's bsdtar 2.8.3 then lists the `._` members and exits 1 ("Ignoring malformed pax
+#           extended attribute"), so verify-artifact.sh refuses the archive. COPYFILE_DISABLE=1 stops
+#           the AppleDouble members and 10.9's tar honors it; macOS 27 also needs --no-xattrs, which
+#           10.9's tar rejects, so probe for it.
+COPYFILE_DISABLE=1
+export COPYFILE_DISABLE
+if tar --no-xattrs -cf /dev/null /dev/null 2>/dev/null; then
+  set -- --no-xattrs
+else
+  set --
+fi
+tar "$@" -cf "$STAGING/codex.tar" -C "$SOURCE" codex codex-code-mode-host build-manifest LICENSE NOTICE
 (cd "$STAGING" && shasum -a 256 codex.tar > codex.tar.sha256)
 
 case "$DESTINATION" in
