@@ -62,8 +62,8 @@ on 10.9.
 
 | Check | Result |
 |---|---|
-| The patched tree compared with unpatched upstream | no failure caused by the patches. Every failure also fails on upstream there: 366 come from that Mac's environment, and the rest are tests that fail on both trees when the machine is loaded |
-| `codex-http-client` | 119 passed. The 6 tests of upstream's native-TLS retry are ignored by 0001 |
-| `suite::mcp_optional_startup_grace`, one test at a time | 6 of 6 pass, 3 of 3 runs: about 4.0 s, against upstream's 2.35 s, for the first client's root load |
-| The same 6 tests started together | fail on both trees: loading the roots slows down with concurrent processes (about 160 ms alone, 390 ms each for 6) |
-| `cargo fmt` with upstream's options, and `cargo clippy -p codex-http-client --tests` | clean |
+| The full run above, patched against unpatched upstream | no failure caused by the patches. Every failure also fails on upstream there: 366 come from that Mac's environment, and the rest are tests that fail on both trees when the machine is loaded |
+| `codex-http-client`, `codex-otel` and `codex-responses-api-proxy`, 5 runs each, after 0001 loaded its roots at the first certificate check | `codex-http-client` and the proxy: no failures, and faster than upstream. `codex-otel`: `otlp_http_exporter_times_out_when_collector_stalls_during_bounded_shutdown` fails on both trees; `…sends_traces_to_collector_with_bounded_shutdown_in_tokio_runtime` failed once in 5 patched runs, not root-caused. The 6 tests of upstream's native-TLS retry are ignored by 0001 |
+| An OTLP trace exporter with no `tls` table, unmanaged policy, against a TLS 1.3-only local server | the patched tree completes a TLS 1.3 handshake with ALPN through the lazy verifier. Upstream's exporter used native-tls and failed the handshake |
+| `suite::mcp_optional_startup_grace` | 3 of its 6 cases fail with the patches when the 6 start together, and upstream fails 1 or 2 there too. The cause is the test harness: the first `CFBundleGetMainBundle` in a process lists the executable's directory, and a test binary sits in `target/debug/deps` (about 134,000 entries), which took 0.6 to 1.3 s. With rustls, that first lookup falls inside MCP startup, through the system-proxy probe reqwest makes when it builds a client. An installed `codex` sits in a small directory, where the same lookup takes about 0.4 ms |
+| `cargo fmt` with upstream's options, and `cargo clippy -p codex-http-client -p codex-otel -p codex-responses-api-proxy --tests` | clean |

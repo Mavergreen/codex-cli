@@ -12,12 +12,11 @@ since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is th
   bundled rustls backend instead of native-tls. A client with its own root certificate or client
   identity gets reqwest's rustls, which honors them. Every other client gets one rustls config
   shared by the process, from `custom_ca.rs`. That config trusts the platform's native roots and
-  offers `h2` and `http/1.1` by ALPN, as reqwest's own would. `custom_ca.rs` also loads the native
-  roots once per process, and its websocket config reuses them. The six `http-client` tests of
-  upstream's native-TLS-to-rustls retry are marked ignored, with the reason. In
-  `core/tests/suite/mcp_optional_startup_grace.rs`, the "zero grace respects server startup
-  timeout" case gives the server 1 s to start instead of 250 ms, because the first client's root
-  load does not fit in 250 ms.
+  offers `h2` and `http/1.1` by ALPN, as reqwest's own would. Its certificate verifier is rustls's
+  own WebPKI verifier over those roots, built at the first certificate check, so a client that
+  never makes a TLS connection never loads them. `custom_ca.rs` loads the native roots at most
+  once per process, and its websocket config reuses them. The six `http-client` tests of
+  upstream's native-TLS-to-rustls retry are marked ignored, with the reason.
 - **Why:** reqwest's default backend is native-tls (Secure Transport). On a stock 10.9 it cannot
   negotiate modern TLS (`-9824`, handshake failure). With AquaTransport installed, the handshake
   completes, but native-tls then checks the server's certificates itself: it breaks the handshake
@@ -28,7 +27,8 @@ since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is th
 - **Why shared:** loading the native roots takes about 450 ms on 10.9 (214 roots, measured on
   2026-10-14), and reqwest's own rustls loads them again for every client it builds. One `codex
   exec` built 10 clients that way, and upstream tests that build many clients ran past their time
-  limits.
+  limits. Loading eagerly at the first client build was not enough: nextest runs every test in its
+  own process, so plain-HTTP loopback tests and MCP startup paid for roots they never used.
 - **Roots:** rustls trusts the roots in the keychain's trust settings. A stock 10.9 lacks ISRG
   Root X1 there. AquaTransport's ModernRootCertificates package adds it, which is enough for
   auth.openai.com, chatgpt.com and api.openai.com.
@@ -36,9 +36,9 @@ since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is th
   With `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE` set, upstream's custom-CA path is unchanged: it
   still builds reqwest's rustls for each client, so it still loads the roots each time.
 - **Cost:** a change to the keychain's trust settings reaches a running Codex only after it
-  restarts. The process's first client still pays the one root load, about 450 ms on 10.9. An MCP
-  server configured with a `startup_timeout_sec` below about half a second can time out when it
-  builds that first client; the default is 30 s.
+  restarts. The process's first TLS handshake still pays the one root load, about 450 ms on 10.9.
+  An HTTPS MCP server configured with a `startup_timeout_sec` below about half a second can time
+  out if its handshake is the first; the default is 30 s.
 - **Clients outside `HttpClientBuilder`:** four reqwest clients are built elsewhere, and 0001
   puts each on rustls too. The blocking OTLP client (`otel/src/otlp.rs`) shares the config, or
   uses reqwest's rustls when it has its own CA or client identity. The log, trace and metrics

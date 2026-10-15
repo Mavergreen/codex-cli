@@ -44,7 +44,6 @@ setup() {
     codex-rs/http-client/src/route_aware_client_pool_tests.rs \
     codex-rs/http-client/src/route_aware_tls_fallback_tests.rs \
     codex-rs/core/src/config/mod.rs \
-    codex-rs/core/tests/suite/mcp_optional_startup_grace.rs \
     codex-rs/otel/src/metrics/client.rs \
     codex-rs/otel/src/otlp.rs \
     codex-rs/otel/src/provider.rs \

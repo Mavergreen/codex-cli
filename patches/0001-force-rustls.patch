@@ -1,29 +1,3 @@
-diff --git a/codex-rs/core/tests/suite/mcp_optional_startup_grace.rs b/codex-rs/core/tests/suite/mcp_optional_startup_grace.rs
-index 73a2028..6880bab 100644
---- a/codex-rs/core/tests/suite/mcp_optional_startup_grace.rs
-+++ b/codex-rs/core/tests/suite/mcp_optional_startup_grace.rs
-@@ -50,7 +50,11 @@ async fn optional_mcp_startup_grace_controls_initial_turn_tool_catalog(
-     };
-     let startup_timeout = match scenario {
-         StartupGraceScenario::ShortGraceOmitsPending => PENDING_SERVER_TIMEOUT,
--        StartupGraceScenario::DisabledGraceRespectsStartupTimeout => Duration::from_millis(250),
-+        // Patch 0001: the server's startup includes building its HTTP client, and the process's
-+        // first client also loads the platform roots for the shared rustls config. Together they
-+        // take longer than 250 ms. The held initialize never completes, so the timeout still
-+        // ends it.
-+        StartupGraceScenario::DisabledGraceRespectsStartupTimeout => Duration::from_secs(1),
-         StartupGraceScenario::CustomGraceIncludesReady
-         | StartupGraceScenario::DisabledGraceWaitsForStartup => Duration::from_secs(1),
-     };
-@@ -146,7 +150,7 @@ async fn optional_mcp_startup_grace_controls_initial_turn_tool_catalog(
-                     .is_err(),
-                 "zero grace should keep waiting until the server-specific startup timeout"
-             );
--            tokio::time::timeout(Duration::from_secs(1), &mut turn)
-+            tokio::time::timeout(Duration::from_secs(2), &mut turn)
-                 .await
-                 .context("zero grace should stop waiting once the server startup times out")??;
-             release_startup
 diff --git a/codex-rs/http-client/src/client_builder.rs b/codex-rs/http-client/src/client_builder.rs
 index a3ad63d..f776280 100644
 --- a/codex-rs/http-client/src/client_builder.rs
@@ -79,10 +53,10 @@ index a3ad63d..f776280 100644
              builder = builder.redirect(reqwest::redirect::Policy::none());
          } else if let Some(redirect_observed) = self.redirect_observed {
 diff --git a/codex-rs/http-client/src/custom_ca.rs b/codex-rs/http-client/src/custom_ca.rs
-index 6ca705d..69e21cc 100644
+index 6ca705d..06b9d3d 100644
 --- a/codex-rs/http-client/src/custom_ca.rs
 +++ b/codex-rs/http-client/src/custom_ca.rs
-@@ -46,6 +46,7 @@ use std::io;
+@@ -46,10 +46,12 @@ use std::io;
  use std::path::Path;
  use std::path::PathBuf;
  use std::sync::Arc;
@@ -90,7 +64,12 @@ index 6ca705d..69e21cc 100644
  
  use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
  use rustls::ClientConfig;
-@@ -248,15 +249,7 @@ fn build_rustls_client_config(
+ use rustls::RootCertStore;
++use rustls::client::danger::ServerCertVerifier;
+ use rustls_pki_types::CertificateDer;
+ use rustls_pki_types::pem::PemObject;
+ use rustls_pki_types::pem::SectionKind;
+@@ -248,15 +250,7 @@ fn build_rustls_client_config(
      // they would get from tungstenite's default rustls connector, then layer in the Codex custom
      // CA bundle on top when configured.
      let mut root_store = RootCertStore::empty();
@@ -107,7 +86,7 @@ index 6ca705d..69e21cc 100644
  
      if let Some(bundle) = bundle {
          let certificates = bundle.load_certificates()?;
-@@ -286,6 +279,46 @@ fn build_rustls_client_config(
+@@ -286,6 +280,127 @@ fn build_rustls_client_config(
      ))
  }
  
@@ -133,22 +112,103 @@ index 6ca705d..69e21cc 100644
 +///
 +/// macOS 10.9: it trusts the platform native roots, as reqwest's own rustls config would, and
 +/// offers the ALPN protocols reqwest would offer, since reqwest sets neither on a preconfigured
-+/// config. It is built once per process; each caller gets a cheap clone.
++/// config. It is built once per process; each caller gets a cheap clone. The roots load on the
++/// first certificate check, not here, so a client that never makes a TLS connection never pays.
 +pub fn shared_system_roots_rustls_config() -> ClientConfig {
 +    static CONFIG: OnceLock<ClientConfig> = OnceLock::new();
 +    CONFIG
 +        .get_or_init(|| {
 +            ensure_rustls_crypto_provider();
-+            let mut root_store = RootCertStore::empty();
-+            let _ =
-+                root_store.add_parsable_certificates(native_root_certificates().iter().cloned());
-+            let mut config = ClientConfig::builder()
-+                .with_root_certificates(root_store)
++            let builder = ClientConfig::builder();
++            let verifier = NativeRootsVerifier {
++                provider: Arc::clone(builder.crypto_provider()),
++                inner: OnceLock::new(),
++            };
++            let mut config = builder
++                .dangerous()
++                .with_custom_certificate_verifier(Arc::new(verifier))
 +                .with_no_client_auth();
 +            config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 +            config
 +        })
 +        .clone()
++}
++
++/// Verifies server certificates with rustls's own WebPKI verifier over the platform native roots,
++/// building it on the first check.
++///
++/// macOS 10.9: loading the roots takes about half a second there. Every check is delegated
++/// unchanged; only the moment the roots load moves.
++#[derive(Debug)]
++struct NativeRootsVerifier {
++    provider: Arc<rustls::crypto::CryptoProvider>,
++    inner: OnceLock<Result<Arc<rustls::client::WebPkiServerVerifier>, rustls::Error>>,
++}
++
++impl NativeRootsVerifier {
++    fn verifier(&self) -> Result<&Arc<rustls::client::WebPkiServerVerifier>, rustls::Error> {
++        self.inner
++            .get_or_init(|| {
++                let mut root_store = RootCertStore::empty();
++                let _ = root_store
++                    .add_parsable_certificates(native_root_certificates().iter().cloned());
++                rustls::client::WebPkiServerVerifier::builder_with_provider(
++                    Arc::new(root_store),
++                    Arc::clone(&self.provider),
++                )
++                .build()
++                .map_err(|error| {
++                    rustls::Error::General(format!(
++                        "cannot verify server certificates with the platform roots: {error}"
++                    ))
++                })
++            })
++            .as_ref()
++            .map_err(Clone::clone)
++    }
++}
++
++impl ServerCertVerifier for NativeRootsVerifier {
++    fn verify_server_cert(
++        &self,
++        end_entity: &CertificateDer<'_>,
++        intermediates: &[CertificateDer<'_>],
++        server_name: &rustls_pki_types::ServerName<'_>,
++        ocsp_response: &[u8],
++        now: rustls_pki_types::UnixTime,
++    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
++        self.verifier()?.verify_server_cert(
++            end_entity,
++            intermediates,
++            server_name,
++            ocsp_response,
++            now,
++        )
++    }
++
++    fn verify_tls12_signature(
++        &self,
++        message: &[u8],
++        cert: &CertificateDer<'_>,
++        dss: &rustls::DigitallySignedStruct,
++    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
++        self.verifier()?.verify_tls12_signature(message, cert, dss)
++    }
++
++    fn verify_tls13_signature(
++        &self,
++        message: &[u8],
++        cert: &CertificateDer<'_>,
++        dss: &rustls::DigitallySignedStruct,
++    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
++        self.verifier()?.verify_tls13_signature(message, cert, dss)
++    }
++
++    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
++        self.provider
++            .signature_verification_algorithms
++            .supported_schemes()
++    }
 +}
 +
  /// Builds a reqwest client using an injected environment source and reqwest builder.
@@ -223,7 +283,7 @@ index dc716e3..384d98e 100644
      let (url, attempts, stop_server) =
          spawn_protocol_version_rejection_server(/*maximum_attempts*/ 2)
 diff --git a/codex-rs/otel/src/metrics/client.rs b/codex-rs/otel/src/metrics/client.rs
-index ca7fa74..4ff30b1 100644
+index ca7fa74..6c764a7 100644
 --- a/codex-rs/otel/src/metrics/client.rs
 +++ b/codex-rs/otel/src/metrics/client.rs
 @@ -661,9 +661,13 @@ fn build_otlp_metric_exporter(
@@ -235,7 +295,7 @@ index ca7fa74..4ff30b1 100644
 +                // macOS 10.9: given no client, opentelemetry-otlp builds its own reqwest client,
 +                // which uses native-tls. Codex's client uses rustls, so build it even with no TLS
 +                // settings.
-+                let tls = tls.clone().unwrap_or_default();
++                let tls = tls.unwrap_or_default();
                  let client =
 -                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
 +                    crate::otlp::build_http_client(&tls, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
@@ -262,7 +322,7 @@ index 09b9b01..3f870f4 100644
      if let Some(path) = tls.ca_certificate.as_ref() {
          let (pem, location) = read_bytes(path)?;
 diff --git a/codex-rs/otel/src/provider.rs b/codex-rs/otel/src/provider.rs
-index 0b2aeb5..875da61 100644
+index 0b2aeb5..e7f8d60 100644
 --- a/codex-rs/otel/src/provider.rs
 +++ b/codex-rs/otel/src/provider.rs
 @@ -508,8 +508,12 @@ fn build_logger(
@@ -275,7 +335,7 @@ index 0b2aeb5..875da61 100644
 +                // macOS 10.9: given no client, opentelemetry-otlp builds its own reqwest client,
 +                // which uses native-tls. Codex's client uses rustls, so build it even with no TLS
 +                // settings.
-+                let tls = tls.clone().unwrap_or_default();
++                let tls = tls.unwrap_or_default();
 +                let client = crate::otlp::build_http_client(&tls, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT)?;
                  exporter_builder = exporter_builder.with_http_client(client);
              }
@@ -289,7 +349,7 @@ index 0b2aeb5..875da61 100644
 +                // macOS 10.9: given no client, opentelemetry-otlp builds its own reqwest client,
 +                // which uses native-tls. Codex's client uses rustls, so build it even with no TLS
 +                // settings.
-+                let tls = tls.clone().unwrap_or_default();
++                let tls = tls.unwrap_or_default();
                  let client =
 -                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)?;
 +                    crate::otlp::build_http_client(&tls, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)?;
