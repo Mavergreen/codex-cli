@@ -27,7 +27,7 @@ case "$sha" in
   "") echo "$name: $pkg is not listed in $base/SHA256SUMS -- refusing an unverified pkg" >&2; exit 1 ;;
   *[!0-9a-f]*) echo "$name: $pkg is listed more than once in $base/SHA256SUMS" >&2; exit 1 ;;
 esac
-mav_fetch_verified "$base/$pkg" "$sha" "$dir" "$pkg" || { echo "$name: $pkg failed verification" >&2; exit 1; }
+shipyard_fetch_verified "$base/$pkg" "$sha" "$dir" "$pkg" || { echo "$name: $pkg failed verification" >&2; exit 1; }
 
 rm -rf "$dir/expanded" "$dir/root" "$dir/extracted"
 pkgutil --expand "$dir/$pkg" "$dir/expanded"

@@ -46,9 +46,9 @@ fetch_asset() {
   [ "${#sha}" -eq 64 ] || { echo "fetch-rusty-v8: $SUMS does not list $name" >&2; exit 1; }
   cached=no
   [ ! -f "$DEST/$name" ] || cached=yes
-  mav_fetch_verified "$BASE/$name" "$sha" "$DEST" "$name" && return 0
+  shipyard_fetch_verified "$BASE/$name" "$sha" "$DEST" "$name" && return 0
   [ "$cached" = yes ] || exit 1
-  mav_fetch_verified "$BASE/$name" "$sha" "$DEST" "$name" || exit 1
+  shipyard_fetch_verified "$BASE/$name" "$sha" "$DEST" "$name" || exit 1
 }
 
 fetch_asset "$ARCHIVE"
