@@ -1,4 +1,5 @@
 #!/bin/sh
+# platform: host-agnostic -- plain sh and git; runs on ultimate-hat and modern macOS
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MAVERICKS_BUILD_DIR=$HERE

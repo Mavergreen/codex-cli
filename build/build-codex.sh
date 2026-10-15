@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: ultimate-hat for native; modern macOS for cross.
+# platform: macOS-only -- builds for Apple targets: ultimate-hat for native, an arm64 modern Mac for cross
 set -eu
 
 if [ "$#" -ne 1 ]; then
@@ -137,7 +137,15 @@ for notice in LICENSE NOTICE; do
   cp "$SOURCE/$notice" "$ARTIFACT/$notice"
   chmod 644 "$ARTIFACT/$notice"
 done
-VERSION=$(sh "$HERE/versions.sh" auto)
+# spec: .github/workflows/release.yml -- the workflow resolves the version (auto, local or reconcile) and writes
+#       it to VERSION; the manifest must say the same, so VERSION wins and version.sh auto is the fallback
+if [ -s "$MAVERICKS_ROOT/VERSION" ]; then
+  VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/VERSION")
+else
+  VERSION=$(sh "$HERE/version.sh" auto) || exit 1
+  VERSION=$(printf '%s\n' "$VERSION" | sed -n 's/^FULL=//p')
+fi
+[ -n "$VERSION" ] || { echo "build-codex: no version: VERSION is empty and version.sh printed no FULL=" >&2; exit 1; }
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \

@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# platform: host-agnostic -- fixtures and plain sh; runs on ultimate-hat and modern macOS
 
 setup() {
   export PRODUCT_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
@@ -85,4 +86,35 @@ setup() {
     grep -q '^#!/bin/sh$' "$script" || continue
     [ "$(head -n 1 "$script")" = '#!/bin/sh' ] || { echo "no shebang on line 1: $script"; return 1; }
   done
+}
+
+@test "--cross-only checks the cross manifest alone, as CI must with no native build" {
+  rm "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
+  [ "$status" -eq 0 ]
+  [ "$output" = "check-build-manifests: cross inputs match the committed pins (no native manifest compared)" ]
+}
+
+@test "--cross-only still refuses a cross manifest that is not the committed pins" {
+  rm "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  sed -i.bak 's/^source_revision=.*/source_revision=wrong/' \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Codex source revision mismatch"* ]] || false
+}
+
+@test "--cross-only still requires the cross manifest to use the host's protoc" {
+  rm "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  sed -i.bak 's/^protoc_runtime=.*/protoc_runtime=libcxx22-22.1.1-mavericks.8/' \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
+  [ "$status" -ne 0 ]
+}
+
+@test "an unknown check-build-manifests option is a usage error" {
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --bogus
+  [ "$status" -eq 2 ]
 }

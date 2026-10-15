@@ -1,4 +1,5 @@
 #!/bin/sh
+# platform: host-agnostic -- plain sh; runs on ultimate-hat and modern macOS
 set -eu
 
 HERE=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd)

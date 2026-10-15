@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: modern macOS or Mavericks -- otool -l lists load commands the same way on both.
+# platform: macOS-only -- otool lists load commands; the same on modern macOS and Mavericks
 #   usage: check-load-paths.sh BINARY...   exits 0 when every BINARY loads libraries only from
 #          /usr/lib/ and /System/Library/ and has no LC_RPATH; 1 if one does not; 2 on misuse
 # platform: interim, until shipyard's family guard checks load paths. assert_binary_compatible.sh

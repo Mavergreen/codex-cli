@@ -14,9 +14,17 @@ if(NOT _build_root_result EQUAL 0)
   message(FATAL_ERROR "Could not resolve the host-local Mavericks build root")
 endif()
 
+# spec: build/check-build-manifests.sh --cross-only -- CI has no native build to compare with, so it checks
+#       the cross manifest against the pins alone; a local release run compares both
+option(CODEX_CROSS_ONLY_MANIFEST "Check only the cross build manifest (CI has no native one)" OFF)
+set(_manifest_args)
+if(CODEX_CROSS_ONLY_MANIFEST)
+  set(_manifest_args --cross-only)
+endif()
+
 if(MAVERICKS_MODE STREQUAL "cross")
   execute_process(
-    COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-build-manifests.sh"
+    COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-build-manifests.sh" ${_manifest_args}
     RESULT_VARIABLE _manifest_result)
   if(NOT _manifest_result EQUAL 0)
     message(FATAL_ERROR "Native and cross Codex build manifests do not match")

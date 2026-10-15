@@ -2,10 +2,10 @@
 
 | Ingredient | Pin | Use |
 | --- | --- | --- |
-| OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144` | CLI source and Cargo workspace |
-| Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning) will be wired by the old plan's Task 6; nothing bumps the pin yet. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
-| Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning) will be wired by the old plan's Task 6; nothing bumps the pin yet | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
-| Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2` | SDK, build mode, source fetch, compatibility, and package helpers |
+| OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144`. Renovate (`github-releases` on `openai/codex`, tags `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` never match) bumps `UPSTREAM_VERSION` only; the commit is a manual edit, see "Releasing" | CLI source and Cargo workspace |
+| Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning); a bump repackages. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
+| Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning); a bump repackages | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
+| Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2`; the workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving repackages nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
 | Sparkle, in the updater | shipyard's `fetch_sparkle_framework.sh`, pinned by hash there; the family EdDSA public key is `updater/ed25519_key.pub`, the same file every Mavergreen product carries | Update channel for the installed CLI. Untrackable here: shipyard owns the Sparkle pin |
 | OpenAI prebuilt `rusty_v8` | Derived from Codex's `Cargo.lock` (`v8` package), so a Codex bump moves it with no separate pin and Renovate tracks nothing extra; verified against upstream's published `.sha256` checksums file | Static V8 archive linked into `codex-code-mode-host`; prebuilt because building V8 needs Chromium's toolchain and python3, which a native 10.9 build lacks |
 
@@ -30,6 +30,13 @@ sibling of its own canonicalized executable. The host links V8, so the build fet
 native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-14,
 in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Both
 binaries link and pass the non-interactive smoke checks: see `docs/compatibility-matrix.md`.
+
+## Declared state
+
+- upstream: UPSTREAM_VERSION
+- codex-revision: build/codex-revision
+- rust: components/rust/version
+- clang-22: components/clang-22/version
 
 ## Compatibility gate implementation
 
@@ -62,9 +69,8 @@ updater's bundle ID, feed and comparison version against the registry and the pa
 the pkg's own install scripts against a temporary target root, never `/`.
 
 The updater is an off-by-default CMake option, `-DCODEX_BUILD_UPDATER=ON`, because it needs `codex-cli`
-in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). That
-registry row is pending: it is not in a shipyard release yet, and this file records no shipyard revision
-for it until it is. The updater never links the CLI binary.
+in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). The row arrived in shipyard commit `b3b9a91`, released as `v1.0.487`; packaging and the updater were verified against that
+registry with no override. It stays off by default, as in mavergreen-gh. The updater never links the CLI binary.
 
 ## License notices
 
@@ -85,3 +91,44 @@ and byte-identical to the artifact's.
 - **Codex is not built by CMake.** The CMake project imports the two executables that
   `build/build-codex.sh` made, so the product is packaged by `packaging/build-pkg.sh` from that output
   rather than from CMake install rules.
+
+## Releasing
+
+A merged `UPSTREAM_VERSION` bump releases itself: the push to `main` cuts `-mavericks.1`. A merged
+bump of `components/rust/version` or `components/clang-22/version` repackages (`repackage-on-ingredient-bump`).
+
+A packaging-only release of the same source (a new `.N`):
+
+    gh workflow run release.yml -R Mavergreen/codex-cli --ref main -f local_release=true
+
+**Bumping Codex takes two edits, and only one is automatic.** The family has a convention for a tag
+pinned together with its commit (Renovate's `git-refs`/`currentDigest`, as in porthole's `SKALIBS_REF`
+and recaulk's `components/macports-legacy-support/version`), but it pins both in one file. Here the
+tag is `UPSTREAM_VERSION`, which the family requires to be a bare committed version, and the commit is
+`build/codex-revision`, which eight scripts and tests read as a bare SHA. Renovate bumps
+`UPSTREAM_VERSION` alone, so the gap is guarded rather than closed: `build/check-upstream-pin.sh
+--remote` is the first step after install in `release.yml`, and fails the PR before anything is built,
+printing the commit that `rust-v<version>` points at and naming `build/codex-revision`. Until that edit
+is made on the Renovate branch (with `patches/` refreshed if they no longer apply), the PR stays red
+and does not automerge. The same step refuses a prerelease or otherwise non-`x.y.z`
+`UPSTREAM_VERSION`: `0.162.0-alpha.1-mavericks.1` has no order the updater can compare, so the form is
+unsupported rather than mapped. Follow-up: one file holding both (`<sha> # <version>`, with a second
+manager on `UPSTREAM_VERSION` for the same dependency) would close the gap; it needs the readers
+updated and shipyard's convention confirmed for two files.
+
+`release.yml` mirrors mavergreen-gh's: a `build` job on `macos-26` (cross build, compat guard, updater,
+repo tests, pkg, package test, notes, feeds, conformance), `on-mavericks` (installs the cross-built pkg
+in a real 10.9 VM and runs `codex --version`, `codex --help`, `codex-code-mode-host --help`, the link
+farm's symlinked `codex`, and `codex sandbox -- /usr/bin/true`; no login and no secrets beyond the VM
+key), `scan` (key-log scan) and `publish`, which needs `build`, `scan` and `on-mavericks`. The
+`conventions` check and `reconcile` backstop are gh's, unchanged. Voice is not built or smoked.
+
+Two CI-specific points:
+
+- CI has no native build to compare against, so the cross configure passes
+  `-DCODEX_CROSS_ONLY_MANIFEST=ON`, which runs `build/check-build-manifests.sh --cross-only`: the cross
+  manifest is checked against the committed pins (source commit, Rust, clang-22, target, deployment
+  target, SDK shape, host protoc). The native-vs-cross comparison is an out-of-band check, like the logged-in smokes: nothing enforces it before a release. Run it with the
+  native artifact transferred from ultimate-hat.
+- The logged-in smokes (a symlinked `codex` running a `code_mode_only` model) need credentials and
+  stay out-of-band checks on ultimate-hat; see `docs/compatibility-matrix.md`.

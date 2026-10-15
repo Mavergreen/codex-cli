@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# platform: host-agnostic -- fixtures and plain sh; runs on ultimate-hat and modern macOS
 
 # Each test checks a scratch copy of build/ and components/, so it can write its own pin, against a
 # source directory holding only codex-rs/rust-toolchain.toml.

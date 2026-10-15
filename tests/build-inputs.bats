@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# platform: host-agnostic -- fixtures and plain sh; runs on ultimate-hat and modern macOS
 
 setup() {
   export MAVERGREEN_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
@@ -10,14 +11,18 @@ setup() {
 
 @test "version resolution follows the family upstream and packaging axes" {
   upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
-  run sh "$MAVERGREEN_ROOT/build/versions.sh" auto
+  run sh "$MAVERGREEN_ROOT/build/version.sh" auto
   [ "$status" -eq 0 ]
-  [ "$output" = "$upstream-mavericks.1" ]
+  [ "$output" = "FULL=$upstream-mavericks.1
+TAG=$upstream-mavericks.1
+RELEASE=yes" ]
 
   export MAVERICKS_TAGS="$upstream-mavericks.1"
-  run sh "$MAVERGREEN_ROOT/build/versions.sh" local
+  run sh "$MAVERGREEN_ROOT/build/version.sh" local
   [ "$status" -eq 0 ]
-  [ "$output" = "$upstream-mavericks.2" ]
+  [ "$output" = "FULL=$upstream-mavericks.2
+TAG=$upstream-mavericks.2
+RELEASE=yes" ]
 }
 
 @test "build root is host-local and cannot be inside the product source" {

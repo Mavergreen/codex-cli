@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: modern macOS or Mavericks -- validates a transferred native artifact.
+# platform: macOS-only -- validates a transferred artifact with otool and file; modern macOS or Mavericks
 set -eu
 
 if [ "$#" -ne 3 ]; then

@@ -1,4 +1,5 @@
 #!/bin/sh
+# platform: host-agnostic -- plain sh; runs on ultimate-hat and modern macOS
 set -eu
 BUILD_DIR=${MAVERICKS_BUILD_DIR:?set MAVERICKS_BUILD_DIR before sourcing build/lib.sh}
 MAVERICKS_ROOT=$(CDPATH= cd -- "$BUILD_DIR/.." && pwd)

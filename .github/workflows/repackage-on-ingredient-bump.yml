@@ -1,0 +1,18 @@
+name: repackage-on-ingredient-bump
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - components/rust/version
+      - components/clang-22/version
+
+permissions: {}
+
+jobs:
+  repackage:
+    permissions:
+      actions: write
+    uses: Mavergreen/shipyard/.github/workflows/repackage-on-ingredient-bump.yml@v1
+    with:
+      own-upstream-paths: UPSTREAM_VERSION

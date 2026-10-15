@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# platform: host-agnostic -- fixtures and plain sh; runs on ultimate-hat and modern macOS
 
 setup() {
   export PRODUCT_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
