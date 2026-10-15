@@ -37,8 +37,9 @@ upstream's own lints (trailing semicolons in `bail!`, unused imports and `mut`).
 | shipyard `assert_binary_compatible.sh` on both binaries | passed natively for both (`compat guard: 1 binaries clean (x86_64, pinned minos and SDK per arch, no post-10.9 imports)`). It also passed the earlier `codex` that linked `/opt/pkg` dylibs, so it does not check where a binary's libraries come from |
 | `otool -L` shows no libcxx22, `@rpath` or build-root paths | passed for both after the pkg-config fix: libobjc, libSystem and `/usr/lib/libiconv.2.dylib`, plus OS frameworks (`codex` adds IOKit, AppKit and CoreGraphics), and no `LC_RPATH` and no `/opt/pkg` string. Build-root paths appear only as Cargo source paths in panic locations (2141 in `codex`, 828 in the host), not as load paths |
 | `otool -l` shows minos 10.9 and SDK 10.9 | passed for both: `LC_VERSION_MIN_MACOSX`, `version 10.9`, `sdk 10.9` |
-| `code_mode_only` model through a symlinked `codex` does not report "Code Mode is unavailable" | maintainer, interactive |
-| TUI starts in Terminal with a prompt, not an Objective-C exception | maintainer, interactive |
+| `code_mode_only` model through a symlinked `codex` does not report "Code Mode is unavailable" | failed on 2026-10-15 before 0009: logged in with `codex login --device-auth`, `codex exec -m gpt-5.6-terra "run ls"` through a symlink in another directory warned "host executable was not found" for `codex-code-mode-host` beside the symlink, and the model could not run `ls`. From the real path it ran `ls` through the host in the read-only sandbox. Passed through the symlink with 0009 |
+| TUI starts in Terminal with a prompt, not an Objective-C exception | passed on 2026-10-15 (maintainer): the trust prompt, then the TUI; a full turn ran a command and answered. No FSEvents lines on the screen at startup or quit |
+| `FSEventsPurgeEventsForDeviceUpToEventId: f2d_purge_events_for_device_up_to_event_id_rpc() failed: 5` on stderr | seen in `codex exec` output, a few lines per run; harmless. notify 8.2.0, Codex's file watcher, calls it whenever it restarts an FSEvents stream, and Apple's header says only root may call it. 10.9 prints the failure. notify removed the call in 9.0.0-rc.2 (#795); Codex 0.161.0 pins 8.2.0, so it goes away when Codex moves to notify 9 |
 
 ## Cross build
 

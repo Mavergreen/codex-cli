@@ -4,7 +4,8 @@
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has
-since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is this product's own.
+since been rewritten here; `PROVENANCE.md` says where each came from. 0008 and 0009 are this
+product's own.
 
 ## 0001-force-rustls.patch
 
@@ -160,3 +161,17 @@ since been rewritten here; `PROVENANCE.md` says where each came from. 0008 is th
   `macos_child_tests.rs`, hooks `command_runner_tests.rs`) are valid only on 10.15 and later.
 - **When to reconsider:** when the floor rises to 10.15, or upstream looks the function up at
   runtime itself.
+
+## 0009-code-mode-host-beside-resolved-executable.patch
+
+- **What:** `codex-rs/install-context/src/lib.rs` looks for `codex-code-mode-host` beside the file
+  `codex` resolves to, not beside the path it was started by. If that path cannot be resolved, it
+  looks where upstream does. `code_mode_host_program_follows_a_symlinked_codex_to_its_directory`
+  tests it.
+- **Why:** on 10.9, `_NSGetExecutablePath`, and so `std::env::current_exe()`, returns the path
+  `codex` was started by, a symlink included. Upstream resolves only that path's directory, so a
+  symlink to `codex` in another directory made Code Mode fail with "host executable was not
+  found". Measured on 2026-10-15. Whether newer macOS returns the resolved path was not measured.
+- **Invariant kept:** a package layout or standalone release directory is used first, as before.
+  Started from its own directory, `codex` finds the host where it always did.
+- **When to reconsider:** when upstream resolves the executable before taking its directory.

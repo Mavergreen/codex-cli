@@ -38,6 +38,7 @@ setup() {
   [ "$(git -C "$source_dir" rev-parse HEAD)" = "$(cat "$MAVERGREEN_ROOT/build/codex-revision")" ]
   expected=$(printf '%s\n' \
     codex-rs/Cargo.lock \
+    codex-rs/install-context/src/lib.rs \
     codex-rs/http-client/src/client_builder.rs \
     codex-rs/http-client/src/custom_ca.rs \
     codex-rs/http-client/src/lib.rs \

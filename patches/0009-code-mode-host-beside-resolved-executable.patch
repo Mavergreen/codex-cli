@@ -1,0 +1,59 @@
+diff --git a/codex-rs/install-context/src/lib.rs b/codex-rs/install-context/src/lib.rs
+index 1a9be86..91fd93f 100644
+--- a/codex-rs/install-context/src/lib.rs
++++ b/codex-rs/install-context/src/lib.rs
+@@ -188,9 +188,16 @@ impl InstallContext {
+         } else if let InstallMethod::Standalone { release_dir, .. } = &self.method {
+             Some(release_dir.clone())
+         } else {
++            // macOS 10.9: current_exe() there is the path Codex was started by, so when that is a
++            // symlink to codex, it names the symlink. Look beside the file the symlink points to.
+             current_exe
+-                .and_then(Path::parent)
+                 .and_then(canonical_absolute_path)
++                .and_then(|exe| exe.parent())
++                .or_else(|| {
++                    current_exe
++                        .and_then(Path::parent)
++                        .and_then(canonical_absolute_path)
++                })
+         };
+         if let Some(executable_dir) = executable_dir {
+             let executable = executable_dir.join(CODE_MODE_HOST_EXECUTABLE_NAME);
+@@ -677,6 +684,36 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn code_mode_host_program_follows_a_symlinked_codex_to_its_directory() -> std::io::Result<()> {
++        let root = tempfile::tempdir()?;
++        let install_dir = root.path().join("install");
++        let link_dir = root.path().join("link");
++        fs::create_dir_all(&install_dir)?;
++        fs::create_dir_all(&link_dir)?;
++        let exe_path = install_dir.join("codex");
++        fs::write(&exe_path, "")?;
++        fs::write(install_dir.join(CODE_MODE_HOST_EXECUTABLE_NAME), "")?;
++        let link_path = link_dir.join("codex");
++        std::os::unix::fs::symlink(&exe_path, &link_path)?;
++        let canonical_install_dir =
++            AbsolutePathBuf::from_absolute_path(install_dir.canonicalize()?)?;
++
++        let context = InstallContext::from_exe(
++            /*is_macos*/ true,
++            /*current_exe*/ Some(&link_path),
++            /*method_override*/ None,
++        );
++
++        assert_eq!(
++            context.code_mode_host_program_from_exe(Some(&link_path)),
++            canonical_install_dir
++                .join(CODE_MODE_HOST_EXECUTABLE_NAME)
++                .into_path_buf()
++        );
++        Ok(())
++    }
++
+     #[test]
+     fn standalone_package_layout_keeps_standalone_install_method() -> std::io::Result<()> {
+         let codex_home = tempfile::tempdir()?;
