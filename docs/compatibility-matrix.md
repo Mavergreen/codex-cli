@@ -50,9 +50,80 @@ Measured on 2026-10-14 on an arm64 Mac running macOS 27.0.1, at the same source 
 | `build-codex.sh cross` from a cold build root | passed: 36 minutes, exit 0. Every target C compile took its sysroot from clang22-cross's cfg (cc printed no SDK detection of its own), and no `rustc-link-search` points outside the target dir |
 | `verify-artifact.sh` on the transferred native artifact | passed with Apple's `/usr/bin/file` |
 | `check-build-manifests.sh` | `native and cross inputs match`. The manifests differ only in `mode` and `protoc_runtime` |
-| `shipyard-ctest --preset cross` (the `compat_guard_*` and `load_paths_*` tests, formerly the build-time `codex_compat` target) | passed for both cross binaries |
+| `shipyard-ctest --preset cross` (the `compat_guard_*` and `load_paths_*` tests, formerly the build-time `codex_compat` target) | passed for both cross binaries. The 2026-10-15 rerun at `3ab408c` is under "Native versus cross" |
 | `otool -L`, minos and SDK of the cross binaries | the same OS libraries as native, `LC_VERSION_MIN_MACOSX 10.9` and SDK 10.9, no `LC_RPATH`, no `/opt/pkg` string |
-| The cross binaries on 10.9 | passed: `codex --version`, `codex-code-mode-host --help`, the two `codex sandbox` runs, and the app-server `command/exec` with a `cwd`, as in the native table above |
+| The cross binaries on 10.9 | see "Cross binaries on 10.9" below: the 2026-10-15 run of a cross artifact built at `f6de432` |
+
+## Installed native package on 10.9
+
+Measured on 2026-10-15 on ultimate-hat (Mac OS X 10.9.5). The native package
+`codex-cli-0.161.0-mavericks.1` was installed there at 16:02 EDT with `sudo installer`, on the
+maintainer's instruction.
+
+| Check | Result |
+|---|---|
+| The installed tree | passed: only `codex` is in the link farm; `LICENSE`, `NOTICE` and `build-manifest` are in `share/doc/codex-cli`; `dev.mavergreen.codex-cli-updatecheck` was loaded |
+| Non-interactive smokes through `/usr/local/mavergreen/bin/codex` (on the login `PATH`) | passed: `--version` prints `codex-cli 0.161.0`; `--help` works; `codex-code-mode-host --help` works; `codex sandbox -- /usr/bin/true` exits 0; `codex exec -m gpt-5.6-terra "run ls"` ran `ls` through the host, using the existing login |
+| An interactive TUI workflow with the installed `codex` (maintainer, in this repo) | passed: the model read `build/build-codex.sh` and ran it with no arguments; it printed `usage: build-codex.sh native|cross` and exited 2, as it should, and the TUI quit cleanly |
+| Login on a clean `CODEX_HOME` | passed: `codex login --device-auth`, then `codex exec "say hi"` answered "Hi!" with the default model `gpt-6-luna` |
+| `failed to refresh available models: request timed out` on the clean profile | intermittent; seen twice in the maintainer's clean-profile run. The models manager gives the request 5 s (`manager.rs:421`). Three reruns on a clean profile: once exit 1, once an error at +5 s, once clean, where the models request took 1.2 s with a 200, of which about 0.5 s was the lazy root load at the first certificate check. `exec` still answered in the maintainer's run. It was not attributed to the port |
+
+## Native versus cross
+
+Measured on 2026-10-15 at `f6de432`: the cross side on the arm64 Mac running macOS 27 from a clean
+build root, the native side on ultimate-hat.
+
+| Check | Result |
+|---|---|
+| `build-codex.sh cross` from a clean build root | passed: 37 minutes 4 seconds, exit 0 |
+| The native artifact verified on the modern Mac | passed |
+| `check-build-manifests.sh` | `native and cross inputs match`; the manifests differ only in `mode` and `protoc_runtime` |
+| Cross configure with the updater, and the compat guard | passed: configure exit 0; the guard was clean for `codex`, the host and the updater |
+| `check-load-paths.sh` on the cross binaries | exit 0 |
+| `shipyard-ctest --preset cross`, at `3ab408c` on the modern Mac | 4/4 passed |
+| `shipyard-ctest --preset native`, at `b664361` on ultimate-hat | 4/4 passed. The updater's compat guard was clean |
+
+| Comparison | Native versus cross |
+|---|---|
+| `lipo` architecture | same |
+| `minos` and SDK | same |
+| `otool -L` | same (12 entries) |
+| `nm -u` | `codex` 465 undefined symbols and the host 420, the same count on both builds, with 0 lines differing |
+| `LC_RPATH` | none in either |
+| File mode | same |
+| `codex` sha256 | native `4f6de220…a01e`, cross `7f176ce9…316e` |
+| `codex` size | native 357,475,576 bytes, cross 357,389,912 (cross 85,664 smaller) |
+| `codex-code-mode-host` sha256 | native `385ad878…89a4`, cross `81a40466…2e7e` |
+| `codex-code-mode-host` size | native 90,492,720 bytes, cross 90,497,672 (cross 4,952 larger) |
+| `__cstring` section | cross larger by 6,084 bytes (`codex`) and 2,304 (host) |
+| `__text` section | cross smaller by 35,968 bytes (`codex`) and 7,168 (host) |
+| Build-root path strings | native 2,141 (`codex`) and 828 (host), under `mm-build`; cross 2,143 and 829, under `mm-build-t7` |
+
+The native build ran on ultimate-hat under `~/Library/Caches/mm-build` and the cross build on the
+modern Mac under `~/Library/Caches/mm-build-t7`. The expected causes of the byte differences were not
+isolated by experiment:
+
+- Build-root path strings in panic locations differ, and the counts above differ by 2 and 1. Whether
+  they account for the whole `__cstring` growth was not measured.
+- Crate metadata hashes differ, because the host triple and the cross-only rustflags differ.
+- The `__text` difference may come from codegen following the names (the longer path and metadata
+  strings). That is a hypothesis, unmeasured.
+
+## Cross binaries on 10.9
+
+Measured on 2026-10-15 on ultimate-hat, with the cross artifact built on the modern Mac at `f6de432`.
+
+| Check | Result |
+|---|---|
+| Transferring the artifact | failed at first: macOS 27 tags every file it creates with `com.apple.provenance`, so `tar` carried `._` and pax extended-attribute entries that 10.9's `tar` rejects. `build/transfer-artifact.sh` now sets `COPYFILE_DISABLE` and adds `--no-xattrs` where a probe shows `tar` supports it (`41870d3`; test 17 runs only where the local `tar -tf` lists `._` members). On macOS 27 at `3ab408c` the staged `codex.tar` (sha256 `9c9560bd…`) had exactly 5 members and no `._` entry, and was byte-identical to a hand-made clean tar. At `b664361`, `artifact-transfer.bats` passed 17/17 there; test 17 skips unless the local `tar -tf` both succeeds and lists `._codex`, which macOS 27's `tar` does not, and on 10.9 it runs and passes |
+| `verify-artifact.sh` on 10.9 | passed. `codex` sha256 `7f176ce9…` and the host's `81a40466…` matched the values reported on the modern Mac |
+| Packaging | The cross pkg that was smoke-tested was packaged on 10.9 from the cross artifact, with `packaging/build-pkg.sh` and the native-built updater. The pkg built on the modern Mac failed `tests/package-test.sh` and was not installed: macOS 27's `pkgbuild` writes `._` entries into the BOM of a pkg built on the provenance-tagged Mac. That is a shipyard issue, queued there as QUEUE #72. Until it is fixed a pkg built locally on the modern Mac is not releasable. Whether CI-built pkgs are affected was not measured |
+| `tests/package-test.sh` on that pkg | `ok 43` |
+| The installed cross build | passed: the installed `codex` reports `mode=cross`; `--version`, `--help` and `codex-code-mode-host --help` work; `codex sandbox -- /usr/bin/true` exits 0; `codex exec -m gpt-5.6-terra` ran commands through the host |
+| A TUI turn with the installed cross build (maintainer) | passed: a full turn, with no FSEvents lines |
+| The model's note that it was in "Codex CI" with the network disabled | upstream behaviour. For tool commands, unified exec sets `CODEX_CI=1`, `TERM=dumb` and a `C.UTF-8` locale, and the default sandbox sets `CODEX_SANDBOX_NETWORK_DISABLED`. Not a port effect |
+
+The native package was reinstalled afterwards.
 
 ## Codex's own tests
 

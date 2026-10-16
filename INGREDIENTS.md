@@ -157,3 +157,18 @@ Two CI-specific points:
   native artifact transferred from ultimate-hat.
 - The logged-in smokes (a symlinked `codex` running a `code_mode_only` model) need credentials and
   stay out-of-band checks on ultimate-hat; see `docs/compatibility-matrix.md`.
+
+## Hardware validation
+
+On 2026-10-15, out of band, on ultimate-hat (Mac OS X 10.9.5): the native package and a package of
+the cross-built binaries were each installed and passed the non-interactive smokes, the
+maintainer's TUI turns, and, for the native one, login and `exec` on a clean `CODEX_HOME`. The native and cross
+builds had matching inputs, and matching architecture, deployment target and SDK, linked libraries
+and undefined symbols, with no `LC_RPATH`. Their hashes and sizes differ, with expected causes,
+partly unmeasured. Results are in `docs/compatibility-matrix.md`:
+"Installed native package on 10.9", "Native versus cross" and "Cross binaries on 10.9".
+
+Open shipyard dependency, QUEUE #72: a pkg built on a modern Mac that tags files with
+`com.apple.provenance` (macOS 27) carries `._` entries and is not releasable until shipyard fixes
+it. The cross pkg was therefore packaged on 10.9. CI-built pkgs are likely fine, but that is
+unmeasured. Measuring it belongs to shipyard #72.
