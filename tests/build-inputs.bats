@@ -9,6 +9,15 @@ setup() {
   export MAVERICKS_BUILD_ROOT="$BATS_TEST_TMPDIR/local-build"
 }
 
+# need_codex_checkout: the fetch tests clone the gitignored codex/ inspection checkout, which a
+# clean checkout (CI's actions/checkout, a git archive copy) lacks. They skip unless codex/ is a git
+# checkout holding the pinned revision; CI's build-codex.sh cross runs the same fetch for real.
+need_codex_checkout() {
+  revision=$(cat "$MAVERGREEN_ROOT/build/codex-revision")
+  git -C "$MAVERGREEN_ROOT/codex" cat-file -e "$revision^{commit}" 2>/dev/null ||
+    skip "codex/ is not a git checkout holding the pinned revision $revision"
+}
+
 @test "version resolution follows the family upstream and packaging axes" {
   upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
   run sh "$MAVERGREEN_ROOT/build/version.sh" auto
@@ -36,6 +45,7 @@ RELEASE=yes" ]
 }
 
 @test "fetch applies the committed patch series to the pinned revision" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
@@ -73,6 +83,7 @@ RELEASE=yes" ]
 }
 
 @test "fetch records the workspace version for every path package in Cargo.lock" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
@@ -84,6 +95,7 @@ RELEASE=yes" ]
 }
 
 @test "fetch reuses its own prepared checkout without touching it" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
@@ -106,6 +118,7 @@ copy_product() {
 }
 
 @test "a change to the patch series invalidates the prepared checkout" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   copy_product
   run sh "$product/build/fetch-codex.sh"
@@ -133,6 +146,7 @@ PATCH
 }
 
 @test "re-preparing keeps the mtime of a file it prepares the same" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   copy_product
   run sh "$product/build/fetch-codex.sh"
@@ -160,6 +174,7 @@ PATCH
 }
 
 @test "fetch refuses a Codex workspace version other than UPSTREAM_VERSION" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   copy_product
   run sh "$product/build/fetch-codex.sh"
@@ -171,6 +186,7 @@ PATCH
 }
 
 @test "fetch discards a checkout it did not prepare and applies the series again" {
+  need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
