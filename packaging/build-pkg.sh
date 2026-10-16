@@ -3,7 +3,7 @@
 #   usage: build-pkg.sh UPDATER-APP CODEX-OUT VERSION OUT-DIR
 #          CODEX-OUT is a Codex build's artifact directory (build/build-codex.sh's codex-native or
 #          codex-cross): codex, codex-code-mode-host and build-manifest. Stages the two executables
-#          (byte for byte as built and checked) side by side in bin/, the build manifest, upstream's LICENSE and NOTICE and the updater
+#          (byte for byte as built and checked) side by side in bin/, the build manifest, upstream's LICENSE and NOTICE, the README and the updater
 #          under /usr/local/mavergreen/codex-cli, and wraps them in a 10.9.5-floored product archive,
 #          OUT-DIR/codex-cli-VERSION.pkg, whose path it prints. The same script packages either mode.
 set -eu
@@ -22,6 +22,7 @@ done
 for f in codex-voice-host codex-resources; do
   [ ! -e "$OUT_IN/$f" ] || { echo "build-pkg: $OUT_IN/$f: voice is not packaged" >&2; exit 1; }
 done
+[ -s "$REPO/README.md" ] || { echo "build-pkg: no $REPO/README.md" >&2; exit 1; }
 [ -d "$APP" ] || { echo "build-pkg: no updater $APP; configure with -DCODEX_BUILD_UPDATER=ON" >&2; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/codex-cli-pkg.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -35,6 +36,9 @@ install -m 0755 "$OUT_IN/codex-code-mode-host" "$T/bin/codex-code-mode-host"
 for f in build-manifest LICENSE NOTICE; do
   install -m 0644 "$OUT_IN/$f" "$T/share/doc/codex-cli/$f"
 done
+# spec: INGREDIENTS.md "Packaging" -- the installed README is the repo's own, as in mavergreen-gh, so the
+#       pkg carries whatever the maintainer's edit of it leaves
+install -m 0644 "$REPO/README.md" "$T/share/doc/codex-cli/README.md"
 find "$ROOT" -name '._*' -delete
 # Only codex is a command; the host is an implementation detail the link farm must not export.
 sh "$SHIPYARD/stage_product.sh" --stage "$ROOT" --product codex-cli --name "Codex CLI for Mavericks" --version "$V" \

@@ -50,7 +50,7 @@ Measured on 2026-10-14 on an arm64 Mac running macOS 27.0.1, at the same source 
 | `build-codex.sh cross` from a cold build root | passed: 36 minutes, exit 0. Every target C compile took its sysroot from clang22-cross's cfg (cc printed no SDK detection of its own), and no `rustc-link-search` points outside the target dir |
 | `verify-artifact.sh` on the transferred native artifact | passed with Apple's `/usr/bin/file` |
 | `check-build-manifests.sh` | `native and cross inputs match`. The manifests differ only in `mode` and `protoc_runtime` |
-| `shipyard-ctest --preset cross` (the `compat_guard_*` and `load_paths_*` tests, formerly the build-time `codex_compat` target) | passed for both cross binaries. The 2026-10-15 rerun at `3ab408c` is under "Native versus cross" |
+| CMake `codex_compat` (both compat guards and `check-load-paths.sh`, then a build-time target) | passed for both cross binaries. Those checks are now the CTest tests `compat_guard_*` and `load_paths_*`, run by `shipyard-ctest --preset cross`: see that row under "Native versus cross" (2026-10-15, at `3ab408c`) |
 | `otool -L`, minos and SDK of the cross binaries | the same OS libraries as native, `LC_VERSION_MIN_MACOSX 10.9` and SDK 10.9, no `LC_RPATH`, no `/opt/pkg` string |
 | The cross binaries on 10.9 | see "Cross binaries on 10.9" below: the 2026-10-15 run of a cross artifact built at `f6de432` |
 

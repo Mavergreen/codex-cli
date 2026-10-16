@@ -5,7 +5,7 @@
 | OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144`. Renovate (`github-releases` on `openai/codex`, tags `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` never match) bumps `UPSTREAM_VERSION` only; the commit is a manual edit, see "Releasing" | CLI source and Cargo workspace |
 | Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning); a bump repackages. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
 | Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning); a bump repackages | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
-| Mavergreen shipyard | inspected revision `66579f0a5899a16744a7c9c79e52e63b95a46fa2`; the workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving repackages nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
+| Mavergreen shipyard | `v1.0.487` or later: that release (shipyard commit `b3b9a91`) added the `codex-cli` registry row the updater and packaging need. The fetch scripts verify their downloads (Rust, clang-22 and `rusty_v8`) with `shipyard_fetch_verified`, called by its canonical name in `build/fetch-release-pkg.sh` and `build/fetch-rusty-v8.sh`, so they do not depend on the `mav_*` aliases. The workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving repackages nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
 | Sparkle, in the updater | shipyard's `fetch_sparkle_framework.sh`, pinned by hash there; the family EdDSA public key is `updater/ed25519_key.pub`, the same file every Mavergreen product carries | Update channel for the installed CLI. Untrackable here: shipyard owns the Sparkle pin |
 | OpenAI prebuilt `rusty_v8` | Derived from Codex's `Cargo.lock` (`v8` package), so a Codex bump moves it with no separate pin and Renovate tracks nothing extra; verified against upstream's published `.sha256` checksums file | Static V8 archive linked into `codex-code-mode-host`; prebuilt because building V8 needs Chromium's toolchain and python3, which a native 10.9 build lacks |
 
@@ -27,7 +27,7 @@ Cargo home, target output, extracted toolchains, and transfer staging stay under
 sibling of its own canonicalized executable. The host links V8, so the build fetches OpenAI's prebuilt
 `rusty_v8` archive with `build/fetch-rusty-v8.sh` (the one declared non-Mavergreen input) and records
 `rusty_v8_version` in the build manifest. The package does not include `codex-voice-host`, the
-native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-14,
+native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-15,
 in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Both
 binaries link and pass the non-interactive smoke checks: see `docs/compatibility-matrix.md`.
 
@@ -60,14 +60,22 @@ hand-written. The product tree is `/usr/local/mavergreen/codex-cli` with `bin/co
 `bin/codex-code-mode-host` side by side, because Codex finds the host beside its canonicalized
 executable (patch 0009 makes that work through the link farm's symlink). Only `codex` is exported to
 `/usr/local/mavergreen/bin`: `--exclude bin/codex-code-mode-host` keeps the host out. The build
-manifest ships as `share/doc/codex-cli/build-manifest`. The pkg has no `codex-voice-host` and no
+manifest ships as `share/doc/codex-cli/build-manifest`, and the repo's own `README.md` as
+`share/doc/codex-cli/README.md`, copied at package time, as mavergreen-gh does, so the pkg carries
+whatever the maintainer's edit of it leaves. The pkg has no `codex-voice-host` and no
 `codex-resources/voice`, and `build-pkg.sh` refuses an artifact directory that has either.
 
 `tests/package-test.sh PKG CODEX-OUT` checks the pkg, in either mode, with no Bats and no Python:
-payload contents and modes, binaries byte-identical to the build, manifest identity, a link farm that
-holds `codex` alone and resolves to a directory holding the host, a clean upgrade and uninstall, and the
-updater's bundle ID, feed and comparison version against the registry and the package version. It runs
-the pkg's own install scripts against a temporary target root, never `/`.
+payload contents and modes, binaries byte-identical to the build, the installed README equal to
+`README.md`, the installed `build-manifest`'s `version=` equal to the package version, manifest
+identity, a link farm that holds `codex` alone and resolves to a directory holding the host, a clean
+upgrade and uninstall, and the updater's bundle ID, feed and comparison version against the registry
+and the package version. It runs the pkg's own install scripts against a temporary target root,
+never `/`.
+
+`README.md` is a draft until the maintainer edits it. It carries shipyard's unreviewed-README marker
+line, so `check-readme-reviewed.sh`, run by shipyard's `publish-release.yml`, refuses the first
+release until a human has edited the README and deleted that line.
 
 The updater is an off-by-default CMake option, `-DCODEX_BUILD_UPDATER=ON`, because it needs `codex-cli`
 in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). The row arrived in shipyard commit `b3b9a91`, released as `v1.0.487`; packaging and the updater were verified against that
@@ -83,6 +91,17 @@ require them, so a cross artifact moved from the modern Mac has them too. `packa
 installs them from the artifact, never from a checkout, at `share/doc/codex-cli/LICENSE` and
 `share/doc/codex-cli/NOTICE`, and fails without them. `tests/package-test.sh` checks both are in the pkg
 and byte-identical to the artifact's.
+
+The binaries are built from Codex's sources as modified by the patches in `patches/` (Apache-2.0
+section 4(b)); `README.md` says so, and `patches/README.md` says what each patch changes.
+
+The binaries also contain open-source dependencies under their own licenses, listed in Codex's
+pinned [`codex-rs/Cargo.lock`](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/Cargo.lock).
+No third-party notices file is shipped, which matches upstream's own releases (maintainer decision,
+2026-10-15). Codex's tree at `build/codex-revision` has none: besides `LICENSE` and `NOTICE` it has
+only `docs/license.md`, which points at `LICENSE`, and `codex-rs/deny.toml`, cargo-deny's
+configuration, which includes a license policy for its dependencies. The link names the commit, so
+a Codex bump updates it here and in `README.md` along with `build/codex-revision`.
 
 ## Deviations
 

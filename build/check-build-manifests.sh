@@ -3,8 +3,9 @@
 #   usage: check-build-manifests.sh [--cross-only]
 #          --cross-only is for CI, which has no native build to compare with: the cross manifest alone is
 #          checked against the committed pins, and the native-only comparisons (V8 version, SDK, the
-#          native protoc runtime) are skipped. The native-vs-cross comparison stays a local gate,
-#          run before a release with the native artifact transferred from ultimate-hat.
+#          native protoc runtime) are skipped. The native-vs-cross comparison is an out-of-band
+#          check (INGREDIENTS.md "Releasing"): nothing enforces it before a release. Run it with the
+#          native artifact transferred from ultimate-hat.
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PRODUCT_ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)

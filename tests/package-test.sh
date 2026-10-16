@@ -6,7 +6,7 @@
 #          (codex-native or codex-cross), which is what the packaged binaries must equal. The same test
 #          checks either mode. Its codex-cli component must carry exactly bin/codex and
 #          bin/codex-code-mode-host (executable, byte-identical to the build), the build manifest, upstream's
-#          LICENSE and NOTICE, the mavergreen.plist manifest and the updater app (Sparkle framework aside) with its LaunchAgent,
+#          LICENSE and NOTICE, the repo's README, the mavergreen.plist manifest and the updater app (Sparkle framework aside) with its LaunchAgent,
 #          and no voice payload. It then runs the pkg's own preinstall and postinstall against a
 #          temporary target root (never "/", so nothing system-wide is touched) to prove the link farm
 #          exports codex alone and resolves to the directory holding codex-code-mode-host, that an
@@ -52,7 +52,8 @@ usr/local/mavergreen/codex-cli/bin/codex-code-mode-host
 usr/local/mavergreen/codex-cli/mavergreen.plist
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/LICENSE
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/NOTICE
-usr/local/mavergreen/codex-cli/share/doc/codex-cli/build-manifest" "$(cat "$T/payload")" "the payload is codex and its host, the manifests, the updater and its LaunchAgent"
+usr/local/mavergreen/codex-cli/share/doc/codex-cli/README.md
+usr/local/mavergreen/codex-cli/share/doc/codex-cli/build-manifest" "$(cat "$T/payload")" "the payload is codex and its host, the manifests, the README, the updater and its LaunchAgent"
 
 # A target root, filled the way Installer fills one: preinstall, then each component's payload, then postinstall.
 B="$T/x/mavergreen-base.pkg"
@@ -77,6 +78,10 @@ for f in LICENSE NOTICE build-manifest; do
   cmp "$P/share/doc/codex-cli/$f" "$OUT/$f" && _s=same || _s=differs
   a_eq same "$_s" "the installed $f is byte-identical to the artifact's"
 done
+a_file_exists "README.md is installed" "$P/share/doc/codex-cli/README.md"
+cmp "$P/share/doc/codex-cli/README.md" "$REPO/README.md" && _s=same || _s=differs
+a_eq same "$_s" "the installed README.md is byte-identical to the repo's"
+a_eq "$V" "$(sed -n 's/^version=//p' "$P/share/doc/codex-cli/build-manifest")" "the installed build-manifest's version is the package version"
 a_no_file "no codex-voice-host is installed" "$P/bin/codex-voice-host"
 a_no_file "no codex-resources is installed" "$P/codex-resources"
 

@@ -15,7 +15,8 @@ if(NOT _build_root_result EQUAL 0)
 endif()
 
 # spec: build/check-build-manifests.sh --cross-only -- CI has no native build to compare with, so it checks
-#       the cross manifest against the pins alone; a local release run compares both
+#       the cross manifest against the pins alone. Comparing both is an out-of-band check (INGREDIENTS.md
+#       "Releasing"), run with the native artifact transferred from ultimate-hat
 option(CODEX_CROSS_ONLY_MANIFEST "Check only the cross build manifest (CI has no native one)" OFF)
 set(_manifest_args)
 if(CODEX_CROSS_ONLY_MANIFEST)
