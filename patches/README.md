@@ -21,10 +21,12 @@ product's own.
 - **Why:** reqwest's default backend is native-tls (Secure Transport). On a stock 10.9 it cannot
   negotiate modern TLS (`-9824`, handshake failure). With AquaTransport installed, the handshake
   completes, but native-tls then checks the server's certificates itself: it breaks the handshake
-  for server authentication and asks for the peer trust. `SSLCopyPeerTrust` returns `-909`
-  (errSecBadReq) at that point, so every native-tls request still fails, and "Sign in with
-  ChatGPT" fails with "error sending request". Measured on 2026-10-14 with AquaTransport
-  2026.09.21. Codex's rustls retry is opt-in and not every API client turns it on.
+  for server authentication and, before fetching the peer trust, asks for the session state.
+  AquaTransport answers `kSSLIdle` there where Secure Transport answers `kSSLHandshake`, so
+  security-framework refuses with `-909` (errSecBadReq) without calling `SSLCopyPeerTrust`. Every
+  native-tls request still fails, and "Sign in with ChatGPT" fails with "error sending request".
+  Measured on 2026-10-14 with AquaTransport 2026.09.21, and the cause on 2026-10-17. Codex's
+  rustls retry is opt-in and not every API client turns it on.
 - **Why shared:** loading the native roots takes about 450 ms on 10.9 (214 roots, measured on
   2026-10-14), and reqwest's own rustls loads them again for every client it builds. One `codex
   exec` built 10 clients that way, and upstream tests that build many clients ran past their time
@@ -52,7 +54,8 @@ product's own.
   reqwest 0.13 that `rmcp` depends on is built with no TLS backend, so Codex gives it its own
   clients. Every other reqwest client in the workspace is in a test or the custom-CA test probe.
 - **When to reconsider:** when upstream defaults reqwest to rustls, its rustls path covers every
-  client, or AquaTransport returns a peer trust after a server-authentication break. That last
+  client, or a released AquaTransport has the TLS fix native-tls needs (the fix is made, for
+  Wowfunhappy to take upstream). That last
   would let native-tls work on 10.9 for every client, including any a later Codex adds, so
   forcing rustls in each place would no longer be needed.
 
