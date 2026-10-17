@@ -187,7 +187,7 @@ and undefined symbols, with no `LC_RPATH`. Their hashes and sizes differ, with e
 partly unmeasured. Results are in `docs/compatibility-matrix.md`:
 "Installed native package on 10.9", "Native versus cross" and "Cross binaries on 10.9".
 
-Open shipyard dependency, QUEUE #72: a pkg built on a modern Mac that tags files with
+Open shipyard dependency: a pkg built on a modern Mac that tags files with
 `com.apple.provenance` (macOS 27) carries `._` entries and is not releasable until shipyard fixes
 it. The cross pkg was therefore packaged on 10.9. CI-built pkgs are likely fine, but that is
-unmeasured. Measuring it belongs to shipyard #72.
+unmeasured, and measuring it is shipyard's.
