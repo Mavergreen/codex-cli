@@ -73,9 +73,8 @@ upgrade and uninstall, and the updater's bundle ID, feed and comparison version 
 and the package version. It runs the pkg's own install scripts against a temporary target root,
 never `/`.
 
-`README.md` is a draft until the maintainer edits it. It carries shipyard's unreviewed-README marker
-line, so `check-readme-reviewed.sh`, run by shipyard's `publish-release.yml`, refuses the first
-release until a human has edited the README and deleted that line.
+`check-readme-reviewed.sh`, run by shipyard's `publish-release.yml`, refuses a release while
+`README.md` carries shipyard's unreviewed-README marker line. The maintainer's edit removed it.
 
 The updater is an off-by-default CMake option, `-DCODEX_BUILD_UPDATER=ON`, because it needs `codex-cli`
 in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). The row arrived in shipyard commit `b3b9a91`, released as `v1.0.487`; packaging and the updater were verified against that
@@ -93,7 +92,7 @@ installs them from the artifact, never from a checkout, at `share/doc/codex-cli/
 and byte-identical to the artifact's.
 
 The binaries are built from Codex's sources as modified by the patches in `patches/` (Apache-2.0
-section 4(b)); `README.md` says so, and `patches/README.md` says what each patch changes.
+section 4(b)); `patches/README.md` says what each patch changes.
 
 The binaries also contain open-source dependencies under their own licenses, listed in Codex's
 pinned [`codex-rs/Cargo.lock`](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/Cargo.lock).
@@ -101,7 +100,7 @@ No third-party notices file is shipped, which matches upstream's own releases (m
 2026-10-15). Codex's tree at `build/codex-revision` has none: besides `LICENSE` and `NOTICE` it has
 only `docs/license.md`, which points at `LICENSE`, and `codex-rs/deny.toml`, cargo-deny's
 configuration, which includes a license policy for its dependencies. The link names the commit, so
-a Codex bump updates it here and in `README.md` along with `build/codex-revision`.
+a Codex bump updates it here along with `build/codex-revision`.
 
 ## Deviations
 
@@ -129,7 +128,7 @@ a Codex bump updates it here and in `README.md` along with `build/codex-revision
   build lacks, and its updater installs upstream builds the host may not run; the TUI hosts the
   app server in-process instead. Biometric user verification (0004) reports unsupported because it
   needs LocalAuthentication and Secure Enclave APIs, which 10.9 lacks. Updates come from this
-  product's own Sparkle updater.
+  product's own Sparkle updater, and `codex update` opens it (0010).
 
 ## Conformance deviations
 

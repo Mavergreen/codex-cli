@@ -4,7 +4,7 @@
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has
-since been rewritten here; `PROVENANCE.md` says where each came from. 0008 and 0009 are this
+since been rewritten here; `PROVENANCE.md` says where each came from. 0008 to 0010 are this
 product's own.
 
 ## 0001-force-rustls.patch
@@ -64,7 +64,9 @@ product's own.
   unable to run, so startup would offer an update path that cannot work.
 - **Invariant kept:** only the default changes. `check_for_update_on_startup = true` still turns
   the check on.
-- **When to reconsider:** when this package has its own update path that the check can offer.
+- **When to reconsider:** for the installed package, 0010 already keeps the check from looking
+  at upstream's releases. The default still matters for a `codex` run from anywhere else, such as
+  a build directory, where the check would offer upstream's releases.
 
 ## 0003-daemon-auto-start-off-by-default.patch
 
@@ -175,3 +177,25 @@ product's own.
 - **Invariant kept:** a package layout or standalone release directory is used first, as before.
   Started from its own directory, `codex` finds the host where it always did.
 - **When to reconsider:** when upstream resolves the executable before taking its directory.
+
+## 0010-update-through-the-package-updater.patch
+
+- **What:** `codex-rs/install-context/src/lib.rs` reports a `codex` under `/usr/local/mavergreen`
+  as installed by Mavergreen, checking for it before the `/usr/local` prefix it reads as
+  Homebrew. For that install, `codex-rs/tui/src/update_action.rs` updates by opening
+  `/Library/Application Support/Mavergreen/codex-cli-updater.app` with `--user`, which runs
+  Sparkle's interactive check: an update dialog, or word that Codex is up to date.
+  `codex-rs/cli/src/main.rs` opens it for `codex update` and says to restart Codex if it installs
+  an update. `codex-rs/tui/src/updates.rs` skips Codex's own check for newer versions there, and
+  `codex doctor` (`cli/src/doctor.rs`, `doctor/runtime.rs`, `doctor/updates.rs`) names the method
+  and the updater. `mavergreen_is_detected_before_brew_on_macos` and
+  `mavergreen_update_opens_the_packages_updater` test it.
+- **Why:** upstream reads any `codex` under `/usr/local` as Homebrew's, so on 10.9 `codex update`
+  ran `brew upgrade --cask codex`. That failed with "No such file or directory" where Homebrew is
+  absent, measured on 2026-10-17, and where it is present it would install upstream's build,
+  which 10.9 cannot run. The package's updater is the update path that works here, and it already
+  checks for this package's releases daily.
+- **Invariant kept:** every other install method updates as upstream does. Codex's startup check
+  stays off by default (0002).
+- **When to reconsider:** when upstream stops reading every `/usr/local` install as Homebrew's,
+  or when the package's updater moves.

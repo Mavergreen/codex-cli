@@ -54,6 +54,12 @@ RELEASE=yes" ]
   expected=$(printf '%s\n' \
     codex-rs/Cargo.lock \
     codex-rs/install-context/src/lib.rs \
+    codex-rs/cli/src/doctor.rs \
+    codex-rs/cli/src/doctor/runtime.rs \
+    codex-rs/cli/src/doctor/updates.rs \
+    codex-rs/cli/src/main.rs \
+    codex-rs/tui/src/update_action.rs \
+    codex-rs/tui/src/updates.rs \
     codex-rs/http-client/src/client_builder.rs \
     codex-rs/http-client/src/custom_ca.rs \
     codex-rs/http-client/src/lib.rs \
