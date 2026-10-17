@@ -118,9 +118,10 @@ a Codex bump updates it here along with `build/codex-revision`.
   beside it, because Codex runs it as a sibling and it is not a command to run by hand; patch 0009
   makes the symlinked `codex` find it.
 - **Native TLS is replaced by rustls.** Patch 0001 puts every HTTPS client on rustls, because native-tls
-  (Secure Transport) cannot complete a handshake on 10.9, even with AquaTransport installed. The
+  (Secure Transport) fails every request on 10.9, even with AquaTransport installed. The
   trust store is the keychain's, so a stock 10.9 needs AquaTransport's ModernRootCertificates to
-  reach OpenAI. `patches/README.md` has the reasons and what ends the patch.
+  reach OpenAI. `patches/README.md` has the reasons and what ends the patch: an AquaTransport
+  release with the TLS fix native-tls needs.
 - **Three defaults differ from upstream's.** Each can be turned on in config, except verification.
   The startup update check (0002) is off because the package manager Codex detects (notably
   Homebrew) may be absent or unable to run, so startup would offer an update path that cannot work.
