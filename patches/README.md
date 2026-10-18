@@ -182,7 +182,8 @@ at the end says what each did and why it went.
   stop updating once restarted.
 - **Invariant kept:** the loop's guarded runs (`CODEX_INSTALL_IF_LATEST`,
   `CODEX_INSTALL_IF_CURRENT`, `CODEX_INSTALL_DAEMON_ONLY`, `CODEX_INSTALL_DEFER_SELECTION`,
-  `CODEX_UPDATE_FROM_RELEASE`) and their environment are upstream's.
+  `CODEX_UPDATE_FROM_RELEASE`) and their environment are upstream's. The package's installer
+  implements each of them as upstream's `install.sh` does.
 - **When to reconsider:** when the package's installer moves.
 
 ## Removed patches

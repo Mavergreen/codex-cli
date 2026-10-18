@@ -43,3 +43,39 @@ commit before they were arranged into `patches/`.
 | `codex-0.157.0-mavericks-seatbelt-runtime.patch` | `fd81b245265d83cafcc26563022625e93a3fc3c5b3891584c05cba8d345f0ea8` |
 | `codex-0.157.0-mavericks-user-verification.patch` | `994b7ad33960344516da67aedec0fb7b3e4e927cb50819852a911e66b02d72c5` |
 | `test-builds.sh` | `4caddbb1e71578011af0c7a547e9344ec52cf70315bbf869379da22b24d32f70` |
+
+## The package's Codex installer
+
+`tree/libexec/codex-cli/install.sh` is derived from OpenAI's `scripts/install/install.sh`, from
+`openai/codex` at revision `979011409de0a60b52f179721948e65531d26144` (the one in
+`build/codex-revision`). Codex is Apache-2.0; its `LICENSE` and `NOTICE`, copied from that revision,
+travel with the installer in `tree/share/doc/codex-cli/`. The file's header lists the same changes:
+
+1. release metadata and the package come from Mavergreen's builds channel (`CODEX_BUILDS_URL`), not
+   from the GitHub API or releases.openai.com, and the npm layout, `codex-package_SHA256SUMS` and the
+   Linux and Apple Silicon targets are gone; fetching metadata and signature times out after
+   30 seconds and the package after 300
+2. the metadata's `.sig` is checked with `ed25519-verify` against the package's public key before
+   the metadata is parsed, so the temp dir and its cleanup trap are set up before the release is
+   resolved; a refusal suggests trying again in a minute, since a fetch while a build is published
+   can see the new `latest.json` beside the old signature
+3. `validate_version` accepts `latest` and `<x.y.z>-mavericks.<N>`, and `tag_name` `rust-v<ID>`
+   resolves to `<ID>`; because the package's `codex` reports OpenAI's `x.y.z` rather than the build
+   ID, a release is complete when `codex --version` reports the build's `x.y.z`, and "already
+   installed" is judged by the current link's release name
+4. a build whose `mavergreen_min_pkg` is newer than the installed package installs nothing and exits
+   3, before any progress line; an interactive run first opens the package's updater, and a guarded
+   run (the daemon's markers, `CODEX_INSTALL_NO_UPDATER=1` as the launcher's first run sets, or no
+   usable tty as in upstream's `prompt_yes_no`) opens nothing; `CODEX_NON_INTERACTIVE`, which
+   `codex update` sets with somebody watching, guards nothing, since the prompts it skips upstream
+   are removed
+5. it never creates or changes `~/.local/bin/codex` or a shell profile, and does not look for
+   conflicting installs
+6. everything else, including the guarded modes the daemon uses and the `current` link but for 8,
+   is upstream's, except that a build that is already installed says "Codex CLI <ID> is already
+   installed" where upstream says "Updating Codex CLI"
+7. the temp dir is made from an explicit `"${TMPDIR:-/tmp}"` template, the family conventions
+   check's rule, where upstream's `mktemp -d` takes none
+8. the `current` link is swapped atomically on 10.9 too: its `mv` has neither `-T` nor `-h`, so
+   where both of upstream's attempts fail, perl's `rename(2)` replaces the link in one step before
+   upstream's last resort (remove, then move)
