@@ -55,15 +55,6 @@ RELEASE=yes" ]
     codex-rs/Cargo.lock \
     codex-rs/install-context/src/lib.rs \
     codex-rs/install-context/src/mavergreen.rs \
-    codex-rs/http-client/src/client_builder.rs \
-    codex-rs/http-client/src/custom_ca.rs \
-    codex-rs/http-client/src/lib.rs \
-    codex-rs/http-client/src/route_aware_client_pool_tests.rs \
-    codex-rs/http-client/src/route_aware_tls_fallback_tests.rs \
-    codex-rs/otel/src/metrics/client.rs \
-    codex-rs/otel/src/otlp.rs \
-    codex-rs/otel/src/provider.rs \
-    codex-rs/responses-api-proxy/src/lib.rs \
     codex-rs/user-verification/src/lib.rs \
     codex-rs/app-server-daemon/src/managed_install.rs \
     codex-rs/app-server-daemon/src/managed_install_path_tests.rs \

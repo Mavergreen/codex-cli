@@ -117,11 +117,6 @@ a Codex bump updates it here along with `build/codex-revision`.
 - **Only `codex` is exported to the link farm.** `codex-code-mode-host` stays in the product tree
   beside it, because Codex runs it as a sibling and it is not a command to run by hand; patch 0009
   makes the symlinked `codex` find it.
-- **Native TLS is replaced by rustls.** Patch 0001 puts every HTTPS client on rustls, because native-tls
-  (Secure Transport) fails every request on 10.9, even with AquaTransport installed. The
-  trust store is the keychain's, so a stock 10.9 needs AquaTransport's ModernRootCertificates to
-  reach OpenAI. `patches/README.md` has the reasons and what ends the patch: an AquaTransport
-  release with the TLS fix native-tls needs.
 - **Updates come from this product's builds.** The startup check, `codex update`, `codex doctor`
   and the app-server daemon's background updates all use the builds channel and the package's
   installer, never OpenAI's releases (0011 to 0013). Their wording and defaults are upstream's: the

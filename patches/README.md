@@ -4,62 +4,10 @@
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
-rather than OpenAI's. Patches 0001 and 0004 to 0007 are Wowfunhappy's, and 0001 has since been
-rewritten here; `PROVENANCE.md` says where each came from. 0008, 0009 and 0011 to 0013 are this
-product's own. 0002, 0003 and 0010 are removed, and their numbers are not reused: "Removed patches"
+rather than OpenAI's. Patches 0004 to 0007 are Wowfunhappy's; `PROVENANCE.md` says where each came
+from. 0008, 0009 and 0011 to 0013 are this product's own. 0001, 0002, 0003 and 0010 are removed,
+and their numbers are not reused: "Removed patches"
 at the end says what each did and why it went.
-
-## 0001-force-rustls.patch
-
-- **What:** `codex-rs/http-client/src/client_builder.rs` makes every client it builds use the
-  bundled rustls backend instead of native-tls. A client with its own root certificate or client
-  identity gets reqwest's rustls, which honors them. Every other client gets one rustls config
-  shared by the process, from `custom_ca.rs`. That config trusts the platform's native roots and
-  offers `h2` and `http/1.1` by ALPN, as reqwest's own would. Its certificate verifier is rustls's
-  own WebPKI verifier over those roots, built at the first certificate check, so a client that
-  never makes a TLS connection never loads them. `custom_ca.rs` loads the native roots at most
-  once per process, and its websocket config reuses them. The six `http-client` tests of
-  upstream's native-TLS-to-rustls retry are marked ignored, with the reason.
-- **Why:** reqwest's default backend is native-tls (Secure Transport). On a stock 10.9 it cannot
-  negotiate modern TLS (`-9824`, handshake failure). With AquaTransport installed, the handshake
-  completes, but native-tls then checks the server's certificates itself: it breaks the handshake
-  for server authentication and, before fetching the peer trust, asks for the session state.
-  AquaTransport answers `kSSLIdle` there where Secure Transport answers `kSSLHandshake`, so
-  security-framework refuses with `-909` (errSecBadReq) without calling `SSLCopyPeerTrust`. Every
-  native-tls request still fails, and "Sign in with ChatGPT" fails with "error sending request".
-  Measured on 2026-10-14 with AquaTransport 2026.09.21, and the cause on 2026-10-17. Codex's
-  rustls retry is opt-in and not every API client turns it on.
-- **Why shared:** loading the native roots takes about 450 ms on 10.9 (214 roots, measured on
-  2026-10-14), and reqwest's own rustls loads them again for every client it builds. One `codex
-  exec` built 10 clients that way, and upstream tests that build many clients ran past their time
-  limits. Loading eagerly at the first client build was not enough: nextest runs every test in its
-  own process, so plain-HTTP loopback tests and MCP startup paid for roots they never used.
-- **Roots:** rustls trusts the roots in the keychain's trust settings. A stock 10.9 lacks ISRG
-  Root X1 there. AquaTransport's ModernRootCertificates package adds it, which is enough for
-  auth.openai.com, chatgpt.com and api.openai.com.
-- **Invariant kept:** a client's own root certificate and client identity are honored as before.
-  With `CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE` set, upstream's custom-CA path is unchanged: it
-  still builds reqwest's rustls for each client, so it still loads the roots each time.
-- **Cost:** a change to the keychain's trust settings reaches a running Codex only after it
-  restarts. The process's first TLS handshake still pays the one root load, about 450 ms on 10.9.
-  An HTTPS MCP server configured with a `startup_timeout_sec` below about half a second can time
-  out if its handshake is the first; the default is 30 s.
-- **Clients outside `HttpClientBuilder`:** four reqwest clients are built elsewhere, and 0001
-  puts each on rustls too. The blocking OTLP client (`otel/src/otlp.rs`) shares the config, or
-  uses reqwest's rustls when it has its own CA or client identity. The log, trace and metrics
-  exporters (`otel/src/provider.rs`, `otel/src/metrics/client.rs`) passed that client only when a
-  `tls` table was configured; otherwise opentelemetry-otlp built its own, with native-tls. They
-  now always pass it. `codex-responses-api-proxy` (`responses-api-proxy/src/lib.rs`) uses
-  reqwest's rustls: that crate does not depend on `codex-http-client`, and adding the dependency
-  would change `Cargo.lock`. `client_builder.rs`'s
-  last-resort client tries the shared config before falling back to `reqwest::Client::new()`. The
-  reqwest 0.13 that `rmcp` depends on is built with no TLS backend, so Codex gives it its own
-  clients. Every other reqwest client in the workspace is in a test or the custom-CA test probe.
-- **When to reconsider:** when upstream defaults reqwest to rustls, its rustls path covers every
-  client, or a released AquaTransport has the TLS fix native-tls needs (the fix is made, for
-  Wowfunhappy to take upstream). That last
-  would let native-tls work on 10.9 for every client, including any a later Codex adds, so
-  forcing rustls in each place would no longer be needed.
 
 ## 0004-user-verification-unsupported.patch
 
@@ -238,6 +186,30 @@ at the end says what each did and why it went.
 - **When to reconsider:** when the package's installer moves.
 
 ## Removed patches
+
+### 0001-force-rustls.patch
+
+- **What it did:** put every HTTPS client on the bundled rustls backend instead of native-tls, with
+  one shared rustls config in `codex-rs/http-client` that loaded the platform's native roots at the
+  first certificate check; moved the OTLP exporters and the Responses API proxy onto rustls too; and
+  marked the six `http-client` tests of upstream's native-TLS-to-rustls retry ignored. It was
+  Wowfunhappy's, and was rewritten here.
+- **Why it was removed:** it worked around AquaTransport answering `kSSLIdle` from
+  `SSLGetSessionState` while a handshake was in progress, where Secure Transport answers
+  `kSSLHandshake`. native-tls asks there before fetching the peer trust, so security-framework
+  refused with `-909` and every native-tls request failed. AquaTransport fixed that. With that
+  fix, probe clients' native-tls connections work; Codex's own is still to be measured on 10.9.
+  Codex's HTTPS clients then need neither the
+  patch nor its roughly 450 ms of root loading on first use. The dependence on 10.9's keychain
+  roots, and so on AquaTransport's ModernRootCertificates, did not go with it: WebSockets
+  (`codex-websocket-client` always uses rustls) and the OTLP gRPC exporter still verify through
+  rustls, loading the keychain's roots with `rustls-native-certs` when first used. The six ignored
+  tests run again: one passes (`request_failures_classify_real_untrusted_certificate_handshakes`),
+  and five fail on 10.9 with `-9806`, because AquaTransport reports every handshake failure as
+  errSSLClosedAbort where stock Secure Transport gives -9836. Those five test the native-tls to
+  rustls fallback, which exists for modern macOS, whose Secure Transport lacks TLS 1.3;
+  AquaTransport speaks TLS 1.0 to 1.3, so on 10.9 nothing needs the fallback and the failures are
+  the tests' alone. They pass once AquaTransport returns stock's codes.
 
 ### 0002-update-check-off-by-default.patch
 

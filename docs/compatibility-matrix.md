@@ -136,7 +136,28 @@ on 10.9.
 | Check | Result |
 |---|---|
 | The full run above, patched against unpatched upstream | no failure caused by the patches. Every failure also fails on upstream there: 366 come from that Mac's environment, and the rest are tests that fail on both trees when the machine is loaded |
-| `codex-http-client`, `codex-otel` and `codex-responses-api-proxy`, 5 runs each, after 0001 loaded its roots at the first certificate check | `codex-http-client` and the proxy: no failures, and faster than upstream. `codex-otel`: `otlp_http_exporter_times_out_when_collector_stalls_during_bounded_shutdown` fails on both trees; `…sends_traces_to_collector_with_bounded_shutdown_in_tokio_runtime` failed once in 5 patched runs, not root-caused. The 6 tests of upstream's native-TLS retry are ignored by 0001 |
-| An OTLP trace exporter with no `tls` table, unmanaged policy, against a TLS 1.3-only local server | the patched tree completes a TLS 1.3 handshake with ALPN through the lazy verifier. Upstream's exporter used native-tls and failed the handshake |
+| `codex-http-client`, `codex-otel` and `codex-responses-api-proxy`, 5 runs each, measured with the since-removed 0001, which loaded its roots at the first certificate check | `codex-http-client` and the proxy: no failures, and faster than upstream. `codex-otel`: `otlp_http_exporter_times_out_when_collector_stalls_during_bounded_shutdown` fails on both trees; `…sends_traces_to_collector_with_bounded_shutdown_in_tokio_runtime` failed once in 5 patched runs, not root-caused. The 6 tests of upstream's native-TLS retry are ignored by 0001 |
+| Measured with the since-removed 0001: an OTLP trace exporter with no `tls` table, unmanaged policy, against a TLS 1.3-only local server | the patched tree completes a TLS 1.3 handshake with ALPN through the lazy verifier. Upstream's exporter used native-tls and failed the handshake |
 | `suite::mcp_optional_startup_grace` | 3 of its 6 cases fail with the patches when the 6 start together, and upstream fails 1 or 2 there too. The cause is the test harness: the first `CFBundleGetMainBundle` in a process lists the executable's directory, and a test binary sits in `target/debug/deps` (about 134,000 entries), which took 0.6 to 1.3 s. With rustls, that first lookup falls inside MCP startup, through the system-proxy probe reqwest makes when it builds a client. An installed `codex` sits in a small directory, where the same lookup takes about 0.4 ms |
 | `cargo fmt` with upstream's options, and `cargo clippy -p codex-http-client -p codex-otel -p codex-responses-api-proxy --tests` | clean |
+
+### TLS, pending the AquaTransport release
+
+Patch 0001 is dropped, so Codex's HTTPS clients use native-tls, which goes through AquaTransport.
+WebSockets (`codex-websocket-client` always uses rustls) and the OTLP gRPC exporter still verify
+through rustls, with roots `rustls-native-certs` reads from the 10.9 keychain. These checks wait for
+the AquaTransport release with the TLS fixes Codex's native-tls needs, and are run natively on
+ultimate-hat with a scratch `CODEX_HOME`. The measurements above that name 0001 do not apply to the
+current series.
+
+| Check | Result |
+|---|---|
+| The six `codex-http-client` tests that 0001 ignored (the native-TLS-to-rustls retry), run alone with `build/cargo-dev.sh test -p codex-http-client --lib -- <names>` | one passes (`request_failures_classify_real_untrusted_certificate_handshakes`). Five fail on 10.9 with AquaTransport 2026.09.21 and also with AquaTransport's TLS fix inserted: `retries_a_native_tls_protocol_failure_once_with_rustls`, `retries_a_native_tls_failure_after_another_request_caches_rustls`, `successful_rustls_fallback_replays_the_request_and_reuses_the_destination`, `retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers` and `does_not_retry_a_non_replayable_streaming_request`. Each gets `Error { code: -9806, message: "connection closed via error" }` from native-tls, and Codex retries with rustls only on "bad protocol version". The cause is a second AquaTransport gap: `my_SSLHandshake` reports every handshake failure as errSSLClosedAbort (-9806), where stock Secure Transport gives -9836 for the protocol_version alert these tests send. With AquaTransport switched off for the test binary, all five pass. The failures are the tests' alone, and harmless on 10.9: the fallback they test exists because modern macOS's Secure Transport lacks TLS 1.3, and AquaTransport speaks TLS 1.0 to 1.3, so on 10.9 nothing needs it. They are not ignored; they pass once AquaTransport returns stock's codes |
+| The same five tests against the released AquaTransport | pending |
+| `codex-otel` and `codex-responses-api-proxy` tests, with their HTTPS clients on native-tls | pending |
+| `codex login --device-auth` on a clean `CODEX_HOME` | pending |
+| `codex exec` over HTTPS and WebSockets, with no reconnects and no fallback from WebSockets | pending |
+| A WebSocket turn on a 10.9 host without AquaTransport's ModernRootCertificates (rustls with the keychain's roots) | pending |
+| A request through a proxy | pending |
+| An OTLP trace exporter against a TLS 1.3-only local server | pending |
+
