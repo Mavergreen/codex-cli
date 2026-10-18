@@ -37,15 +37,18 @@ for notice in LICENSE NOTICE; do
   cp "$SOURCE/$notice" "$ARTIFACT/$notice"
   chmod 644 "$ARTIFACT/$notice"
 done
-# spec: .github/workflows/release.yml -- the workflow resolves the version (auto, local or reconcile) and writes
-#       it to VERSION; the manifest must say the same, so VERSION wins and version.sh auto is the fallback
-if [ -s "$MAVERICKS_ROOT/VERSION" ]; then
+# spec: build-id.sh -- BUILD_ID (gitignored) holds the identity it chose; the manifest must say the same.
+#       VERSION is the older release workflow's file and stays a fallback. With neither this is a dev
+#       build, <codex version>-mavericks.0, which build-id.sh never emits and so is never published.
+if [ -s "$MAVERICKS_ROOT/BUILD_ID" ]; then
+  VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/BUILD_ID")
+elif [ -s "$MAVERICKS_ROOT/VERSION" ]; then
   VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/VERSION")
 else
-  VERSION=$(sh "$HERE/version.sh" auto) || exit 1
-  VERSION=$(printf '%s\n' "$VERSION" | sed -n 's/^FULL=//p')
+  VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/codex/version")-mavericks.0
+  echo "build-codex: no BUILD_ID: a dev build, $VERSION, never publishable" >&2
 fi
-[ -n "$VERSION" ] || { echo "build-codex: no version: VERSION is empty and version.sh printed no FULL=" >&2; exit 1; }
+[ -n "$VERSION" ] || { echo "build-codex: no version: BUILD_ID or VERSION is empty" >&2; exit 1; }
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \

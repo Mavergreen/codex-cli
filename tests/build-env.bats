@@ -132,20 +132,25 @@ build() {
   [ ! -e "$cargo_env" ]
 }
 
-@test "the build manifest carries the version the workflow resolved, even for a packaging release" {
-  # the workflow's `local` mode with 0.161.0-mavericks.1 shipped, written to VERSION as release.yml does
-  MAVERICKS_TAGS="$(tr -d '[:space:]' < "$PRODUCT_ROOT/UPSTREAM_VERSION")-mavericks.1" \
-    sh "$product/build/version.sh" local | sed -n 's/^FULL=//p' > "$product/VERSION"
-  resolved=$(cat "$product/VERSION")
-  [ "$resolved" = "$(tr -d '[:space:]' < "$PRODUCT_ROOT/UPSTREAM_VERSION")-mavericks.2" ]
+@test "the build manifest carries the identity in BUILD_ID" {
+  printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
   run build cross
   [ "$status" -eq 0 ]
-  grep -qx "version=$resolved" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+  grep -qx "version=0.161.0-mavericks.7" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }
 
-@test "without a VERSION file the manifest takes version.sh auto" {
+@test "BUILD_ID wins over the older VERSION file" {
+  printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
+  printf '0.161.0-mavericks.2\n' > "$product/VERSION"
   run build cross
   [ "$status" -eq 0 ]
-  grep -qx "version=$(tr -d '[:space:]' < "$PRODUCT_ROOT/UPSTREAM_VERSION")-mavericks.1" \
+  grep -qx "version=0.161.0-mavericks.7" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+}
+
+@test "without BUILD_ID or VERSION the manifest says -mavericks.0 and the build says it is a dev build" {
+  run build cross
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a dev build"* ]] || false
+  grep -qx "version=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/codex/version")-mavericks.0" \
     "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }

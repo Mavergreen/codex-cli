@@ -1,6 +1,7 @@
 /codex/
 /.superpowers/
 /VERSION
+/BUILD_ID
 /dist/
 /.idea/
 CMakeUserPresets.json
