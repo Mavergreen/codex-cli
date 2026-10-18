@@ -4,10 +4,10 @@
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
-rather than OpenAI's. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has since been rewritten
-here; `PROVENANCE.md` says where each came from. 0008, 0009 and 0011 are this product's own. 0010
-is removed, and its number is not reused: "Removed patches" at the end says what it did and why it
-went.
+rather than OpenAI's. Patches 0001 and 0003 to 0007 are Wowfunhappy's, and 0001 has since been
+rewritten here; `PROVENANCE.md` says where each came from. 0008, 0009, 0011 and 0012 are this
+product's own. 0002 and 0010 are removed, and their numbers are not reused: "Removed patches" at
+the end says what each did and why it went.
 
 ## 0001-force-rustls.patch
 
@@ -60,16 +60,6 @@ went.
   Wowfunhappy to take upstream). That last
   would let native-tls work on 10.9 for every client, including any a later Codex adds, so
   forcing rustls in each place would no longer be needed.
-
-## 0002-update-check-off-by-default.patch
-
-- **What:** `codex-rs/core/src/config/mod.rs` changes the default of `check_for_update_on_startup`
-  from `true` to `false`.
-- **Why:** on these hosts the package manager Codex detects (notably Homebrew) may be absent or
-  unable to run, so startup would offer an update path that cannot work.
-- **Invariant kept:** only the default changes. `check_for_update_on_startup = true` still turns
-  the check on.
-- **When to reconsider:** when the check no longer offers upstream's releases.
 
 ## 0003-daemon-auto-start-off-by-default.patch
 
@@ -202,12 +192,53 @@ went.
 - **When to reconsider:** when the channel, the package's installer or its updater moves. Nothing
   upstream would replace the build identity while Codex reaches 10.9 as this product's own builds.
 
+## 0012-update-from-the-mavergreen-channel.patch
+
+- **What:** the TUI's startup check (`codex-rs/tui/src/updates.rs`) and `codex doctor`'s update
+  section (`codex-rs/cli/src/doctor/updates.rs`) read the newest build from the channel's
+  `latest.json`, not from `api.github.com/repos/openai/codex/releases/latest`, and compare it with
+  the running build using 0011's `BuildId` (`codex-rs/tui/src/update_versions.rs`). The Homebrew
+  cask probe is removed, and installs from Homebrew, npm, bun, vp or pnpm check nothing. The
+  standalone update action (`codex-rs/tui/src/update_action.rs`), which `codex update` and the
+  startup notice run, is `CODEX_NON_INTERACTIVE=1 exec /bin/sh
+  /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh` instead of piping
+  `chatgpt.com/codex/install.sh` into `sh`. The Windows action only reports that it is unsupported.
+  When the installer exits 3 because the newest build needs a newer codex-cli package,
+  `codex update` (`codex-rs/cli/src/main.rs`) says so, where to get the newer package (its updater,
+  or the package's latest release), and to run it again then, rather than that the command failed.
+  It does not assume the updater opened, since a run with nobody at a terminal opens nothing; the
+  installer's own lines come first, as before.
+  The two standalone history-cell snapshots show the new commands. `codex doctor`'s update section
+  names the running build (`running build: <ID>`) and, for a standalone install, the `latest.json`
+  it checks (`update channel: <URL>`). When the newest build is a rebuild of the running Codex
+  version, the startup notice and its history cell (`tui/src/update_prompt.rs`,
+  `tui/src/history_cell/notices.rs`) show both build identities, `0.161.0-mavericks.1 →
+  0.161.0-mavericks.2`; for a new Codex version they show the plain versions, as upstream's do.
+- **Why:** upstream's check offers OpenAI's newest release, and its update action installs OpenAI's
+  build, which 10.9 cannot run. Nothing on a 10.9 Mac may fetch or run OpenAI's builds. With the
+  check reading this product's channel and `codex update` running the package's installer, the
+  startup check can stay on, as upstream ships it, so 0002 is removed. `codex --version` stays
+  OpenAI's, so the build number shows where a user looks for it: `codex doctor`, and the notice
+  for a rebuild, which plain versions would show as `0.161.0 → 0.161.0`.
+- **Invariant kept:** upstream's notice, its wording, its dismissal and its 20-hour cache are
+  unchanged, and so is `check_for_update_on_startup`, which still turns the check off. The notice's
+  release-notes link is still upstream's.
+- **When to reconsider:** when the channel or the package's installer moves (both are in 0011).
+
 ## Removed patches
+
+### 0002-update-check-off-by-default.patch
+
+- **What it did:** made `check_for_update_on_startup` default to `false`. It was Wowfunhappy's.
+- **Why it was removed:** it existed because every update path Codex detected failed here, and
+  Homebrew's would have installed upstream's build. Now Codex's check reads this product's channel,
+  and `codex update` runs the package's installer (0012).
+  Upstream's default, on, is what users should see.
 
 ### 0010-update-through-the-package-updater.patch
 
 - **What it did:** reported a `codex` under `/usr/local/mavergreen` as a Mavergreen install, and
   made `codex update` open the package's Sparkle updater instead of running `brew upgrade --cask
   codex`.
-- **Why it was removed:** Codex updates are to come from this product's own builds, which 0011
-  identifies, and not through the package's Sparkle updater.
+- **Why it was removed:** Codex updates come from this product's own builds, which 0011
+  identifies, through the package's installer (0012), and not through the package's Sparkle updater.

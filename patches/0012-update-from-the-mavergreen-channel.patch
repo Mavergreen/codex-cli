@@ -1,0 +1,960 @@
+diff --git a/codex-rs/cli/src/doctor/updates.rs b/codex-rs/cli/src/doctor/updates.rs
+index fbad7d9..21d6a83 100644
+--- a/codex-rs/cli/src/doctor/updates.rs
++++ b/codex-rs/cli/src/doctor/updates.rs
+@@ -14,6 +14,9 @@ use codex_http_client::ClientRouteClass;
+ use codex_http_client::RouteAwareClientPool;
+ use codex_install_context::InstallContext;
+ use codex_install_context::InstallMethod;
++use codex_install_context::mavergreen::BuildId;
++use codex_install_context::mavergreen::LATEST_URL;
++use codex_install_context::mavergreen::current_build_id;
+ use http::Method;
+ use serde::Deserialize;
+ #[cfg(target_os = "macos")]
+@@ -33,8 +36,6 @@ use super::network;
+ const MAX_VERSION_RESPONSE_BYTES: usize = 1024 * 1024;
+ 
+ const VERSION_FILE_NAME: &str = "version.json";
+-const GITHUB_LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
+ #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+ const DESKTOP_UPDATE_URL: &str = "https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml";
+ #[cfg(all(target_os = "macos", not(target_arch = "x86_64")))]
+@@ -60,6 +61,7 @@ pub(super) async fn updates_check(config: &Config) -> DoctorCheck {
+         ),
+         format!("update action: {}", update_action_label(&install_context)),
+     ];
++    details.extend(mavergreen_update_details(&install_context));
+     let version_file = config.codex_home.join(VERSION_FILE_NAME);
+     push_cached_version_details(&mut details, &version_file);
+ 
+@@ -75,10 +77,14 @@ pub(super) async fn updates_check(config: &Config) -> DoctorCheck {
+         ClientRouteClass::Other,
+     );
+ 
++    let current = running_build(&install_context);
+     match fetch_latest_version(&client, &install_context).await {
+-        Ok(latest_version) => {
++        Ok(None) => {
++            details.push("latest version probe: not applicable to this install method".to_string());
++        }
++        Ok(Some(latest_version)) => {
+             details.push(format!("latest version: {latest_version}"));
+-            if is_newer(&latest_version, env!("CARGO_PKG_VERSION")) == Some(true) {
++            if mavergreen_upgrade_available(&latest_version, &current) {
+                 details.push("latest version status: newer version is available".to_string());
+             } else {
+                 details.push("latest version status: current version is not older".to_string());
+@@ -399,45 +405,61 @@ fn update_action_label(context: &InstallContext) -> &'static str {
+     }
+ }
+ 
+-async fn fetch_latest_version(
+-    client: &RouteAwareClientPool,
+-    context: &InstallContext,
+-) -> Result<String, String> {
++// Mavergreen: the running build, falling back to the plain Codex version without a manifest.
++fn running_build(context: &InstallContext) -> String {
++    current_build_id(context).unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
++}
++
++// Mavergreen: only the Mavergreen channel is probed. Other install methods update from sources this
++// build does not consult, so there is nothing to probe for them.
++fn probes_mavergreen_channel(context: &InstallContext) -> bool {
+     match &context.method {
+-        InstallMethod::Brew => fetch_homebrew_cask_version(client).await,
++        InstallMethod::Standalone { .. } | InstallMethod::Other => true,
+         InstallMethod::Npm
+         | InstallMethod::Bun
+         | InstallMethod::VitePlus
+         | InstallMethod::Pnpm
+-        | InstallMethod::Standalone { .. }
+-        | InstallMethod::Other => fetch_latest_github_release_version(client).await,
++        | InstallMethod::Brew => false,
+     }
+ }
+ 
+-async fn fetch_latest_github_release_version(
+-    client: &RouteAwareClientPool,
+-) -> Result<String, String> {
+-    #[derive(Deserialize)]
+-    struct ReleaseInfo {
+-        tag_name: String,
++// Mavergreen: `codex --version` prints OpenAI's version, so the build, and the channel it is
++// compared with, are named here.
++fn mavergreen_update_details(context: &InstallContext) -> Vec<String> {
++    let mut details = vec![format!("running build: {}", running_build(context))];
++    if probes_mavergreen_channel(context) {
++        details.push(format!("update channel: {LATEST_URL}"));
+     }
++    details
++}
+ 
+-    let info = http_get_json::<ReleaseInfo>(client, GITHUB_LATEST_RELEASE_URL).await?;
+-    info.tag_name
+-        .strip_prefix("rust-v")
+-        .map(str::to_string)
+-        .ok_or_else(|| format!("failed to parse latest tag {}", info.tag_name))
++async fn fetch_latest_version(
++    client: &RouteAwareClientPool,
++    context: &InstallContext,
++) -> Result<Option<String>, String> {
++    if probes_mavergreen_channel(context) {
++        fetch_mavergreen_build(client).await.map(Some)
++    } else {
++        Ok(None)
++    }
+ }
+ 
+-async fn fetch_homebrew_cask_version(client: &RouteAwareClientPool) -> Result<String, String> {
++async fn fetch_mavergreen_build(client: &RouteAwareClientPool) -> Result<String, String> {
+     #[derive(Deserialize)]
+-    struct HomebrewCaskInfo {
+-        version: String,
++    struct LatestJson {
++        mavergreen_build: Option<String>,
+     }
+ 
+-    http_get_json::<HomebrewCaskInfo>(client, HOMEBREW_CASK_API_URL)
+-        .await
+-        .map(|info| info.version)
++    let info = http_get_json::<LatestJson>(client, LATEST_URL).await?;
++    let build = info
++        .mavergreen_build
++        .ok_or_else(|| "latest.json does not name a mavergreen_build".to_string())?;
++    match BuildId::parse(&build) {
++        Some(id) if id.build >= 1 => Ok(build),
++        _ => Err(format!(
++            "latest.json names an invalid mavergreen_build {build}"
++        )),
++    }
+ }
+ 
+ async fn http_get_json<T>(client: &RouteAwareClientPool, url: &str) -> Result<T, String>
+@@ -470,21 +492,14 @@ where
+     .map_err(|_| "version request timed out".to_string())?
+ }
+ 
+-fn is_newer(latest: &str, current: &str) -> Option<bool> {
+-    match (parse_version(latest), parse_version(current)) {
+-        (Some(latest), Some(current)) => Some(latest > current),
+-        (Some(_), None) | (None, Some(_)) | (None, None) => None,
++// Mavergreen: true only when both are build ids and `latest` is the later one.
++fn mavergreen_upgrade_available(latest: &str, current: &str) -> bool {
++    match (BuildId::parse(latest), BuildId::parse(current)) {
++        (Some(latest), Some(current)) => latest > current,
++        _ => false,
+     }
+ }
+ 
+-fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
+-    let mut parts = value.trim().split('.');
+-    let major = parts.next()?.parse::<u64>().ok()?;
+-    let minor = parts.next()?.parse::<u64>().ok()?;
+-    let patch = parts.next()?.parse::<u64>().ok()?;
+-    Some((major, minor, patch))
+-}
+-
+ #[derive(Deserialize)]
+ struct VersionInfo {
+     latest_version: String,
+@@ -678,10 +693,85 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn is_newer_compares_plain_semver() {
+-        assert_eq!(is_newer("1.2.4", "1.2.3"), Some(true));
+-        assert_eq!(is_newer("1.2.3", "1.2.4"), Some(false));
+-        assert_eq!(is_newer("1.2.3-beta.1", "1.2.2"), None);
++    fn mavergreen_rebuilds_are_upgrades() {
++        assert!(mavergreen_upgrade_available(
++            "0.163.0-mavericks.2",
++            "0.163.0-mavericks.1"
++        ));
++        assert!(mavergreen_upgrade_available(
++            "0.164.0-mavericks.1",
++            "0.163.0-mavericks.4"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "0.163.0-mavericks.1",
++            "0.163.0-mavericks.1"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "0.163.0-mavericks.1",
++            "0.164.0-mavericks.1"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "garbage",
++            "0.163.0-mavericks.1"
++        ));
++    }
++
++    #[test]
++    fn the_update_section_names_the_running_build_and_its_channel() {
++        let package = tempfile::tempdir().expect("package directory should be created");
++        std::fs::create_dir_all(package.path().join("bin")).expect("bin/ should be created");
++        std::fs::write(
++            package.path().join("codex-package.json"),
++            r#"{"version":"0.161.0","mavergreenBuild":"0.161.0-mavericks.1"}"#,
++        )
++        .expect("manifest should be written");
++        let exe = package.path().join("bin/codex");
++        std::fs::write(&exe, "").expect("executable should be written");
++        let context = InstallContext::from_exe(
++            /*is_macos*/ true,
++            Some(&exe),
++            /*method_override*/ None,
++        );
++        assert_eq!(
++            mavergreen_update_details(&context),
++            vec![
++                "running build: 0.161.0-mavericks.1".to_string(),
++                format!("update channel: {LATEST_URL}"),
++            ]
++        );
++
++        let brew = InstallContext {
++            method: InstallMethod::Brew,
++            package_layout: None,
++        };
++        assert_eq!(
++            mavergreen_update_details(&brew),
++            vec![format!("running build: {}", env!("CARGO_PKG_VERSION"))],
++            "without a manifest build the plain Codex version runs, and no channel is checked"
++        );
++    }
++
++    #[test]
++    fn the_standalone_probe_reads_the_mavergreen_channel() {
++        assert!(LATEST_URL.ends_with("/codex-builds/latest.json"));
++    }
++
++    #[tokio::test]
++    async fn package_managed_installs_probe_nothing() {
++        use codex_http_client::HttpClientFactory;
++        use codex_http_client::OutboundProxyPolicy;
++
++        let client = RouteAwareClientPool::new_without_request_logging(
++            HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
++            ClientRouteClass::Other,
++        );
++        for method in [InstallMethod::Brew, InstallMethod::Npm, InstallMethod::Pnpm] {
++            let context = InstallContext {
++                method,
++                package_layout: None,
++            };
++            assert_eq!(fetch_latest_version(&client, &context).await, Ok(None));
++        }
+     }
+ 
+     #[test]
+diff --git a/codex-rs/cli/src/main.rs b/codex-rs/cli/src/main.rs
+index ac06a66..1fa5283 100644
+--- a/codex-rs/cli/src/main.rs
++++ b/codex-rs/cli/src/main.rs
+@@ -833,12 +833,29 @@ fn run_update_action(
+         }
+     };
+     if !status.success() {
++        // Mavergreen: the installer has already said why it installed nothing.
++        if let Some(message) = mavergreen_update_failure(action, status.code()) {
++            anyhow::bail!(message);
++        }
+         anyhow::bail!("`{cmd_str}` failed with status {status}");
+     }
+     println!("\n🎉 Update ran successfully! Please restart Codex.");
+     Ok(())
+ }
+ 
++// Mavergreen: the package's installer exits 3 when the newest build needs a newer codex-cli package.
++// It installs nothing, says so, and opens the package's updater only when somebody is watching, so
++// the message does not assume the updater opened.
++const MAVERGREEN_NEEDS_NEWER_PACKAGE_EXIT: i32 = 3;
++
++fn mavergreen_update_failure(action: UpdateAction, exit_code: Option<i32>) -> Option<&'static str> {
++    (action == UpdateAction::StandaloneUnix
++        && exit_code == Some(MAVERGREEN_NEEDS_NEWER_PACKAGE_EXIT))
++    .then_some(
++        "Codex was not updated: the newest build needs a newer codex-cli package. Get it with the package's updater or from https://github.com/Mavergreen/codex-cli/releases/latest, then run `codex update` again.",
++    )
++}
++
+ #[cfg(windows)]
+ fn resolve_windows_update_command_from_path(
+     command: &str,
+@@ -2710,6 +2727,29 @@ mod tests {
+     use codex_tui::TokenUsage;
+     use pretty_assertions::assert_eq;
+ 
++    #[test]
++    fn an_update_that_needs_a_newer_package_says_so() {
++        let message = mavergreen_update_failure(UpdateAction::StandaloneUnix, Some(3))
++            .expect("the installer's exit 3 has its own message");
++        assert!(
++            message.contains("needs a newer codex-cli package"),
++            "{message}"
++        );
++        assert!(message.contains("codex update"), "{message}");
++        assert_eq!(
++            mavergreen_update_failure(UpdateAction::StandaloneUnix, Some(1)),
++            None
++        );
++        assert_eq!(
++            mavergreen_update_failure(UpdateAction::StandaloneUnix, None),
++            None
++        );
++        assert_eq!(
++            mavergreen_update_failure(UpdateAction::BrewUpgrade, Some(3)),
++            None
++        );
++    }
++
+     #[test]
+     fn interactive_tui_future_stays_bounded() {
+         let future = run_interactive_tui(
+diff --git a/codex-rs/tui/src/history_cell/notices.rs b/codex-rs/tui/src/history_cell/notices.rs
+index 06d7b2f..e4b18ac 100644
+--- a/codex-rs/tui/src/history_cell/notices.rs
++++ b/codex-rs/tui/src/history_cell/notices.rs
+@@ -12,6 +12,8 @@ const RECAP_HEADING: &str = "Conversation recap";
+ #[cfg_attr(debug_assertions, allow(dead_code))]
+ #[derive(Debug)]
+ pub(crate) struct UpdateAvailableHistoryCell {
++    // Mavergreen: the running build, which the notice names when only the build changes.
++    current_build: String,
+     latest_version: String,
+     update_action: Option<UpdateAction>,
+ }
+@@ -19,11 +21,32 @@ pub(crate) struct UpdateAvailableHistoryCell {
+ #[cfg_attr(debug_assertions, allow(dead_code))]
+ impl UpdateAvailableHistoryCell {
+     pub(crate) fn new(latest_version: String, update_action: Option<UpdateAction>) -> Self {
++        Self::for_build(
++            crate::update_versions::running_build(),
++            latest_version,
++            update_action,
++        )
++    }
++
++    pub(crate) fn for_build(
++        current_build: String,
++        latest_version: String,
++        update_action: Option<UpdateAction>,
++    ) -> Self {
+         Self {
++            current_build,
+             latest_version,
+             update_action,
+         }
+     }
++
++    fn versions(&self) -> String {
++        let (current, latest) = crate::update_versions::update_notice_versions(
++            &self.current_build,
++            &self.latest_version,
++        );
++        format!("{current} -> {latest}")
++    }
+ }
+ 
+ impl HistoryCell for UpdateAvailableHistoryCell {
+@@ -51,7 +74,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
+                 "✨\u{200A}".bold().fg(accent_color()),
+                 "Update available!".bold().fg(accent_color()),
+                 " ",
+-                format!("{CODEX_CLI_VERSION} -> {}", self.latest_version).bold(),
++                self.versions().bold(),
+             ],
+             update_instruction,
+             "",
+@@ -77,7 +100,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
+         };
+         vec![
+             Line::from("Update available!"),
+-            Line::from(format!("{CODEX_CLI_VERSION} -> {}", self.latest_version)),
++            Line::from(self.versions()),
+             Line::from(update_instruction),
+             Line::from(""),
+             Line::from("See full release notes:"),
+diff --git a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
+index c8f352d..8a24bc7 100644
+--- a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
++++ b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
+@@ -2,10 +2,11 @@
+ source: tui/src/history_cell/tests.rs
+ expression: rendered
+ ---
+-╭─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+-│ ✨ Update available! 0.0.0 -> 9.9.9                                                                 │
+-│ Run sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh' to update. │
+-│                                                                                                     │
+-│ See full release notes:                                                                             │
+-│ https://github.com/openai/codex/releases/latest                                                     │
+-╰─────────────────────────────────────────────────────────────────────────────────────────────────────╯
++╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
++│ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
++│ Run sh -c 'CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/         │
++│ install.sh' to update.                                                                                     │
++│                                                                                                            │
++│ See full release notes:                                                                                    │
++│ https://github.com/openai/codex/releases/latest                                                            │
++╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+diff --git a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap
+index fb15a05..5cfb255 100644
+--- a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap
++++ b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap
+@@ -4,8 +4,8 @@ expression: rendered
+ ---
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
+-│ Run powershell -ExecutionPolicy Bypass -c '$env:CODEX_NON_INTERACTIVE=1; irm                               │
+-│ https://chatgpt.com/codex/install.ps1 | iex' to update.                                                    │
++│ Run powershell -ExecutionPolicy Bypass -c "Write-Error 'codex update is not supported on Windows in this   │
++│ build'; exit 1" to update.                                                                                 │
+ │                                                                                                            │
+ │ See full release notes:                                                                                    │
+ │ https://github.com/openai/codex/releases/latest                                                            │
+diff --git a/codex-rs/tui/src/history_cell/tests.rs b/codex-rs/tui/src/history_cell/tests.rs
+index c45fefd..ca78513 100644
+--- a/codex-rs/tui/src/history_cell/tests.rs
++++ b/codex-rs/tui/src/history_cell/tests.rs
+@@ -1388,6 +1388,34 @@ fn standalone_windows_update_available_history_cell_snapshot() {
+     insta::assert_snapshot!(rendered);
+ }
+ 
++#[test]
++fn a_mavergreen_rebuild_update_cell_names_both_builds() {
++    let rebuild = UpdateAvailableHistoryCell::for_build(
++        "0.161.0-mavericks.1".to_string(),
++        "0.161.0-mavericks.2".to_string(),
++        Some(UpdateAction::StandaloneUnix),
++    );
++    let raw = render_lines(&rebuild.raw_lines()).join("\n");
++    assert!(
++        raw.contains("0.161.0-mavericks.1 -> 0.161.0-mavericks.2"),
++        "{raw}"
++    );
++    let shown = render_lines(&rebuild.display_lines(/*width*/ 110)).join("\n");
++    assert!(
++        shown.contains("0.161.0-mavericks.1 -> 0.161.0-mavericks.2"),
++        "{shown}"
++    );
++
++    let new_version = UpdateAvailableHistoryCell::for_build(
++        "0.161.0-mavericks.2".to_string(),
++        "0.162.0-mavericks.1".to_string(),
++        Some(UpdateAction::StandaloneUnix),
++    );
++    let raw = render_lines(&new_version.raw_lines()).join("\n");
++    assert!(raw.contains("0.161.0 -> 0.162.0\n"), "{raw}");
++    assert!(!raw.contains("-> 0.162.0-mavericks"), "{raw}");
++}
++
+ #[test]
+ fn pnpm_update_available_history_cell_snapshot() {
+     let cell =
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index 14d1c97..19272eb 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -179,7 +179,8 @@ mod motion;
+ mod multi_agents;
+ mod named_session_lookup;
+ mod notifications;
+-#[cfg(any(not(debug_assertions), test))]
++// Mavergreen: only its own tests use this now; no update check asks the npm registry.
++#[cfg(test)]
+ mod npm_registry;
+ pub(crate) mod onboarding;
+ mod oss_selection;
+diff --git a/codex-rs/tui/src/update_action.rs b/codex-rs/tui/src/update_action.rs
+index 860d0bd..c99eb14 100644
+--- a/codex-rs/tui/src/update_action.rs
++++ b/codex-rs/tui/src/update_action.rs
+@@ -20,9 +20,11 @@ pub enum UpdateAction {
+     PnpmGlobalLatest,
+     /// Update via `brew upgrade codex`.
+     BrewUpgrade,
+-    /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
++    // Mavergreen: the package's installer fetches the newest build from the Mavergreen channel.
++    /// Update by running the installed package's installer non-interactively.
+     StandaloneUnix,
+-    /// Update via `$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex`.
++    // Mavergreen: Mavergreen builds are for macOS only; the Windows action only says so.
++    /// Report that updating is not supported on Windows in this build.
+     StandaloneWindows,
+ }
+ 
+@@ -56,7 +58,8 @@ impl UpdateAction {
+                 "sh",
+                 &[
+                     "-c",
+-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh",
++                    // Mavergreen: must equal `mavergreen::INSTALLER_PATH`; a test checks it.
++                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh",
+                 ],
+             ),
+             UpdateAction::StandaloneWindows => (
+@@ -65,7 +68,7 @@ impl UpdateAction {
+                     "-ExecutionPolicy",
+                     "Bypass",
+                     "-c",
+-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex",
++                    "Write-Error 'codex update is not supported on Windows in this build'; exit 1",
+                 ],
+             ),
+         }
+@@ -156,17 +159,24 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn standalone_update_commands_rerun_latest_installer() {
++    fn standalone_update_commands_rerun_the_installed_installer() {
+         assert_eq!(
+             UpdateAction::StandaloneUnix.command_args(),
+             (
+                 "sh",
+                 &[
+                     "-c",
+-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh"
++                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh"
+                 ][..],
+             )
+         );
++        assert!(
++            UpdateAction::StandaloneUnix
++                .command_args()
++                .1
++                .iter()
++                .any(|arg| arg.ends_with(codex_install_context::mavergreen::INSTALLER_PATH))
++        );
+         assert_eq!(
+             UpdateAction::StandaloneWindows.command_args(),
+             (
+@@ -175,7 +185,7 @@ mod tests {
+                     "-ExecutionPolicy",
+                     "Bypass",
+                     "-c",
+-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex"
++                    "Write-Error 'codex update is not supported on Windows in this build'; exit 1"
+                 ][..],
+             )
+         );
+diff --git a/codex-rs/tui/src/update_prompt.rs b/codex-rs/tui/src/update_prompt.rs
+index 30e948d..e03a532 100644
+--- a/codex-rs/tui/src/update_prompt.rs
++++ b/codex-rs/tui/src/update_prompt.rs
+@@ -59,8 +59,12 @@ pub(crate) async fn run_update_prompt_if_needed(
+         return Ok(UpdatePromptOutcome::Continue);
+     };
+ 
+-    let mut screen =
+-        UpdatePromptScreen::new(tui.frame_requester(), latest_version.clone(), update_action);
++    let mut screen = UpdatePromptScreen::new(
++        tui.frame_requester(),
++        crate::update_versions::running_build(),
++        latest_version.clone(),
++        update_action,
++    );
+     tui.draw(u16::MAX, |frame| {
+         frame.render_widget_ref(&screen, frame.area());
+     })?;
+@@ -120,13 +124,15 @@ struct UpdatePromptScreen {
+ impl UpdatePromptScreen {
+     fn new(
+         request_frame: FrameRequester,
++        // Mavergreen: the running build, which the notice names when only the build changes.
++        current_version: String,
+         latest_version: String,
+         update_action: UpdateAction,
+     ) -> Self {
+         Self {
+             request_frame,
+             latest_version,
+-            current_version: env!("CARGO_PKG_VERSION").to_string(),
++            current_version,
+             update_action,
+             highlighted: UpdateSelection::UpdateNow,
+             selection: None,
+@@ -207,18 +213,17 @@ impl WidgetRef for &UpdatePromptScreen {
+ 
+         let update_command = self.update_action.command_str();
+ 
++        let (current, latest) = crate::update_versions::update_notice_versions(
++            &self.current_version,
++            &self.latest_version,
++        );
+         column.push(/*flex*/ 1, RenderableItem::Borrowed(&""));
+         column.push(
+             /*flex*/ 0,
+             Paragraph::new(Line::from(vec![
+                 "Update available".bold(),
+                 " · ".dim(),
+-                format!(
+-                    "{current} → {latest}",
+-                    current = self.current_version,
+-                    latest = self.latest_version
+-                )
+-                .dim(),
++                format!("{current} → {latest}").dim(),
+             ]))
+             .wrap(Wrap { trim: false })
+             .inset(Insets::vh(/*v*/ 0, /*h*/ 2)),
+@@ -285,11 +290,46 @@ mod tests {
+     fn new_prompt() -> UpdatePromptScreen {
+         UpdatePromptScreen::new(
+             FrameRequester::test_dummy(),
++            env!("CARGO_PKG_VERSION").into(),
+             "9.9.9".into(),
+             UpdateAction::NpmGlobalLatest,
+         )
+     }
+ 
++    fn rendered_prompt(current_build: &str, latest_build: &str) -> String {
++        let screen = UpdatePromptScreen::new(
++            FrameRequester::test_dummy(),
++            current_build.into(),
++            latest_build.into(),
++            UpdateAction::StandaloneUnix,
++        );
++        let mut terminal =
++            Terminal::new(VT100Backend::new(/*width*/ 200, /*height*/ 12)).expect("terminal");
++        terminal
++            .draw(|frame| frame.render_widget_ref(&screen, frame.area()))
++            .expect("render update prompt");
++        terminal.backend().to_string()
++    }
++
++    #[test]
++    fn a_mavergreen_rebuild_prompt_shows_both_builds() {
++        let rendered = rendered_prompt("0.161.0-mavericks.1", "0.161.0-mavericks.2");
++        assert!(
++            rendered.contains("Update available · 0.161.0-mavericks.1 → 0.161.0-mavericks.2"),
++            "{rendered}"
++        );
++    }
++
++    #[test]
++    fn a_new_codex_version_prompt_shows_plain_versions() {
++        let rendered = rendered_prompt("0.161.0-mavericks.2", "0.162.0-mavericks.1");
++        assert!(
++            rendered.contains("Update available · 0.161.0 → 0.162.0"),
++            "{rendered}"
++        );
++        assert!(!rendered.contains("mavericks"), "{rendered}");
++    }
++
+     #[test]
+     fn update_prompt_snapshot() {
+         let screen = new_prompt();
+diff --git a/codex-rs/tui/src/update_versions.rs b/codex-rs/tui/src/update_versions.rs
+index b0aa3de..4ea9a20 100644
+--- a/codex-rs/tui/src/update_versions.rs
++++ b/codex-rs/tui/src/update_versions.rs
+@@ -1,17 +1,61 @@
+ #[cfg(any(not(debug_assertions), test))]
+-pub(crate) fn is_newer(latest: &str, current: &str) -> Option<bool> {
+-    match (parse_version(latest), parse_version(current)) {
+-        (Some(l), Some(c)) => Some(l > c),
+-        _ => None,
++use codex_install_context::mavergreen::BuildId;
++
++// Mavergreen: versions are Mavergreen build ids (`x.y.z-mavericks.N`), which order a rebuild of a
++// Codex version after the version itself; anything that is not a build id never counts as newer.
++#[cfg(any(not(debug_assertions), test))]
++pub(crate) fn mavergreen_upgrade_available(latest: &str, current: &str) -> bool {
++    match (BuildId::parse(latest), BuildId::parse(current)) {
++        (Some(latest), Some(current)) => latest > current,
++        _ => false,
+     }
+ }
+ 
++// Mavergreen: the running build is its package manifest's build id, or, without one, the plain Codex
++// version, which any rebuild of it follows.
++pub(crate) fn running_build() -> String {
++    codex_install_context::mavergreen::current_build_id(
++        codex_install_context::InstallContext::current(),
++    )
++    .unwrap_or_else(|| crate::version::CODEX_CLI_VERSION.to_string())
++}
++
++// Mavergreen: the "from" and "to" of an update notice. A rebuild of the running Codex version shows
++// both build ids, since only the build number tells them apart; a new Codex version shows both
++// plain versions, as upstream's notice does. Anything that is not a build id is shown as it is.
++pub(crate) fn update_notice_versions(current: &str, latest: &str) -> (String, String) {
++    use codex_install_context::mavergreen::BuildId;
++    match (BuildId::parse(current), BuildId::parse(latest)) {
++        (Some(from), Some(to))
++            if (from.major, from.minor, from.patch) != (to.major, to.minor, to.patch) =>
++        {
++            (
++                BuildId { build: 0, ..from }.to_string(),
++                BuildId { build: 0, ..to }.to_string(),
++            )
++        }
++        _ => (current.to_string(), latest.to_string()),
++    }
++}
++
++// Mavergreen: the channel's `latest.json` names the newest build in `mavergreen_build`.
+ #[cfg(any(not(debug_assertions), test))]
+-pub(crate) fn extract_version_from_latest_tag(latest_tag_name: &str) -> anyhow::Result<String> {
+-    latest_tag_name
+-        .strip_prefix("rust-v")
+-        .map(str::to_owned)
+-        .ok_or_else(|| anyhow::anyhow!("Failed to parse latest tag name '{latest_tag_name}'"))
++pub(crate) fn mavergreen_build_from_latest_json(body: &str) -> anyhow::Result<String> {
++    #[derive(serde::Deserialize)]
++    struct LatestJson {
++        mavergreen_build: Option<String>,
++    }
++
++    let LatestJson { mavergreen_build } = serde_json::from_str(body)
++        .map_err(|err| anyhow::anyhow!("Failed to parse latest.json: {err}"))?;
++    let build = mavergreen_build
++        .ok_or_else(|| anyhow::anyhow!("latest.json does not name a mavergreen_build"))?;
++    match BuildId::parse(&build) {
++        Some(id) if id.build >= 1 => Ok(build),
++        _ => Err(anyhow::anyhow!(
++            "latest.json names an invalid mavergreen_build '{build}'"
++        )),
++    }
+ }
+ 
+ #[cfg(any(not(debug_assertions), test))]
+@@ -58,30 +102,79 @@ mod tests {
+     use pretty_assertions::assert_eq;
+ 
+     #[test]
+-    fn extracts_version_from_latest_tag() {
+-        assert_eq!(
+-            extract_version_from_latest_tag("rust-v1.5.0").expect("failed to parse version"),
+-            "1.5.0"
+-        );
++    fn mavergreen_rebuilds_are_upgrades() {
++        assert!(mavergreen_upgrade_available(
++            "0.163.0-mavericks.2",
++            "0.163.0-mavericks.1"
++        ));
++        assert!(mavergreen_upgrade_available(
++            "0.164.0-mavericks.1",
++            "0.163.0-mavericks.4"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "0.163.0-mavericks.1",
++            "0.163.0-mavericks.1"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "0.163.0-mavericks.1",
++            "0.164.0-mavericks.1"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "garbage",
++            "0.163.0-mavericks.1"
++        ));
+     }
+ 
+     #[test]
+-    fn latest_tag_without_prefix_is_invalid() {
+-        assert!(extract_version_from_latest_tag("v1.5.0").is_err());
++    fn a_first_build_is_an_upgrade_over_the_plain_version() {
++        assert!(mavergreen_upgrade_available(
++            "0.161.0-mavericks.1",
++            "0.161.0"
++        ));
++        assert!(!mavergreen_upgrade_available(
++            "0.161.0",
++            "0.161.0-mavericks.1"
++        ));
+     }
+ 
+     #[test]
+-    fn prerelease_version_is_not_considered_newer() {
+-        assert_eq!(is_newer("0.11.0-beta.1", "0.11.0"), None);
+-        assert_eq!(is_newer("1.0.0-rc.1", "1.0.0"), None);
++    fn a_rebuild_notice_names_both_builds_and_any_other_names_versions() {
++        let pair = |current: &str, latest: &str| {
++            let (from, to) = update_notice_versions(current, latest);
++            format!("{from} -> {to}")
++        };
++        assert_eq!(
++            pair("0.161.0-mavericks.1", "0.161.0-mavericks.2"),
++            "0.161.0-mavericks.1 -> 0.161.0-mavericks.2"
++        );
++        assert_eq!(
++            pair("0.161.0", "0.161.0-mavericks.1"),
++            "0.161.0 -> 0.161.0-mavericks.1"
++        );
++        assert_eq!(
++            pair("0.161.0-mavericks.3", "0.162.0-mavericks.1"),
++            "0.161.0 -> 0.162.0"
++        );
++        assert_eq!(pair("0.161.0", "9.9.9"), "0.161.0 -> 9.9.9");
++        assert_eq!(
++            pair("garbage", "0.162.0-mavericks.1"),
++            "garbage -> 0.162.0-mavericks.1"
++        );
+     }
+ 
+     #[test]
+-    fn plain_semver_comparisons_work() {
+-        assert_eq!(is_newer("0.11.1", "0.11.0"), Some(true));
+-        assert_eq!(is_newer("0.11.0", "0.11.1"), Some(false));
+-        assert_eq!(is_newer("1.0.0", "0.9.9"), Some(true));
+-        assert_eq!(is_newer("0.9.9", "1.0.0"), Some(false));
++    fn reads_the_build_from_latest_json() {
++        let body = r#"{"tag_name":"rust-v0.163.0-mavericks.2","mavergreen_build":"0.163.0-mavericks.2","mavergreen_codex_version":"0.163.0","mavergreen_min_pkg":"","mavergreen_state":"00","assets":[]}"#;
++        assert_eq!(
++            mavergreen_build_from_latest_json(body).unwrap(),
++            "0.163.0-mavericks.2"
++        );
++        assert!(mavergreen_build_from_latest_json(r#"{"tag_name":"rust-v0.163.0"}"#).is_err());
++        assert!(
++            mavergreen_build_from_latest_json(r#"{"mavergreen_build":"0.163.0"}"#).is_err(),
++            "a channel build names a rebuild"
++        );
++        assert!(mavergreen_build_from_latest_json("not json").is_err());
+     }
+ 
+     #[test]
+@@ -93,7 +186,6 @@ mod tests {
+     #[test]
+     fn whitespace_is_ignored() {
+         assert_eq!(parse_version(" 1.2.3 \n"), Some((1, 2, 3)));
+-        assert_eq!(is_newer(" 1.2.3 ", "1.2.2"), Some(true));
+     }
+ 
+     #[test]
+diff --git a/codex-rs/tui/src/updates.rs b/codex-rs/tui/src/updates.rs
+index 9bbdf31..9a11219 100644
+--- a/codex-rs/tui/src/updates.rs
++++ b/codex-rs/tui/src/updates.rs
+@@ -1,13 +1,12 @@
+ #![cfg(not(debug_assertions))]
+ 
+ use crate::legacy_core::config::Config;
+-use crate::npm_registry;
+-use crate::npm_registry::NpmPackageInfo;
+ use crate::update_action;
+ use crate::update_action::UpdateAction;
+-use crate::update_versions::extract_version_from_latest_tag;
+-use crate::update_versions::is_newer;
+ use crate::update_versions::is_source_build_version;
++use crate::update_versions::mavergreen_build_from_latest_json;
++use crate::update_versions::mavergreen_upgrade_available;
++use crate::update_versions::running_build;
+ use crate::updates_cache::VersionInfo;
+ use crate::updates_cache::read_version_info;
+ use crate::updates_cache::version_filepath;
+@@ -16,8 +15,8 @@ use chrono::Utc;
+ use codex_http_client::ClientRouteClass;
+ use codex_http_client::HttpClientFactory;
+ use codex_http_client::RouteAwareClientPool;
++use codex_install_context::mavergreen::LATEST_URL;
+ use codex_login::default_client::default_headers;
+-use serde::Deserialize;
+ use std::path::Path;
+ 
+ use crate::version::CODEX_CLI_VERSION;
+@@ -49,7 +48,7 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
+     }
+ 
+     info.and_then(|info| {
+-        if is_newer(&info.latest_version, CODEX_CLI_VERSION).unwrap_or(false) {
++        if mavergreen_upgrade_available(&info.latest_version, &running_build()) {
+             Some(info.latest_version)
+         } else {
+             None
+@@ -57,20 +56,6 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
+     })
+ }
+ 
+-// We use the latest version from the cask if installation is via homebrew - homebrew does not immediately pick up the latest release and can lag behind.
+-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
+-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+-
+-#[derive(Deserialize, Debug, Clone)]
+-struct ReleaseInfo {
+-    tag_name: String,
+-}
+-
+-#[derive(Deserialize, Debug, Clone)]
+-struct HomebrewCaskInfo {
+-    version: String,
+-}
+-
+ async fn check_for_update(
+     version_file: &Path,
+     action: Option<UpdateAction>,
+@@ -82,36 +67,24 @@ async fn check_for_update(
+     )
+     .with_legacy_custom_ca_fallback();
+     let latest_version = match action {
+-        Some(UpdateAction::Daemon(_)) => return Ok(()),
+-        Some(UpdateAction::BrewUpgrade) => {
+-            let HomebrewCaskInfo { version } = client_pool
+-                .get(HOMEBREW_CASK_API_URL)
+-                .headers(default_headers())
+-                .send()
+-                .await?
+-                .error_for_status()?
+-                .json::<HomebrewCaskInfo>()
+-                .await?;
+-            version
+-        }
+-        Some(UpdateAction::NpmGlobalLatest)
++        // Mavergreen: only the Mavergreen channel is checked. Package managers and the daemon
++        // update from other sources, so there is nothing to compare for them.
++        Some(UpdateAction::Daemon(_))
++        | Some(UpdateAction::BrewUpgrade)
++        | Some(UpdateAction::NpmGlobalLatest)
+         | Some(UpdateAction::BunGlobalLatest)
+         | Some(UpdateAction::VitePlusGlobalLatest)
+-        | Some(UpdateAction::PnpmGlobalLatest) => {
+-            let latest_version = fetch_latest_github_release_version(&client_pool).await?;
+-            let package_info = client_pool
+-                .get(npm_registry::PACKAGE_URL)
++        | Some(UpdateAction::PnpmGlobalLatest) => return Ok(()),
++        Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
++            let body = client_pool
++                .get(LATEST_URL)
+                 .headers(default_headers())
+                 .send()
+                 .await?
+                 .error_for_status()?
+-                .json::<NpmPackageInfo>()
++                .text()
+                 .await?;
+-            npm_registry::ensure_version_ready(&package_info, &latest_version)?;
+-            latest_version
+-        }
+-        Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
+-            fetch_latest_github_release_version(&client_pool).await?
++            mavergreen_build_from_latest_json(&body)?
+         }
+     };
+ 
+@@ -131,22 +104,6 @@ async fn check_for_update(
+     Ok(())
+ }
+ 
+-async fn fetch_latest_github_release_version(
+-    client_pool: &RouteAwareClientPool,
+-) -> anyhow::Result<String> {
+-    let ReleaseInfo {
+-        tag_name: latest_tag_name,
+-    } = client_pool
+-        .get(LATEST_RELEASE_URL)
+-        .headers(default_headers())
+-        .send()
+-        .await?
+-        .error_for_status()?
+-        .json::<ReleaseInfo>()
+-        .await?;
+-    extract_version_from_latest_tag(&latest_tag_name)
+-}
+-
+ /// Returns the latest version to show in a popup, if it should be shown.
+ /// This respects the user's dismissal choice for the current latest version.
+ pub fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {

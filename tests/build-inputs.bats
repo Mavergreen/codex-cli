@@ -60,14 +60,24 @@ RELEASE=yes" ]
     codex-rs/http-client/src/lib.rs \
     codex-rs/http-client/src/route_aware_client_pool_tests.rs \
     codex-rs/http-client/src/route_aware_tls_fallback_tests.rs \
-    codex-rs/core/src/config/mod.rs \
     codex-rs/otel/src/metrics/client.rs \
     codex-rs/otel/src/otlp.rs \
     codex-rs/otel/src/provider.rs \
     codex-rs/responses-api-proxy/src/lib.rs \
     codex-rs/features/src/lib.rs \
     codex-rs/user-verification/src/lib.rs \
+    codex-rs/cli/src/doctor/updates.rs \
+    codex-rs/cli/src/main.rs \
     codex-rs/tui/Cargo.toml \
+    codex-rs/tui/src/history_cell/notices.rs \
+    codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap \
+    codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap \
+    codex-rs/tui/src/history_cell/tests.rs \
+    codex-rs/tui/src/lib.rs \
+    codex-rs/tui/src/update_action.rs \
+    codex-rs/tui/src/update_prompt.rs \
+    codex-rs/tui/src/update_versions.rs \
+    codex-rs/tui/src/updates.rs \
     codex-rs/tui/src/screen_reader.rs \
     codex-rs/tui/src/system_motion.rs \
     codex-rs/tui/tests/suite/focus_palette.rs \
