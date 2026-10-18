@@ -20,9 +20,9 @@ Wowfunhappy's 0002 (the startup update check off by default) and 0003 (the app-s
 auto-start off by default) were removed when Codex began updating itself from this product's own
 builds. Both turned off an upstream feature that could not work here: the update check offered
 update paths that failed or installed OpenAI's builds, and the daemon needed a packaged install
-and updated itself to OpenAI's builds. Codex's update check and `codex update` now use this
-product's builds channel and installer (0012), and the daemon updates through the same installer
-(0013), so upstream's defaults stand. Their source,
+and updated itself to OpenAI's builds. Codex now runs from the user's standalone layout, its update
+check and `codex update` use this product's builds channel and installer (0012), and the daemon
+updates through the same installer (0013), so upstream's defaults stand. Their source,
 `test-builds.sh`, stays in this repo's history under Wowfunhappy's authorship (see "Received files"),
 and `patches/README.md` says what each patch did and why it went.
 

@@ -6,8 +6,14 @@
 | Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning); a bump repackages. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
 | Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning); a bump repackages | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
 | Mavergreen shipyard | `v1.0.487` or later: that release (shipyard commit `b3b9a91`) added the `codex-cli` registry row the updater and packaging need. The fetch scripts verify their downloads (Rust, clang-22 and `rusty_v8`) with `shipyard_fetch_verified`, called by its canonical name in `build/fetch-release-pkg.sh` and `build/fetch-rusty-v8.sh`, so they do not depend on the `mav_*` aliases. The workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving repackages nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
-| Sparkle, in the updater | shipyard's `fetch_sparkle_framework.sh`, pinned by hash there; the family EdDSA public key is `updater/ed25519_key.pub`, the same file every Mavergreen product carries | Update channel for the installed CLI. Untrackable here: shipyard owns the Sparkle pin |
+| Sparkle, in the updater | shipyard's `fetch_sparkle_framework.sh`, pinned by hash there; the family EdDSA public key is `updater/ed25519_key.pub`, the same file every Mavergreen product carries | Update channel for the package itself: the launcher, the installer and the updater. Codex builds never go through it. Untrackable here: shipyard owns the Sparkle pin |
 | OpenAI prebuilt `rusty_v8` | Derived from Codex's `Cargo.lock` (`v8` package), so a Codex bump moves it with no separate pin and Renovate tracks nothing extra; verified against upstream's published `.sha256` checksums file | Static V8 archive linked into `codex-code-mode-host`; prebuilt because building V8 needs Chromium's toolchain and python3, which a native 10.9 build lacks |
+
+Not ingredients: `rg` and `ed25519` are required at install and run time
+(`tree/share/codex-cli/requires`, checked by the pkg's preinstall and by the launcher), not shipped
+in this package. Each build's `codex-path/rg` is a two-line script that runs the `rg` package's
+`/usr/local/mavergreen/rg/bin/rg`, so no other `rg` is fetched or pinned, and the installer checks
+each build's signature with the `ed25519` package's `ed25519-verify`.
 
 Codex is fetched into a host-local build root with shipyard's `clone_pinned.sh`. The exact Codex
 commit is verified before committed `patches/*.patch` files are applied. `patches/README.md` says
@@ -51,34 +57,71 @@ shipyard's checker does not look at load paths, and it passed a `codex` that loa
 `/opt/pkg` dylibs. `build/verify-artifact.sh` runs the same load-path check on a transferred
 artifact. It is interim, until shipyard's family guard checks load paths.
 
+CMake registers these four tests only when it finds a build in the build root's `codex-native` or
+`codex-cross`, since configuring for the pkg needs no Codex. Only the updater is compiled for the
+pkg, and it is guarded as it is built.
+
 ## Packaging
 
-`packaging/build-pkg.sh UPDATER-APP CODEX-OUT VERSION OUT-DIR` wraps a build's artifact directory
-(`codex-native` or `codex-cross`) in `OUT-DIR/codex-cli-VERSION.pkg`, the same way in either mode, using
-shipyard's `stage_product.sh`, `build_component_pkg.sh` and `set_install_floor.sh`; nothing is
-hand-written. The product tree is `/usr/local/mavergreen/codex-cli` with `bin/codex` and
-`bin/codex-code-mode-host` side by side, because Codex finds the host beside its canonicalized
-executable (patch 0009 makes that work through the link farm's symlink). Only `codex` is exported to
-`/usr/local/mavergreen/bin`: `--exclude bin/codex-code-mode-host` keeps the host out. The build
-manifest ships as `share/doc/codex-cli/build-manifest`, and the repo's own `README.md` as
-`share/doc/codex-cli/README.md`, copied at package time, as mavergreen-gh does, so the pkg carries
-whatever the maintainer's edit of it leaves. The pkg has no `codex-voice-host` and no
-`codex-resources/voice`, and `build-pkg.sh` refuses an artifact directory that has either.
+**The pkg.** `packaging/build-pkg.sh UPDATER-APP VERSION OUT-DIR` stages `tree/` as committed at
+`HEAD` (it warns about uncommitted changes there, which it leaves out), the repo's `README.md` and the
+updater under `/usr/local/mavergreen/codex-cli`, and wraps them in `OUT-DIR/codex-cli-VERSION.pkg`
+with shipyard's `stage_product.sh`, `build_component_pkg.sh` and `set_install_floor.sh`; nothing is
+hand-written. `VERSION` is the pkg's own `YYYYMMDD.N`. The tree is:
 
-`tests/package-test.sh PKG CODEX-OUT` checks the pkg, in either mode, with no Bats and no Python:
-payload contents and modes, binaries byte-identical to the build, the installed README equal to
-`README.md`, the installed `build-manifest`'s `version=` equal to the package version, manifest
-identity, a link farm that holds `codex` alone and resolves to a directory holding the host, a clean
-upgrade and uninstall, and the updater's bundle ID, feed and comparison version against the registry
-and the package version. It runs the pkg's own install scripts against a temporary target root,
-never `/`.
+| Path under `/usr/local/mavergreen/codex-cli` | What |
+| --- | --- |
+| `bin/codex` | the launcher, a shell script, and the only file exported to `/usr/local/mavergreen/bin` |
+| `libexec/codex-cli/lib.sh`, `link.sh` | the launcher's modules |
+| `libexec/codex-cli/install.sh` | the installer, derived from upstream's `install.sh` (see `PROVENANCE.md`) |
+| `share/codex-cli/requires` | `rg` and `ed25519`, which the preinstall and the launcher require |
+| `share/codex-cli/ed25519_key.pub` | the family EdDSA public key, against which the installer checks each build's signature |
+| `share/doc/codex-cli/` | the repo's `README.md`, copied at package time as mavergreen-gh does, and the `LICENSE` and `NOTICE` of Codex, which the installer is derived from |
+
+The updater is installed in `/Library/Application Support/Mavergreen/codex-cli-updater.app`, with
+its LaunchAgent. `build-pkg.sh` refuses a payload holding any Mach-O file or a Codex binary, and
+`tests/package-test.sh PKG` checks the pkg with no Bats and no Python: exactly that payload, no
+Codex binary, a preinstall that requires each product in `requires`, the link farm exporting
+`codex` alone and resolving to the launcher, a clean upgrade and uninstall (run against a temporary
+target root, never `/`), and the updater's bundle ID, feed and versions against shipyard's
+registry and the pkg's version.
+
+**The launcher.** `/usr/local/mavergreen/bin/codex` resolves its own symlinks, sources its modules,
+checks `requires`, and then runs the user's Codex: `${CODEX_HOME:-~/.codex}/packages/standalone/current/bin/codex`,
+with the arguments unchanged, when that is a complete Mavergreen build (its `codex-package.json`
+names a `mavergreenBuild`). On the first run there is none, so it says `installing Codex (first
+run; this downloads Codex and can take a minute)`, runs the installer non-interactively, and then
+runs what it installed; if the installer fails, it says why and exits 1. It seeds the newest build
+`latest.json` names, as Claude's launcher does.
+It points `~/.local/bin/codex` at itself, as Claude's launcher does with `claude`, unless that path
+is someone else's, which it leaves alone and mentions once; the installer never touches it or a
+shell profile, so there is one `codex` on `PATH`.
+
+**The installer.** `libexec/codex-cli/install.sh` is what both the launcher's first run and
+`codex update` run. It reads `latest.json` (or `codex-build-<ID>.json` for `--release <ID>`) from the
+builds channel, checks its signature against `share/codex-cli/ed25519_key.pub` before parsing it,
+downloads the tarball it names, checks the sha256 the signed metadata gives, stages it, and only
+then moves `current`, under upstream's lock and in upstream's layout. A build already installed says
+so. It also implements the guarded modes the app-server daemon's background update loop runs it
+in. Its header lists every change from upstream's.
+
+**A Codex build.** `packaging/build-codex-package.sh CODEX-OUT BUILD-ID OUT-DIR` lays a build's
+artifact directory (`codex-native` or `codex-cross`) out as upstream's package:
+`bin/codex`, `bin/codex-code-mode-host`, an empty `codex-resources/`, `codex-path/rg` (a script that
+execs the `rg` package's `rg`), `codex-package.json` (upstream's fields plus `"mavergreenBuild":"<ID>"`), and
+the artifact's `build-manifest`, `LICENSE` and `NOTICE`, in
+`OUT-DIR/codex-package-x86_64-apple-darwin-<ID>.tar.gz`. It refuses an artifact with a voice
+runtime. Upstream's macOS package can also carry OpenAI's prebuilt zsh fork in `codex-resources/`;
+this one never does (see "Deviations").
 
 `check-readme-reviewed.sh`, run by shipyard's `publish-release.yml`, refuses a release while
 `README.md` carries shipyard's unreviewed-README marker line. The maintainer's edit removed it.
 
 The updater is an off-by-default CMake option, `-DCODEX_BUILD_UPDATER=ON`, because it needs `codex-cli`
 in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). The row arrived in shipyard commit `b3b9a91`, released as `v1.0.487`; packaging and the updater were verified against that
-registry with no override. It stays off by default, as in mavergreen-gh. The updater never links the CLI binary.
+registry with no override. It stays off by default, as in mavergreen-gh. The updater's version is the
+pkg's own, from `VERSION` (else `UPSTREAM_VERSION`), as mavergreen-claude-code's is, because Sparkle
+compares the feed's version with the bundle's. The updater never links the CLI binary.
 
 ## License notices
 
@@ -86,10 +129,11 @@ Codex is Apache-2.0, whose section 4 requires the license text and the NOTICE fi
 redistributed binaries. `build/build-codex.sh` copies `LICENSE` and `NOTICE` from the fetched, pinned
 Codex source root into the artifact directory, next to the binaries and `build-manifest`, in both modes
 and failing if either is missing or empty. `transfer-artifact.sh` and `verify-artifact.sh` carry and
-require them, so a cross artifact moved from the modern Mac has them too. `packaging/build-pkg.sh`
-installs them from the artifact, never from a checkout, at `share/doc/codex-cli/LICENSE` and
-`share/doc/codex-cli/NOTICE`, and fails without them. `tests/package-test.sh` checks both are in the pkg
-and byte-identical to the artifact's.
+require them, so a cross artifact moved from the modern Mac has them too.
+`packaging/build-codex-package.sh` puts the artifact's copies in every build's tarball, beside the
+binaries, and fails without them. The pkg carries no Codex binary, but its installer is derived from
+Codex's `install.sh`, so the pkg carries Codex's `LICENSE` and `NOTICE` too, from
+`tree/share/doc/codex-cli/`, and `tests/package-test.sh` checks both are in the pkg.
 
 The binaries are built from Codex's sources as modified by the patches in `patches/` (Apache-2.0
 section 4(b)); `patches/README.md` says what each patch changes.
@@ -108,15 +152,25 @@ a Codex bump updates it here along with `build/codex-revision`.
   OpenAI's, and this is an unofficial build that must not read as official. `updater/ICON-CREDIT.txt`
   says why and what ends the deviation, as mavergreen-rg does.
 - **Codex is not built by CMake.** The CMake project imports the two executables that
-  `build/build-codex.sh` made, so the product is packaged by `packaging/build-pkg.sh` from that output
-  rather than from CMake install rules.
-- **No voice.** The package ships no `codex-voice-host` and no `codex-resources/voice`, so Codex's
-  voice features are unsupported. `packaging/build-pkg.sh` refuses an artifact that has either and
-  `tests/package-test.sh` checks the payload has neither. Voice is deferred, not dropped:
-  nobody has yet tried building `codex-voice-host` on 10.9, so what it needs is unmeasured.
-- **Only `codex` is exported to the link farm.** `codex-code-mode-host` stays in the product tree
-  beside it, because Codex runs it as a sibling and it is not a command to run by hand; patch 0009
-  makes the symlinked `codex` find it.
+  `build/build-codex.sh` made, to run the compatibility guards on them; each build is packaged by
+  `packaging/build-codex-package.sh` from that output rather than from CMake install rules.
+- **Codex is installed per user, not by the pkg.** The pkg installs a launcher, and Codex itself
+  lands in each user's `~/.codex/packages/standalone` on first run, as upstream's standalone install
+  does. `sudo mavergreen uninstall codex-cli` removes the launcher, the installer and the updater,
+  and leaves every user's `~/.codex` alone, as Claude's uninstall leaves users' home directories
+  alone.
+- **No voice.** No build has `codex-voice-host` or `codex-resources/voice`, so Codex's voice
+  features are unsupported. `packaging/build-codex-package.sh` refuses an artifact that has either.
+  Voice is deferred, not dropped: nobody has yet tried building `codex-voice-host` on 10.9, so what
+  it needs is unmeasured.
+- **No `shell_zsh_fork`.** Upstream's macOS package carries OpenAI's prebuilt zsh fork in
+  `codex-resources/` for this feature, which is under development and off by default. It is
+  OpenAI's binary, so no build carries it, and the feature is unsupported.
+- **`codex-path/rg` is the family's `rg`.** Upstream's package carries BurntSushi's macOS `rg` in
+  `codex-path/`, which Codex puts first on the agent shell's `PATH`. Here it is a script,
+  `exec /usr/local/mavergreen/rg/bin/rg "$@"`, for the `rg` package the pkg requires, as pi uses
+  that `rg`. It is not a link because the app-server daemon copies the package and refuses any link
+  that resolves outside it.
 - **Updates come from this product's builds.** The startup check, `codex update`, `codex doctor`
   and the app-server daemon's background updates all use the builds channel and the package's
   installer, never OpenAI's releases (0011 to 0013). Their wording and defaults are upstream's: the

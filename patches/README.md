@@ -102,6 +102,8 @@ at the end says what each did and why it went.
 - **Invariant kept:** a package layout or standalone release directory is used first, as before.
   Started from its own directory, `codex` finds the host where it always did.
 - **When to reconsider:** when upstream resolves the executable before taking its directory.
+- **To be measured:** whether Codex still needs it now that the launcher runs the real binary from
+  the user's standalone install, where Codex looks in its package's `bin/` before this code runs.
 
 ## 0011-mavergreen-build-identity.patch
 
@@ -217,20 +219,23 @@ at the end says what each did and why it went.
 
 - **What it did:** made `check_for_update_on_startup` default to `false`. It was Wowfunhappy's.
 - **Why it was removed:** it existed because every update path Codex detected failed here, and
-  Homebrew's would have installed upstream's build. Now Codex's check reads this product's channel,
-  and `codex update` runs the package's installer (0012).
+  Homebrew's would have installed upstream's build. Now Codex runs from the standalone layout, its
+  check reads this product's channel, and `codex update` runs the package's installer (0012).
   Upstream's default, on, is what users should see.
 
 ### 0003-daemon-auto-start-off-by-default.patch
 
 - **What it did:** made the `daemon_auto_start` feature default to off, so the TUI hosted the app
   server in-process, and updated the two TUI tests that relied on that. It was Wowfunhappy's.
-- **Why it was removed:** its updater installed upstream's builds, which 0013 ends.
+- **Why it was removed:** both of its reasons are gone. The daemon needed a packaged install, which
+  the standalone layout is, and its updater installed upstream's builds, which 0013 ends.
 
 ### 0010-update-through-the-package-updater.patch
 
 - **What it did:** reported a `codex` under `/usr/local/mavergreen` as a Mavergreen install, and
   made `codex update` open the package's Sparkle updater instead of running `brew upgrade --cask
   codex`.
-- **Why it was removed:** Codex updates come from this product's own builds, which 0011
-  identifies, through the package's installer (0012), and not through the package's Sparkle updater.
+- **Why it was removed:** the real binary now runs from the user's standalone layout, so Codex
+  identifies the install as standalone by itself, and an ordinary Codex update no longer goes
+  through Sparkle. The one part still needed, sending the user to the updater when a build needs
+  a newer package, moved into the package's installer, which exits 3 for such a build.
