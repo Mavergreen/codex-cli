@@ -94,7 +94,7 @@ RELEASE=yes" ]
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
   source_dir="$MAVERICKS_BUILD_ROOT/codex-src"
-  upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
+  upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/components/codex/version")
   changed=$(git -C "$source_dir" diff -U0 codex-rs/Cargo.lock | grep '^[-+][^-+]' | LC_ALL=C sort -u)
   [ "$changed" = "$(printf '+version = "%s"\n-version = "0.0.0"' "$upstream")" ]
   [ "$(grep -c '^version = "0.0.0"$' "$source_dir/codex-rs/Cargo.lock")" -eq 0 ]
@@ -179,13 +179,13 @@ PATCH
   [ ! -e "$MAVERICKS_BUILD_ROOT/codex-src-kept" ]
 }
 
-@test "fetch refuses a Codex workspace version other than UPSTREAM_VERSION" {
+@test "fetch refuses a Codex workspace version other than components/codex/version" {
   need_codex_checkout
   export CODEX_REPOSITORY="file://$MAVERGREEN_ROOT/codex"
   copy_product
   run sh "$product/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
-  printf '0.0.1\n' > "$product/UPSTREAM_VERSION"
+  printf '0.0.1\n' > "$product/components/codex/version"
   run sh "$product/build/fetch-codex.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *"workspace version"*"is not 0.0.1"* ]] || false

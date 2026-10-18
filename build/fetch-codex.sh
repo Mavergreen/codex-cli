@@ -6,7 +6,7 @@ MAVERICKS_BUILD_DIR=$HERE
 export MAVERICKS_BUILD_DIR
 . "$HERE/lib.sh"
 
-UPSTREAM_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/UPSTREAM_VERSION")
+CODEX_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/codex/version")
 REVISION=$(tr -d '[:space:]' < "$HERE/codex-revision")
 BUILD_ROOT=$(mavericks_build_root)
 DEST="$BUILD_ROOT/codex-src"
@@ -18,7 +18,7 @@ esac
 
 CODEX_REPOSITORY=${CODEX_REPOSITORY:-https://github.com/openai/codex.git}
 sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
-  "$CODEX_REPOSITORY" "rust-v$UPSTREAM_VERSION" "$REVISION" "$DEST"
+  "$CODEX_REPOSITORY" "rust-v$CODEX_VERSION" "$REVISION" "$DEST"
 [ "$(git -C "$DEST" rev-parse HEAD)" = "$REVISION" ] || {
   echo "fetch-codex: checkout does not match build/codex-revision" >&2; exit 1;
 }
@@ -31,7 +31,7 @@ sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
 STAMP="$DEST/.git/mavergreen-prepared"
 KEEP=
 inputs_id() {
-  cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/UPSTREAM_VERSION" \
+  cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/components/codex/version" \
     "$HERE/codex-revision" | shasum -a 256 | awk '{ print $1 }'
 }
 tree_status() { git -C "$DEST" status --porcelain --ignored --untracked-files=all; }
@@ -70,8 +70,8 @@ WORKSPACE_VERSION=$(awk '
   /^\[/ { want = 0 }
   want && /^version = "/ { gsub(/^version = "|"$/, ""); print; exit }
 ' "$DEST/codex-rs/Cargo.toml")
-[ "$WORKSPACE_VERSION" = "$UPSTREAM_VERSION" ] || {
-  echo "fetch-codex: codex-rs/Cargo.toml workspace version '$WORKSPACE_VERSION' is not $UPSTREAM_VERSION" >&2
+[ "$WORKSPACE_VERSION" = "$CODEX_VERSION" ] || {
+  echo "fetch-codex: codex-rs/Cargo.toml workspace version '$WORKSPACE_VERSION' is not $CODEX_VERSION" >&2
   exit 1
 }
 REWRITTEN=$(awk -v v="$WORKSPACE_VERSION" -v out="$LOCK.tmp" '

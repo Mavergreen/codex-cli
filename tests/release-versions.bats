@@ -48,6 +48,10 @@ TAG=0.161.0-mavericks.4
 RELEASE=yes" ]
 }
 
+@test "UPSTREAM_VERSION is the package's own date" {
+  grep -Eq '^[0-9]{8}$' "$PRODUCT_ROOT/UPSTREAM_VERSION"
+}
+
 @test "a mode other than auto or local is refused" {
   run resolve nightly 0.161.0 ""
   [ "$status" -ne 0 ]
@@ -55,7 +59,8 @@ RELEASE=yes" ]
 
 # pin_check VERSION REVISION [ARGS]: check-upstream-pin.sh on a scratch product pinning them
 pin_check() {
-  printf '%s\n' "$1" > "$product/UPSTREAM_VERSION"
+  mkdir -p "$product/components/codex"
+  printf '%s\n' "$1" > "$product/components/codex/version"
   printf '%s\n' "$2" > "$product/build/codex-revision"
   shift 2
   sh "$product/build/check-upstream-pin.sh" "$@"
@@ -64,7 +69,7 @@ pin_check() {
 @test "a Codex prerelease tag is refused before it can be packaged" {
   run pin_check 0.162.0-alpha.1 979011409de0a60b52f179721948e65531d26144
   [ "$status" -eq 1 ]
-  [[ "$output" == *"UPSTREAM_VERSION '0.162.0-alpha.1' is not a stable x.y.z"* ]] || false
+  [[ "$output" == *"components/codex/version '0.162.0-alpha.1' is not a stable x.y.z"* ]] || false
 }
 
 @test "malformed upstream versions and revisions are refused" {
@@ -105,11 +110,11 @@ make_upstream() {
   [ "$status" -eq 0 ]
 }
 
-@test "a UPSTREAM_VERSION bump alone fails early, naming build/codex-revision and the commit to use" {
+@test "a components/codex/version bump alone fails early, naming build/codex-revision and the commit to use" {
   make_upstream
   run pin_check 0.162.0 "$rev_one" --remote
   [ "$status" -eq 1 ]
-  [[ "$output" == *"UPSTREAM_VERSION is 0.162.0 but build/codex-revision is $rev_one; rust-v0.162.0 is commit $rev_two"* ]] || false
+  [[ "$output" == *"components/codex/version is 0.162.0 but build/codex-revision is $rev_one; rust-v0.162.0 is commit $rev_two"* ]] || false
   [[ "$output" == *"Update build/codex-revision to $rev_two"* ]] || false
 }
 

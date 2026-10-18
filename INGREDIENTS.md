@@ -2,7 +2,7 @@
 
 | Ingredient | Pin | Use |
 | --- | --- | --- |
-| OpenAI Codex | `UPSTREAM_VERSION` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144`. Renovate (`github-releases` on `openai/codex`, tags `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` never match) bumps `UPSTREAM_VERSION` only; the commit is a manual edit, see "Releasing" | CLI source and Cargo workspace |
+| OpenAI Codex | `components/codex/version` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144`. Renovate (`github-releases` on `openai/codex`, tags `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` never match) bumps `components/codex/version` only; the commit is a manual edit, see "Releasing" | CLI source and Cargo workspace |
 | Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning); a bump repackages. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
 | Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning); a bump repackages | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
 | Mavergreen shipyard | `v1.0.487` or later: that release (shipyard commit `b3b9a91`) added the `codex-cli` registry row the updater and packaging need. The fetch scripts verify their downloads (Rust, clang-22 and `rusty_v8`) with `shipyard_fetch_verified`, called by its canonical name in `build/fetch-release-pkg.sh` and `build/fetch-rusty-v8.sh`, so they do not depend on the `mav_*` aliases. The workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving repackages nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
@@ -141,17 +141,16 @@ A packaging-only release of the same source (a new `.N`):
 **Bumping Codex takes two edits, and only one is automatic.** The family has a convention for a tag
 pinned together with its commit (Renovate's `git-refs`/`currentDigest`, as in porthole's `SKALIBS_REF`
 and recaulk's `components/macports-legacy-support/version`), but it pins both in one file. Here the
-tag is `UPSTREAM_VERSION`, which the family requires to be a bare committed version, and the commit is
-`build/codex-revision`, which eight scripts and tests read as a bare SHA. Renovate bumps
-`UPSTREAM_VERSION` alone, so the gap is guarded rather than closed: `build/check-upstream-pin.sh
---remote` is the first step after install in `release.yml`, and fails the PR before anything is built,
-printing the commit that `rust-v<version>` points at and naming `build/codex-revision`. Until that edit
-is made on the Renovate branch (with `patches/` refreshed if they no longer apply), the PR stays red
-and does not automerge. The same step refuses a prerelease or otherwise non-`x.y.z`
-`UPSTREAM_VERSION`: `0.162.0-alpha.1-mavericks.1` has no order the updater can compare, so the form is
-unsupported rather than mapped. Follow-up: one file holding both (`<sha> # <version>`, with a second
-manager on `UPSTREAM_VERSION` for the same dependency) would close the gap; it needs the readers
-updated and shipyard's convention confirmed for two files.
+tag is `components/codex/version`, and the commit is `build/codex-revision`, which scripts and tests
+read as a bare SHA. Renovate bumps `components/codex/version` alone, so the gap is guarded rather
+than closed: `build/check-upstream-pin.sh --remote` is the first step after install in `release.yml`,
+and fails the PR before anything is built, printing the commit that `rust-v<version>` points at and
+naming `build/codex-revision`. Until that edit is made on the Renovate branch (with `patches/`
+refreshed if they no longer apply), the PR stays red and does not automerge. The same step refuses
+a prerelease or otherwise non-`x.y.z` version: `0.162.0-alpha.1-mavericks.1` has no order the
+update check can compare, so the form is unsupported rather than mapped. Follow-up: one file holding
+both (`<sha> # <version>`, with a second manager on the version for the same dependency) would close
+the gap; it needs the readers updated and shipyard's convention confirmed for two files.
 
 `release.yml` mirrors mavergreen-gh's: a `build` job on `macos-26` (cross build, updater, compat guard tests,
 repo tests, pkg, package test, notes, feeds, conformance), `on-mavericks` (installs the cross-built pkg

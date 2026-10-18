@@ -4,8 +4,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Codex release tags are rust-v<ver>; prerelease tags (rust-v0.162.0-alpha.1) never match. This bumps UPSTREAM_VERSION only: build/codex-revision, the commit of that tag, is not derivable from the version.",
-      "managerFilePatterns": ["/^UPSTREAM_VERSION$/"],
+      "description": "Codex release tags are rust-v<ver>; prerelease tags (rust-v0.162.0-alpha.1) never match. This bumps components/codex/version only: build/codex-revision, the commit of that tag, is not derivable from the version.",
+      "managerFilePatterns": ["/^components/codex/version$/"],
       "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
       "depNameTemplate": "openai/codex",
       "datasourceTemplate": "github-releases",
@@ -32,9 +32,9 @@
   ],
   "packageRules": [
     {
-      "description": "Renovate moves UPSTREAM_VERSION but cannot derive the tag's commit, so build/codex-revision stays on the old commit and release.yml's upstream-pin check fails the PR (it names the commit to use). Not an automerge exception: automerge stays on, and the failing check is what holds the PR until a human edits build/codex-revision.",
+      "description": "Renovate moves components/codex/version but cannot derive the tag's commit, so build/codex-revision stays on the old commit and release.yml's upstream-pin check fails the PR (it names the commit to use). Not an automerge exception: automerge stays on, and the failing check is what holds the PR until a human edits build/codex-revision.",
       "matchDepNames": ["openai/codex"],
-      "prBodyNotes": ["Update `build/codex-revision` to the commit of this release's `rust-v<version>` tag on this branch (the failing `check-upstream-pin` step prints it), and refresh `patches/` if they no longer apply. See INGREDIENTS.md \"Releasing\"."]
+      "prBodyNotes": ["Renovate bumped `components/codex/version` only. Update `build/codex-revision` to the commit of this release's `rust-v<version>` tag on this branch (the failing `check-upstream-pin` step prints it), and refresh `patches/` if they no longer apply. See INGREDIENTS.md \"Releasing\"."]
     }
   ]
 }
