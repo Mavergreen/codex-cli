@@ -4,10 +4,10 @@
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
-rather than OpenAI's. Patches 0001 and 0003 to 0007 are Wowfunhappy's, and 0001 has since been
-rewritten here; `PROVENANCE.md` says where each came from. 0008, 0009, 0011 and 0012 are this
-product's own. 0002 and 0010 are removed, and their numbers are not reused: "Removed patches" at
-the end says what each did and why it went.
+rather than OpenAI's. Patches 0001 and 0004 to 0007 are Wowfunhappy's, and 0001 has since been
+rewritten here; `PROVENANCE.md` says where each came from. 0008, 0009 and 0011 to 0013 are this
+product's own. 0002, 0003 and 0010 are removed, and their numbers are not reused: "Removed patches"
+at the end says what each did and why it went.
 
 ## 0001-force-rustls.patch
 
@@ -60,22 +60,6 @@ the end says what each did and why it went.
   Wowfunhappy to take upstream). That last
   would let native-tls work on 10.9 for every client, including any a later Codex adds, so
   forcing rustls in each place would no longer be needed.
-
-## 0003-daemon-auto-start-off-by-default.patch
-
-- **What:** `codex-rs/features/src/lib.rs` changes the default of the `daemon_auto_start` feature
-  from enabled to disabled. The two TUI tests in `tests/suite/focus_palette.rs` that relied on
-  the old default (`no_daemon_skips_startup_and_discovery` and
-  `auto_daemon_start_failure_exits_with_manual_fallback_hint`) now set
-  `features.daemon_auto_start = true` themselves.
-- **Why:** the shared background app-server daemon runs from a packaged install, which a cargo
-  build lacks, so it fails with "this CLI has no complete local package". Its updater also
-  installs upstream builds the host may not run. The TUI hosts the app server in-process instead,
-  as with `--no-daemon`.
-- **Invariant kept:** only the default changes. `[features] daemon_auto_start = true` still turns
-  it on.
-- **When to reconsider:** when the package ships what the daemon needs and its updater no longer
-  installs upstream builds.
 
 ## 0004-user-verification-unsupported.patch
 
@@ -225,6 +209,34 @@ the end says what each did and why it went.
   release-notes link is still upstream's.
 - **When to reconsider:** when the channel or the package's installer moves (both are in 0011).
 
+## 0013-daemon-updates-through-the-package-installer.patch
+
+- **What:** `codex-rs/app-server-daemon/src/update_loop.rs`: the app-server daemon's background
+  update loop, and the migration its manual update runs, read the package's installer from disk at
+  0011's path instead of downloading `https://chatgpt.com/codex/install.sh`. A failed scheduled
+  update is logged on the updater's stderr (`warning: scheduled update failed: …`) where upstream
+  dropped it. The installer's own stderr is not kept, so its exit 3 gets a message that says why:
+  the newest build needs a newer codex-cli package, and nothing was installed.
+  `local_installer_reads_the_package_installer` in `update_loop_tests.rs` checks that the script's
+  bytes come back unchanged and that a missing script is an error naming its path, and
+  `an_installer_that_needs_a_newer_package_says_why` checks the exit-3 message.
+  The daemon runs its updater, and restarts into what it installed, only while its selected release
+  is a "stable" one, which upstream recognises by a plain `x.y.z` in the release's name.
+  `codex-rs/app-server-daemon/src/managed_install.rs` also accepts the installer's
+  `<x.y.z>-mavericks.<N>` names, and `prepare_install.rs` names the daemon's first release for the
+  package's build (`mavergreenBuild`), as the installer would. `mavergreen_build_releases_are_stable`
+  and `a_mavergreen_package_seeds_a_release_named_for_its_build` test both.
+- **Why:** upstream's loop downloads OpenAI's installer and runs it, which installs OpenAI's builds.
+  Read from the package, the installer fetches only this product's signed builds. With that, the
+  daemon can start on its own, as upstream's does, so 0003 is removed. Without the build names,
+  the daemon's first scheduled update would install the running build again under its build name,
+  and then count that release as unstable: it would never restart into a newer build, and would
+  stop updating once restarted.
+- **Invariant kept:** the loop's guarded runs (`CODEX_INSTALL_IF_LATEST`,
+  `CODEX_INSTALL_IF_CURRENT`, `CODEX_INSTALL_DAEMON_ONLY`, `CODEX_INSTALL_DEFER_SELECTION`,
+  `CODEX_UPDATE_FROM_RELEASE`) and their environment are upstream's.
+- **When to reconsider:** when the package's installer moves.
+
 ## Removed patches
 
 ### 0002-update-check-off-by-default.patch
@@ -234,6 +246,12 @@ the end says what each did and why it went.
   Homebrew's would have installed upstream's build. Now Codex's check reads this product's channel,
   and `codex update` runs the package's installer (0012).
   Upstream's default, on, is what users should see.
+
+### 0003-daemon-auto-start-off-by-default.patch
+
+- **What it did:** made the `daemon_auto_start` feature default to off, so the TUI hosted the app
+  server in-process, and updated the two TUI tests that relied on that. It was Wowfunhappy's.
+- **Why it was removed:** its updater installed upstream's builds, which 0013 ends.
 
 ### 0010-update-through-the-package-updater.patch
 

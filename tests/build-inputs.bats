@@ -64,8 +64,13 @@ RELEASE=yes" ]
     codex-rs/otel/src/otlp.rs \
     codex-rs/otel/src/provider.rs \
     codex-rs/responses-api-proxy/src/lib.rs \
-    codex-rs/features/src/lib.rs \
     codex-rs/user-verification/src/lib.rs \
+    codex-rs/app-server-daemon/src/managed_install.rs \
+    codex-rs/app-server-daemon/src/managed_install_path_tests.rs \
+    codex-rs/app-server-daemon/src/prepare_install.rs \
+    codex-rs/app-server-daemon/src/prepare_install_tests.rs \
+    codex-rs/app-server-daemon/src/update_loop.rs \
+    codex-rs/app-server-daemon/src/update_loop_tests.rs \
     codex-rs/cli/src/doctor/updates.rs \
     codex-rs/cli/src/main.rs \
     codex-rs/tui/Cargo.toml \
@@ -80,7 +85,6 @@ RELEASE=yes" ]
     codex-rs/tui/src/updates.rs \
     codex-rs/tui/src/screen_reader.rs \
     codex-rs/tui/src/system_motion.rs \
-    codex-rs/tui/tests/suite/focus_palette.rs \
     codex-rs/sandboxing/src/seatbelt_base_policy.sbpl \
     codex-rs/sandboxing/src/seatbelt_preferences_policy.sbpl \
     codex-rs/sandboxing/src/seatbelt_tests.rs \

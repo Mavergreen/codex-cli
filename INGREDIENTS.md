@@ -122,14 +122,12 @@ a Codex bump updates it here along with `build/codex-revision`.
   trust store is the keychain's, so a stock 10.9 needs AquaTransport's ModernRootCertificates to
   reach OpenAI. `patches/README.md` has the reasons and what ends the patch: an AquaTransport
   release with the TLS fix native-tls needs.
-- **Updates come from this product's builds.** The startup check, `codex update` and `codex doctor`
-  use the builds channel and the package's installer, never OpenAI's releases (0011 and 0012).
-  Their wording and defaults are upstream's: the startup check is on.
-- **Two defaults differ from upstream's.** Each can be turned on in config, except verification.
-  The shared background daemon (0003) is off because it runs from a packaged install that a cargo
-  build lacks, and its updater installs upstream builds the host may not run; the TUI hosts the
-  app server in-process instead. Biometric user verification (0004) reports unsupported because it
-  needs LocalAuthentication and Secure Enclave APIs, which 10.9 lacks.
+- **Updates come from this product's builds.** The startup check, `codex update`, `codex doctor`
+  and the app-server daemon's background updates all use the builds channel and the package's
+  installer, never OpenAI's releases (0011 to 0013). Their wording and defaults are upstream's: the
+  startup check and the daemon are on.
+- **Biometric user verification reports unsupported** (0004), because it needs LocalAuthentication
+  and Secure Enclave APIs, which 10.9 lacks. It cannot be turned on.
 
 ## Conformance deviations
 

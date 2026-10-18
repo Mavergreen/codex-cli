@@ -1,0 +1,363 @@
+diff --git a/codex-rs/app-server-daemon/src/managed_install.rs b/codex-rs/app-server-daemon/src/managed_install.rs
+index ce3107f..190b624 100644
+--- a/codex-rs/app-server-daemon/src/managed_install.rs
++++ b/codex-rs/app-server-daemon/src/managed_install.rs
+@@ -105,11 +105,9 @@ pub(crate) fn is_stable_standalone_release(codex_home: &Path, codex_bin: &Path)
+     else {
+         return false;
+     };
+-    let components: Vec<_> = version.split('.').collect();
+-    components.len() == 3
+-        && components.iter().all(|component| {
+-            !component.is_empty() && component.bytes().all(|byte| byte.is_ascii_digit())
+-        })
++    // Mavergreen: the package's installer names a release for its build, `<x.y.z>-mavericks.<N>`,
++    // which is as stable as the plain `x.y.z` this accepted.
++    codex_install_context::mavergreen::BuildId::parse(version).is_some()
+         && std::fs::read_to_string(standalone.join("auto-update-version"))
+             .is_ok_and(|selected| selected == release_name)
+         && std::fs::canonicalize(codex_bin).is_ok_and(|bin| bin.starts_with(&release))
+diff --git a/codex-rs/app-server-daemon/src/managed_install_path_tests.rs b/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
+index b227c7e..a79d7a9 100644
+--- a/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
++++ b/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
+@@ -111,6 +111,36 @@ fn updater_only_runs_for_stable_installer_owned_releases() {
+     ));
+ }
+ 
++// Mavergreen: the package's installer names a release for its build, `<x.y.z>-mavericks.<N>`.
++#[cfg(unix)]
++#[test]
++fn mavergreen_build_releases_are_stable() {
++    let home = tempfile::TempDir::new().expect("home");
++    let root = home.path().join("packages/app-server-daemon");
++    let current = root.join("current");
++    let marker = root.join("auto-update-version");
++    for (name, stable) in [
++        ("0.161.0-mavericks.2-x86_64-apple-darwin", true),
++        ("0.161.0-x86_64-apple-darwin", true),
++        ("0.161.0-mavericks.0-x86_64-apple-darwin", false),
++        ("0.161.0-mavericks.x-x86_64-apple-darwin", false),
++        ("0.161.0-mavericks-x86_64-apple-darwin", false),
++    ] {
++        let release = root.join("releases").join(name);
++        let managed = release.join("bin/codex");
++        std::fs::create_dir_all(managed.parent().expect("bin parent")).expect("release");
++        std::fs::write(&managed, b"build").expect("managed bin");
++        let _ = std::fs::remove_file(&current);
++        std::os::unix::fs::symlink(&release, &current).expect("current release");
++        std::fs::write(&marker, name).expect("latest selection");
++        assert_eq!(
++            super::is_stable_standalone_release(home.path(), &managed),
++            stable,
++            "{name}"
++        );
++    }
++}
++
+ #[cfg(unix)]
+ #[tokio::test]
+ async fn older_managed_binary_does_not_claim_updater_support() {
+diff --git a/codex-rs/app-server-daemon/src/prepare_install.rs b/codex-rs/app-server-daemon/src/prepare_install.rs
+index ecf2501..92587cf 100644
+--- a/codex-rs/app-server-daemon/src/prepare_install.rs
++++ b/codex-rs/app-server-daemon/src/prepare_install.rs
+@@ -9,6 +9,7 @@ use anyhow::Result;
+ use anyhow::anyhow;
+ use codex_install_context::CodexPackageManifest;
+ use codex_install_context::InstallContext;
++use codex_install_context::mavergreen::BuildId;
+ 
+ use crate::Daemon;
+ use crate::install_lock::acquire_install_lock;
+@@ -245,8 +246,19 @@ async fn prepare_from_package(
+         !stable || version == binary_version,
+         "the CLI package version does not match its executable"
+     );
++    // Mavergreen: named for the package's build, as the package's installer names its releases, so the
++    // daemon's first scheduled update finds the build it runs already installed.
++    let release_id = manifest
++        .mavergreen_build
++        .clone()
++        .filter(|build| {
++            BuildId::parse(build).is_some_and(|id| {
++                id.build >= 1 && BuildId { build: 0, ..id }.to_string() == version
++            })
++        })
++        .unwrap_or_else(|| version.clone());
+     let name = if stable && mode == InstallMode::Missing {
+-        format!("{version}-{target}")
++        format!("{release_id}-{target}")
+     } else {
+         format!("local-{digest}-{target}")
+     };
+diff --git a/codex-rs/app-server-daemon/src/prepare_install_tests.rs b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
+index 810a45b..26d4088 100644
+--- a/codex-rs/app-server-daemon/src/prepare_install_tests.rs
++++ b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
+@@ -180,6 +180,47 @@ async fn legacy_selection_is_not_migrated_or_refreshed() {
+     assert!(!home.join("packages/app-server-daemon").exists());
+ }
+ 
++// Mavergreen: the daemon's first release is named for the package's build, as the package's installer
++// names the releases it installs, so the daemon's updater keeps running after its first update.
++#[tokio::test]
++async fn a_mavergreen_package_seeds_a_release_named_for_its_build() {
++    let temp = tempfile::TempDir::new().expect("temp");
++    let home = temp.path().join("home");
++    let source = temp
++        .path()
++        .join("standalone/releases/0.152.0-mavericks.3-target");
++    let bin = package(&source, "0.152.0");
++    let mut manifest: serde_json::Value =
++        serde_json::from_slice(&std::fs::read(source.join("codex-package.json")).unwrap()).unwrap();
++    manifest["mavergreenBuild"] = "0.152.0-mavericks.3".into();
++    std::fs::write(source.join("codex-package.json"), manifest.to_string()).unwrap();
++    prepare_from_package(
++        &daemon(&home),
++        &DaemonSettings::default(),
++        InstallMode::Missing,
++        Some(&source),
++        &bin,
++        |_| Ok(true),
++    )
++    .await
++    .expect("seed");
++
++    let root = home.join("packages/app-server-daemon");
++    let name = format!("0.152.0-mavericks.3-{}", super::platform_target().unwrap());
++    assert_eq!(
++        root.join("current").canonicalize().unwrap(),
++        root.join("releases").join(&name).canonicalize().unwrap()
++    );
++    assert_eq!(
++        std::fs::read_to_string(root.join("auto-update-version")).unwrap(),
++        name
++    );
++    assert!(crate::managed_install::is_stable_standalone_release(
++        &home,
++        &crate::managed_install::managed_codex_bin(&home)
++    ));
++}
++
+ #[tokio::test]
+ async fn standalone_seed_preserves_explicit_pin_or_latest_channel() {
+     for follows_latest in [false, true] {
+diff --git a/codex-rs/app-server-daemon/src/update_loop.rs b/codex-rs/app-server-daemon/src/update_loop.rs
+index 499acd1..66e67b5 100644
+--- a/codex-rs/app-server-daemon/src/update_loop.rs
++++ b/codex-rs/app-server-daemon/src/update_loop.rs
+@@ -1,6 +1,7 @@
+ //! Owns scheduled and manual installs, daemon restarts, and updater replacement.
+ 
+ use std::path::Path;
++use std::path::PathBuf;
+ #[cfg(unix)]
+ use std::process::Command as StdCommand;
+ use std::process::Stdio;
+@@ -8,9 +9,8 @@ use std::time::Duration;
+ 
+ use anyhow::Context;
+ use anyhow::Result;
+-use codex_http_client::ClientRouteClass;
+ use codex_http_client::HttpClientFactory;
+-use codex_http_client::RouteAwareClientPool;
++use codex_install_context::mavergreen::INSTALLER_PATH;
+ use futures::FutureExt;
+ #[cfg(unix)]
+ use std::os::unix::process::CommandExt;
+@@ -43,7 +43,8 @@ mod migration;
+ 
+ pub(crate) async fn request_manual_update(
+     daemon: &Daemon,
+-    http_client_factory: HttpClientFactory,
++    // Unused, but kept so the diff against upstream stays small.
++    _http_client_factory: HttpClientFactory,
+ ) -> Result<crate::UpdateOutput> {
+     if daemon
+         .pid_file
+@@ -51,32 +52,23 @@ pub(crate) async fn request_manual_update(
+         .is_some_and(|name| name == crate::LEGACY_PID_FILE_NAME)
+         && manual_update::supported(daemon)?
+     {
+-        let http = RouteAwareClientPool::new_without_request_logging(
+-            http_client_factory,
+-            ClientRouteClass::Other,
+-        );
+-        return migration::run(&http, daemon).await;
++        return migration::run(&local_installer(), daemon).await;
+     }
+     manual_update::request(daemon).await
+ }
+ 
+ const INITIAL_UPDATE_DELAY: Duration = Duration::from_secs(5 * 60);
+ const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
+-#[cfg(unix)]
+-const INSTALL_URL: &str = "https://chatgpt.com/codex/install.sh";
+-#[cfg(windows)]
+-const INSTALL_URL: &str = "https://chatgpt.com/codex/install.ps1";
++/// Mavergreen: the package's installer exits 3 when the newest build needs a newer codex-cli package.
++const MAVERGREEN_NEEDS_NEWER_PACKAGE_EXIT: i32 = 3;
+ 
+ pub(crate) async fn run(
+-    http_client_factory: HttpClientFactory,
++    // Unused, but kept so the diff against upstream stays small.
++    _http_client_factory: HttpClientFactory,
+     restore_release: Option<String>,
+ ) -> Result<()> {
+-    let http = RouteAwareClientPool::new_without_request_logging(
+-        http_client_factory,
+-        ClientRouteClass::Other,
+-    );
+     run_with_http(
+-        &http,
++        &local_installer(),
+         &Daemon::from_environment()?,
+         &current_updater_identity().await?,
+         restore_release,
+@@ -229,6 +221,7 @@ async fn run_with_http(
+                     }
+                     Ok((UpdateLoopControl::Continue, None)) => {}
+                     Err(err) => {
++                        eprintln!("warning: scheduled update failed: {err:#}");
+                         let _ = crate::diagnostics::result::<()>("scheduled_update", started, Err(err));
+                     }
+                     Ok((UpdateLoopControl::Stop, _)) => return Ok(()),
+@@ -646,6 +639,11 @@ async fn run_installer_script(
+ 
+     if status.success() {
+         Ok(UpdateLoopControl::Continue)
++    } else if status.code() == Some(MAVERGREEN_NEEDS_NEWER_PACKAGE_EXIT) {
++        // Mavergreen: the installer's stderr is not kept, so say here why it installed nothing.
++        anyhow::bail!(
++            "the newest Codex build needs a newer codex-cli package, so the package's installer installed nothing (exit 3); the package's updater offers the newer package"
++        )
+     } else {
+         anyhow::bail!("standalone Codex updater exited with status {status}")
+     }
+@@ -673,7 +671,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
+ }
+ 
+ async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
+-    match http.get(INSTALL_URL).await? {
++    match http.get(INSTALLER_PATH).await? {
+         InstallerResponse::Success(body) => Ok(body),
+         InstallerResponse::Unsuccessful { status } => {
+             anyhow::bail!("standalone Codex updater request failed with status {status}")
+@@ -698,22 +696,29 @@ trait InstallerHttp: Send + Sync {
+     ) -> impl std::future::Future<Output = Result<InstallerResponse>> + Send + 'a;
+ }
+ 
+-impl InstallerHttp for RouteAwareClientPool {
+-    async fn get(&self, url: &str) -> Result<InstallerResponse> {
+-        let response = RouteAwareClientPool::get(self, url)
+-            .send()
+-            .await
+-            .context("failed to fetch standalone Codex updater")?;
+-        if !response.status().is_success() {
+-            return Ok(InstallerResponse::Unsuccessful {
+-                status: response.status().as_u16(),
+-            });
+-        }
+-        let body = response
+-            .bytes()
+-            .await
+-            .context("failed to read standalone Codex updater")?
+-            .to_vec();
++/// Reads the installer script the package put on disk, instead of downloading one.
++///
++/// The packaged installer updates from the Mavergreen channel and refuses anything unsigned, so
++/// the daemon never fetches or runs a script from the network. The URL the loop passes is the
++/// script's path and is not interpreted.
++struct LocalInstaller {
++    path: PathBuf,
++}
++
++fn local_installer() -> LocalInstaller {
++    LocalInstaller {
++        path: PathBuf::from(INSTALLER_PATH),
++    }
++}
++
++impl InstallerHttp for LocalInstaller {
++    async fn get(&self, _url: &str) -> Result<InstallerResponse> {
++        let body = std::fs::read(&self.path).with_context(|| {
++            format!(
++                "failed to read the package installer at {}",
++                self.path.display()
++            )
++        })?;
+         Ok(InstallerResponse::Success(body))
+     }
+ }
+diff --git a/codex-rs/app-server-daemon/src/update_loop_tests.rs b/codex-rs/app-server-daemon/src/update_loop_tests.rs
+index 598222a..e93f653 100644
+--- a/codex-rs/app-server-daemon/src/update_loop_tests.rs
++++ b/codex-rs/app-server-daemon/src/update_loop_tests.rs
+@@ -6,9 +6,10 @@ use pretty_assertions::assert_eq;
+ #[cfg(unix)]
+ use tempfile::TempDir;
+ 
+-use super::INSTALL_URL;
++use super::INSTALLER_PATH as INSTALL_URL;
+ use super::InstallerHttp;
+ use super::InstallerResponse;
++use super::LocalInstaller;
+ use super::fetch_installer_script;
+ #[cfg(unix)]
+ use super::manual_update::run as manual_update_once;
+@@ -37,6 +38,54 @@ async fn installer_fetch_uses_exact_url_and_preserves_bytes() {
+     assert_eq!(http.requested_urls(), vec![INSTALL_URL.to_string()]);
+ }
+ 
++#[tokio::test]
++async fn local_installer_reads_the_package_installer() {
++    let dir = tempfile::tempdir().unwrap();
++    let path = dir.path().join("install.sh");
++    let script = b"# CODEX_INSTALL_IF_LATEST\n".to_vec();
++    std::fs::write(&path, &script).unwrap();
++    let installer = LocalInstaller { path: path.clone() };
++
++    assert_eq!(
++        installer.get("ignored").await.unwrap(),
++        InstallerResponse::Success(script)
++    );
++
++    let missing = dir.path().join("missing.sh");
++    let error = LocalInstaller {
++        path: missing.clone(),
++    }
++    .get("ignored")
++    .await
++    .unwrap_err();
++    assert!(
++        error.to_string().contains(&missing.display().to_string()),
++        "{error}"
++    );
++}
++
++// Mavergreen: the installer's stderr is not kept, so its exit 3 has a message of its own.
++#[cfg(unix)]
++#[tokio::test]
++async fn an_installer_that_needs_a_newer_package_says_why() {
++    let home = TempDir::new().unwrap();
++    for (script, expected) in [
++        (&b"exit 3\n"[..], "needs a newer codex-cli package"),
++        (&b"exit 1\n"[..], "exited with status"),
++    ] {
++        let error = super::run_installer_script(
++            script,
++            super::InstallerMode::Update("0.161.0-mavericks.1-x86_64-apple-darwin"),
++            &home.path().join("packages/app-server-daemon"),
++            std::future::pending::<Option<()>>(),
++        )
++        .await
++        .err()
++        .expect("a failing installer is an error");
++        assert!(error.to_string().contains(expected), "{error}");
++    }
++}
++
+ #[tokio::test]
+ async fn installer_fetch_rejects_non_success_status() {
+     let http = FakeInstallerHttp::new(InstallerResponse::Unsuccessful { status: 503 });
