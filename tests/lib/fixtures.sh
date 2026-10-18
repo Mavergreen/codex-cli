@@ -21,8 +21,20 @@ h_channel() {
   _c_asset="codex-package-x86_64-apple-darwin-$_c_id.tar.gz"
   _c_art="$H/artifact-$_c_id"
   mkdir -p "$_c_dir" "$_c_art"
-  # --version reports OpenAI's x.y.z like the real binary; with no arguments it names the build
-  printf '#!/bin/sh\nif [ "${1-}" = --version ]; then echo "codex-cli %s"; else echo "fake codex %s"; fi\n' "${_c_id%%-*}" "$_c_id" > "$_c_art/codex"
+  # --version reports OpenAI's x.y.z like the real binary; it names the build, then echoes its arguments
+  cat > "$_c_art/codex" <<FAKE
+#!/bin/sh
+if [ "\${1-}" = --version ]; then
+  # a test may hold the first --version (made under the installer's lock) at a gate file
+  if [ -n "\${CODEX_TEST_GATE-}" ] && [ -e "\$CODEX_TEST_GATE" ]; then
+    : > "\$CODEX_TEST_GATE.in"
+    while [ -e "\$CODEX_TEST_GATE" ]; do sleep 0.2; done
+  fi
+  echo "codex-cli ${_c_id%%-*}"
+else
+  echo "fake codex $_c_id\${*:+ \$*}"
+fi
+FAKE
   printf '#!/bin/sh\necho fake host\n' > "$_c_art/codex-code-mode-host"
   chmod 0755 "$_c_art/codex" "$_c_art/codex-code-mode-host"
   printf 'license\n' > "$_c_art/LICENSE"

@@ -200,17 +200,18 @@ at the end says what each did and why it went.
   `kSSLHandshake`. native-tls asks there before fetching the peer trust, so security-framework
   refused with `-909` and every native-tls request failed. AquaTransport fixed that. With that
   fix, probe clients' native-tls connections work; Codex's own is still to be measured on 10.9.
-  Codex's HTTPS clients then need neither the
-  patch nor its roughly 450 ms of root loading on first use. The dependence on 10.9's keychain
-  roots, and so on AquaTransport's ModernRootCertificates, did not go with it: WebSockets
-  (`codex-websocket-client` always uses rustls) and the OTLP gRPC exporter still verify through
-  rustls, loading the keychain's roots with `rustls-native-certs` when first used. The six ignored
-  tests run again: one passes (`request_failures_classify_real_untrusted_certificate_handshakes`),
-  and five fail on 10.9 with `-9806`, because AquaTransport reports every handshake failure as
-  errSSLClosedAbort where stock Secure Transport gives -9836. Those five test the native-tls to
-  rustls fallback, which exists for modern macOS, whose Secure Transport lacks TLS 1.3;
-  AquaTransport speaks TLS 1.0 to 1.3, so on 10.9 nothing needs the fallback and the failures are
-  the tests' alone. They pass once AquaTransport returns stock's codes.
+  The launcher now requires an AquaTransport release that has the TLS fixes Codex's native-tls
+  needs (`components/aquatransport/min-version`). Codex's HTTPS clients then need neither the patch nor
+  its roughly 450 ms of root loading on first use. The dependence on 10.9's keychain roots, and so on
+  AquaTransport's ModernRootCertificates, did not go with it: WebSockets (`codex-websocket-client`
+  always uses rustls) and the OTLP gRPC exporter still verify through rustls, loading the
+  keychain's roots with `rustls-native-certs` when first used. The six ignored tests run again: one
+  passes (`request_failures_classify_real_untrusted_certificate_handshakes`), and five fail on 10.9
+  with `-9806`, because AquaTransport reports every handshake failure as errSSLClosedAbort where
+  stock Secure Transport gives -9836. Those five test the native-tls to rustls fallback, which
+  exists for modern macOS, whose Secure Transport lacks TLS 1.3; AquaTransport speaks TLS 1.0 to
+  1.3, so on 10.9 nothing needs the fallback and the failures are the tests' alone. They pass once
+  AquaTransport returns stock's codes.
 
 ### 0002-update-check-off-by-default.patch
 

@@ -1,0 +1,40 @@
+#!/bin/sh
+# platform: macOS-only -- runs Codex on Mac OS X 10.9
+
+_cx_s="$0"
+_cx_n=0
+while [ -L "$_cx_s" ]; do
+  _cx_n=$((_cx_n+1))
+  [ "$_cx_n" -le 40 ] || { echo "codex: too many symlinks: $0" >&2; exit 1; }
+  _cx_t="$(readlink "$_cx_s")"
+  case "$_cx_t" in
+    /*) _cx_s="$_cx_t" ;;
+    *) _cx_s="$(dirname "$_cx_s")/$_cx_t" ;;
+  esac
+done
+_cx_x="$(CDPATH= cd -P "$(dirname "$_cx_s")" && pwd -P)/../libexec/codex-cli" || exit 1
+for _cx_m in lib link; do
+  . "$_cx_x/$_cx_m.sh" || exit 1
+done
+
+cx_init "$0"
+
+[ -f "$CX_TREE/share/codex-cli/requires" ] || cx_die "missing $CX_TREE/share/codex-cli/requires"
+_cx_count=0
+while read -r _cx_short _cx_url || [ -n "$_cx_short" ]; do
+  [ -n "$_cx_short" ] || continue
+  _cx_count=$((_cx_count+1))
+  [ -f "$CX_MG/$_cx_short/mavergreen.plist" ] || cx_die "$_cx_short is not installed; get it from $_cx_url"
+done < "$CX_TREE/share/codex-cli/requires"
+[ "$_cx_count" -gt 0 ] || cx_die "$CX_TREE/share/codex-cli/requires lists nothing"
+
+cx_require_aquatransport
+
+cx_claim_link || :
+
+if ! P="$(cx_runnable)"; then
+  cx_seed || exit 1
+  P="$(cx_runnable)" || cx_die "the installed Codex is not a Mavergreen build ($CX_ROOT/current)"
+fi
+
+exec "$P" "$@"

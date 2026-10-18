@@ -28,7 +28,8 @@ and `patches/README.md` says what each patch did and why it went.
 
 Wowfunhappy's 0001 (every HTTPS client on rustls) was removed once AquaTransport, which is also
 Wowfunhappy's, fixed what the patch worked around (see `patches/README.md`), so the patch has
-nothing left to do for Codex's HTTPS clients. The patch's history, with the
+nothing left to do for Codex's HTTPS clients. The launcher requires an AquaTransport release that
+has the TLS fixes Codex's native-tls needs. The patch's history, with the
 rewrite done here, stays in this repo under Wowfunhappy's authorship.
 
 ## Received files

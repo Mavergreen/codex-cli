@@ -1,0 +1,2 @@
+rg https://github.com/Mavergreen/rg/releases/latest
+ed25519 https://github.com/Mavergreen/ed25519/releases/latest
