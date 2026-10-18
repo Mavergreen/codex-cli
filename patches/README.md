@@ -3,9 +3,11 @@
 `build/fetch-codex.sh` applies every `*.patch` here, in lexical order, to the Codex commit in
 `build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
-incompatibility measured on Mac OS X 10.9. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has
-since been rewritten here; `PROVENANCE.md` says where each came from. 0008 to 0010 are this
-product's own.
+incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
+rather than OpenAI's. Patches 0001 to 0007 are Wowfunhappy's, and 0001 has since been rewritten
+here; `PROVENANCE.md` says where each came from. 0008, 0009 and 0011 are this product's own. 0010
+is removed, and its number is not reused: "Removed patches" at the end says what it did and why it
+went.
 
 ## 0001-force-rustls.patch
 
@@ -67,9 +69,7 @@ product's own.
   unable to run, so startup would offer an update path that cannot work.
 - **Invariant kept:** only the default changes. `check_for_update_on_startup = true` still turns
   the check on.
-- **When to reconsider:** for the installed package, 0010 already keeps the check from looking
-  at upstream's releases. The default still matters for a `codex` run from anywhere else, such as
-  a build directory, where the check would offer upstream's releases.
+- **When to reconsider:** when the check no longer offers upstream's releases.
 
 ## 0003-daemon-auto-start-off-by-default.patch
 
@@ -181,24 +181,33 @@ product's own.
   Started from its own directory, `codex` finds the host where it always did.
 - **When to reconsider:** when upstream resolves the executable before taking its directory.
 
-## 0010-update-through-the-package-updater.patch
+## 0011-mavergreen-build-identity.patch
 
-- **What:** `codex-rs/install-context/src/lib.rs` reports a `codex` under `/usr/local/mavergreen`
-  as installed by Mavergreen, checking for it before the `/usr/local` prefix it reads as
-  Homebrew. For that install, `codex-rs/tui/src/update_action.rs` updates by opening
-  `/Library/Application Support/Mavergreen/codex-cli-updater.app` with `--user`, which runs
-  Sparkle's interactive check: an update dialog, or word that Codex is up to date.
-  `codex-rs/cli/src/main.rs` opens it for `codex update` and says to restart Codex if it installs
-  an update. `codex-rs/tui/src/updates.rs` skips Codex's own check for newer versions there, and
-  `codex doctor` (`cli/src/doctor.rs`, `doctor/runtime.rs`, `doctor/updates.rs`) names the method
-  and the updater. `mavergreen_is_detected_before_brew_on_macos` and
-  `mavergreen_update_opens_the_packages_updater` test it.
-- **Why:** upstream reads any `codex` under `/usr/local` as Homebrew's, so on 10.9 `codex update`
-  ran `brew upgrade --cask codex`. That failed with "No such file or directory" where Homebrew is
-  absent, measured on 2026-10-17, and where it is present it would install upstream's build,
-  which 10.9 cannot run. The package's updater is the update path that works here, and it already
-  checks for this package's releases daily.
-- **Invariant kept:** every other install method updates as upstream does. Codex's startup check
-  stays off by default (0002).
-- **When to reconsider:** when upstream stops reading every `/usr/local` install as Homebrew's,
-  or when the package's updater moves.
+- **What:** `codex-rs/install-context/src/mavergreen.rs`, a new module, holds what a build knows
+  about where its updates come from: the builds channel and its `latest.json`, the package's
+  installer (`/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh`) and the package's
+  updater. Its `BuildId` reads a build identity, `<x.y.z>-mavericks.<N>` with N at least 1 and no
+  leading zero, as the channel's identity rule has it, or a plain `x.y.z` as build 0, and orders
+  builds by Codex version and then by build number.
+  `CodexPackageManifest` in `install-context/src/lib.rs` reads `codex-package.json`'s
+  `mavergreenBuild`, and `current_build_id` returns it for the running package. Tests in
+  `mavergreen.rs` cover parsing, ordering and the manifest.
+- **Why:** a rebuild of the same Codex version, for a patch or a toolchain change, must reach users
+  as an update, while `codex --version` keeps printing OpenAI's version. Upstream's update check
+  compares versions with `parse_version`, which reads only `x.y.z`, so it cannot tell
+  `0.161.0-mavericks.2` from `0.161.0-mavericks.1`. The build's identity travels in its package
+  manifest instead.
+- **Invariant kept:** `codex --version` and the workspace version are OpenAI's. A manifest without
+  `mavergreenBuild` reads as before, and its build is the plain Codex version.
+- **When to reconsider:** when the channel, the package's installer or its updater moves. Nothing
+  upstream would replace the build identity while Codex reaches 10.9 as this product's own builds.
+
+## Removed patches
+
+### 0010-update-through-the-package-updater.patch
+
+- **What it did:** reported a `codex` under `/usr/local/mavergreen` as a Mavergreen install, and
+  made `codex update` open the package's Sparkle updater instead of running `brew upgrade --cask
+  codex`.
+- **Why it was removed:** Codex updates are to come from this product's own builds, which 0011
+  identifies, and not through the package's Sparkle updater.

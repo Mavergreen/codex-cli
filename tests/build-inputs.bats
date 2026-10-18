@@ -54,12 +54,7 @@ RELEASE=yes" ]
   expected=$(printf '%s\n' \
     codex-rs/Cargo.lock \
     codex-rs/install-context/src/lib.rs \
-    codex-rs/cli/src/doctor.rs \
-    codex-rs/cli/src/doctor/runtime.rs \
-    codex-rs/cli/src/doctor/updates.rs \
-    codex-rs/cli/src/main.rs \
-    codex-rs/tui/src/update_action.rs \
-    codex-rs/tui/src/updates.rs \
+    codex-rs/install-context/src/mavergreen.rs \
     codex-rs/http-client/src/client_builder.rs \
     codex-rs/http-client/src/custom_ca.rs \
     codex-rs/http-client/src/lib.rs \
@@ -82,9 +77,9 @@ RELEASE=yes" ]
     codex-rs/sandboxing/src/seatbelt.rs \
     codex-rs/sandboxing/src/seatbelt_daemon.rs \
     codex-rs/utils/pty/src/posix_child.rs | LC_ALL=C sort)
-  changed=$(git -C "$source_dir" diff --name-only | LC_ALL=C sort)
+  changed=$({ git -C "$source_dir" diff --name-only; git -C "$source_dir" ls-files --others --exclude-standard; } | LC_ALL=C sort)
   [ "$changed" = "$expected" ] || { printf 'expected changes:\n%s\nchanged:\n%s\n' "$expected" "$changed"; return 1; }
-  others=$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ' || true)
+  others=$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M \|^?? codex-rs/install-context/src/mavergreen.rs$' || true)
   [ -z "$others" ] || { printf 'status beyond the modified files:\n%s\n' "$others"; return 1; }
 }
 
@@ -203,7 +198,7 @@ PATCH
   printf 'stray\n' > "$source_dir/codex-rs/target/ignored-stray"
   run sh "$MAVERGREEN_ROOT/build/fetch-codex.sh"
   [ "$status" -eq 0 ]
-  [ -z "$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M ')" ]
+  [ -z "$(git -C "$source_dir" status --porcelain --untracked-files=all | grep -v '^ M \|^?? codex-rs/install-context/src/mavergreen.rs$')" ]
   [ -z "$(git -C "$source_dir" diff --name-only codex-rs/Cargo.toml)" ]
   [ ! -e "$source_dir/codex-rs/target/ignored-stray" ]
 }

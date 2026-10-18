@@ -128,8 +128,7 @@ a Codex bump updates it here along with `build/codex-revision`.
   The shared background daemon (0003) is off because it runs from a packaged install that a cargo
   build lacks, and its updater installs upstream builds the host may not run; the TUI hosts the
   app server in-process instead. Biometric user verification (0004) reports unsupported because it
-  needs LocalAuthentication and Secure Enclave APIs, which 10.9 lacks. Updates come from this
-  product's own Sparkle updater, and `codex update` opens it (0010).
+  needs LocalAuthentication and Secure Enclave APIs, which 10.9 lacks.
 
 ## Conformance deviations
 

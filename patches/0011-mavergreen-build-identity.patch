@@ -1,0 +1,194 @@
+diff --git a/codex-rs/install-context/src/lib.rs b/codex-rs/install-context/src/lib.rs
+index 91fd93f..32f1dc6 100644
+--- a/codex-rs/install-context/src/lib.rs
++++ b/codex-rs/install-context/src/lib.rs
+@@ -7,6 +7,9 @@ use codex_utils_absolute_path::AbsolutePathBuf;
+ use semver::Version;
+ use serde::Deserialize;
+ 
++// Mavergreen: what this build knows about the channel it updates from.
++pub mod mavergreen;
++
+ const BIN_DIRNAME: &str = "bin";
+ const CODE_MODE_HOST_EXECUTABLE_NAME: &str = if cfg!(windows) {
+     "codex-code-mode-host.exe"
+@@ -43,6 +46,9 @@ pub struct CodexPackageLayout {
+ #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+ pub struct CodexPackageManifest {
+     pub version: Version,
++    // Mavergreen: the build identity of the package, `<version>-mavericks.<N>`.
++    #[serde(default, rename = "mavergreenBuild")]
++    pub mavergreen_build: Option<String>,
+ }
+ 
+ #[derive(Clone, Debug, Eq, PartialEq)]
+@@ -614,6 +620,7 @@ mod tests {
+             context.package_manifest(),
+             Some(CodexPackageManifest {
+                 version: Version::new(1, 2, 3),
++                mavergreen_build: None,
+             })
+         );
+         assert_eq!(
+diff --git a/codex-rs/install-context/src/mavergreen.rs b/codex-rs/install-context/src/mavergreen.rs
+new file mode 100644
+index 0000000..16e1447
+--- /dev/null
++++ b/codex-rs/install-context/src/mavergreen.rs
+@@ -0,0 +1,156 @@
++//! Mavergreen: the identity of this build and where newer ones come from.
++//!
++//! A Mavergreen build is named `<x.y.z>-mavericks.<N>`: the Codex version it was built from and the
++//! number of the rebuild of that version. A plain `x.y.z` is the version before any rebuild.
++
++use std::fmt;
++
++use crate::InstallContext;
++
++/// The release whose assets are the builds `codex update` installs.
++pub const BUILDS_CHANNEL_URL: &str =
++    "https://github.com/Mavergreen/codex-cli/releases/download/codex-builds";
++/// Names the newest build.
++pub const LATEST_URL: &str =
++    "https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/latest.json";
++/// The package's installer, which fetches and installs a build.
++pub const INSTALLER_PATH: &str = "/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh";
++/// The Sparkle updater for the package itself.
++pub const UPDATER_APP: &str = "/Library/Application Support/Mavergreen/codex-cli-updater.app";
++
++/// A Codex version and its Mavergreen rebuild number; the field order is the ordering.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
++pub struct BuildId {
++    pub major: u64,
++    pub minor: u64,
++    pub patch: u64,
++    pub build: u64,
++}
++
++impl BuildId {
++    /// Parses `x.y.z-mavericks.N` (N at least 1, with no leading zero) or a plain `x.y.z`, which is
++    /// build 0.
++    pub fn parse(s: &str) -> Option<BuildId> {
++        let (version, build) = match s.split_once("-mavericks.") {
++            Some((version, build)) => (version, Some(build)),
++            None => (s, None),
++        };
++        let mut parts = version.split('.');
++        let major = number(parts.next()?)?;
++        let minor = number(parts.next()?)?;
++        let patch = number(parts.next()?)?;
++        if parts.next().is_some() {
++            return None;
++        }
++        let build = match build {
++            Some(build) => number(build).filter(|n| *n >= 1 && !build.starts_with('0'))?,
++            None => 0,
++        };
++        Some(BuildId {
++            major,
++            minor,
++            patch,
++            build,
++        })
++    }
++}
++
++fn number(s: &str) -> Option<u64> {
++    if s.is_empty() || !s.bytes().all(|byte| byte.is_ascii_digit()) {
++        return None;
++    }
++    s.parse().ok()
++}
++
++impl fmt::Display for BuildId {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
++        if self.build != 0 {
++            write!(f, "-mavericks.{}", self.build)?;
++        }
++        Ok(())
++    }
++}
++
++/// The `mavergreenBuild` of the running package's manifest, if it has one.
++pub fn current_build_id(context: &InstallContext) -> Option<String> {
++    context.package_manifest()?.mavergreen_build
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use pretty_assertions::assert_eq;
++    use std::fs;
++
++    #[test]
++    fn parses_build_ids_and_plain_versions() {
++        assert_eq!(
++            BuildId::parse("0.163.0-mavericks.2"),
++            Some(BuildId {
++                major: 0,
++                minor: 163,
++                patch: 0,
++                build: 2
++            })
++        );
++        assert_eq!(
++            BuildId::parse("0.163.0"),
++            Some(BuildId {
++                major: 0,
++                minor: 163,
++                patch: 0,
++                build: 0
++            })
++        );
++        for bad in [
++            "",
++            "0.163",
++            "0.163.0-mavericks.0",
++            "0.163.0-mavericks.01",
++            "0.163.0-alpha.1",
++            "0.163.0-mavericks.",
++            "v0.163.0",
++            "0.163.0-mavericks.2 ",
++            "0.163.0.1",
++            "0.+163.0",
++        ] {
++            assert_eq!(BuildId::parse(bad), None, "{bad}");
++        }
++    }
++
++    #[test]
++    fn orders_rebuilds_after_their_version_and_before_the_next() {
++        let id = |s| BuildId::parse(s).unwrap();
++        assert!(id("0.163.0-mavericks.2") > id("0.163.0-mavericks.1"));
++        assert!(id("0.163.0-mavericks.1") > id("0.163.0"));
++        assert!(id("0.164.0-mavericks.1") > id("0.163.0-mavericks.9"));
++        assert_eq!(id("0.163.0-mavericks.2").to_string(), "0.163.0-mavericks.2");
++        assert_eq!(id("0.163.0").to_string(), "0.163.0");
++    }
++
++    #[test]
++    fn reads_the_build_id_from_the_package_manifest() -> std::io::Result<()> {
++        let context_for = |manifest: &str| -> std::io::Result<(tempfile::TempDir, InstallContext)> {
++            let package = tempfile::tempdir()?;
++            let bin = package.path().join("bin");
++            fs::create_dir_all(&bin)?;
++            fs::write(package.path().join("codex-package.json"), manifest)?;
++            let exe = bin.join("codex");
++            fs::write(&exe, "")?;
++            let context = InstallContext::from_exe(true, Some(&exe), None);
++            Ok((package, context))
++        };
++
++        let (_package, context) =
++            context_for(r#"{"version":"0.161.0","mavergreenBuild":"0.161.0-mavericks.3"}"#)?;
++        assert_eq!(
++            current_build_id(&context),
++            Some("0.161.0-mavericks.3".to_string())
++        );
++
++        let (_package, context) = context_for(r#"{"version":"0.161.0"}"#)?;
++        assert_eq!(current_build_id(&context), None);
++        Ok(())
++    }
++}
