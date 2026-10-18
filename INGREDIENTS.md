@@ -40,13 +40,14 @@ macOS. Both modes use shipyard's pinned 10.9 SDK, which is also the SDK the clan
 Cargo's locked dependency graph, and set `CARGO_NET_GIT_FETCH_WITH_CLI=true` for nested Git sources.
 Cargo home, target output, extracted toolchains, and transfer staging stay under the local build root.
 
-`codex-cli` and `codex-code-mode-host` are built and transferred together: Codex finds the host as a
-sibling of its own canonicalized executable. The host links V8, so the build fetches OpenAI's prebuilt
+`codex-cli` and `codex-code-mode-host` are built and transferred together: Codex finds the host in
+its package's `bin/`. The host links V8, so the build fetches OpenAI's prebuilt
 `rusty_v8` archive with `build/fetch-rusty-v8.sh` (the one declared non-Mavergreen input) and records
-`rusty_v8_version` in the build manifest. The package does not include `codex-voice-host`, the
-native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-15,
-in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Both
-binaries link and pass the non-interactive smoke checks: see `docs/compatibility-matrix.md`.
+`rusty_v8_version` in the build manifest. No build includes `codex-voice-host`, the
+native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-17,
+in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Testing the
+current self-updating layout end to end on 10.9 waits for the AquaTransport release with the TLS fixes
+Codex needs: see `docs/compatibility-matrix.md`.
 
 ## Declared state
 
@@ -241,6 +242,8 @@ a Codex bump updates it here along with `build/codex-revision`.
 - **No `shell_zsh_fork`.** Upstream's macOS package carries OpenAI's prebuilt zsh fork in
   `codex-resources/` for this feature, which is under development and off by default. It is
   OpenAI's binary, so no build carries it, and the feature is unsupported.
+- **No `codex app`.** `codex app` downloads and opens OpenAI's desktop app, which is not a Codex CLI
+  build and does not run on 10.9. It is left as upstream's, unpatched, and unsupported.
 - **`codex-path/rg` is the family's `rg`.** Upstream's package carries BurntSushi's macOS `rg` in
   `codex-path/`, which Codex puts first on the agent shell's `PATH`. Here it is a script,
   `exec /usr/local/mavergreen/rg/bin/rg "$@"`, for the `rg` package the pkg requires, as pi uses
@@ -353,7 +356,21 @@ Two CI-specific points:
 
 ## Hardware validation
 
-On 2026-10-15, out of band, on ultimate-hat (Mac OS X 10.9.5): the native package and a package of
+The current self-updating layout (the launcher, the installer and the builds channel) is not yet
+tested end to end on 10.9 hardware. That waits for the AquaTransport release with the TLS fixes Codex needs;
+the checks it will run are listed as pending in `docs/compatibility-matrix.md`.
+
+An earlier patch series, which still had 0001 (every HTTPS client on rustls), was run through the
+same layout on 2026-10-17 on ultimate-hat, natively built, from a `file://` channel with a scratch
+`HOME` and `CODEX_HOME`. The first run seeded the build; a `code_mode_only` `exec` turn ran through
+the launcher; the startup notice offered the second build (from a seeded version cache, since the
+channel was not live); `codex update` installed it (through a test shim for the fixed installer
+path); `--release` stepped back; `check_for_update_on_startup = false` hid the notice; and
+`codex doctor` reported the standalone installer. The daemon did not
+start (`package link escapes its root`), which is why `codex-path/rg` became a script. Results are
+in `docs/compatibility-matrix.md`, "The self-updating Codex, end to end on 10.9".
+
+With the earlier packaging, which put both binaries in the pkg: on 2026-10-15, out of band, on ultimate-hat (Mac OS X 10.9.5): the native package and a package of
 the cross-built binaries were each installed and passed the non-interactive smokes, the
 maintainer's TUI turns, and, for the native one, login and `exec` on a clean `CODEX_HOME`. The native and cross
 builds had matching inputs, and matching architecture, deployment target and SDK, linked libraries

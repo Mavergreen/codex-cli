@@ -38,7 +38,7 @@ upstream's own lints (trailing semicolons in `bail!`, unused imports and `mut`).
 | `otool -L` shows no libcxx22, `@rpath` or build-root paths | passed for both after the pkg-config fix: libobjc, libSystem and `/usr/lib/libiconv.2.dylib`, plus OS frameworks (`codex` adds IOKit, AppKit and CoreGraphics), and no `LC_RPATH` and no `/opt/pkg` string. Build-root paths appear only as Cargo source paths in panic locations (2141 in `codex`, 828 in the host), not as load paths |
 | `otool -l` shows minos 10.9 and SDK 10.9 | passed for both: `LC_VERSION_MIN_MACOSX`, `version 10.9`, `sdk 10.9` |
 | `code_mode_only` model through a symlinked `codex` does not report "Code Mode is unavailable" | failed on 2026-10-15 before 0009: logged in with `codex login --device-auth`, `codex exec -m gpt-5.6-terra "run ls"` through a symlink in another directory warned "host executable was not found" for `codex-code-mode-host` beside the symlink, and the model could not run `ls`. From the real path it ran `ls` through the host in the read-only sandbox. Passed through the symlink with 0009 |
-| `codex update` on the installed package opens the package's updater | failed on 2026-10-17 before 0010: `Updating Codex via \`brew upgrade --cask codex\`...` then `Error: No such file or directory (os error 2)`, since upstream reads every `/usr/local` install as Homebrew's. Passed with 0010, natively built and installed from the pkg: it prints `Opening the codex-cli updater...`, and `codex-cli-updater --user` logs `user-initiated: starting interactive check`. `codex doctor` reports install method `mavergreen` and update action `codex-cli updater`. An `exec` turn from the same install ran `ls` and answered |
+| `codex update` on the installed package opens the package's updater | failed on 2026-10-17 before 0010: `Updating Codex via \`brew upgrade --cask codex\`...` then `Error: No such file or directory (os error 2)`, since upstream reads every `/usr/local` install as Homebrew's. Passed with 0010, natively built and installed from the pkg: it prints `Opening the codex-cli updater...`, and `codex-cli-updater --user` logs `user-initiated: starting interactive check`. `codex doctor` reports install method `mavergreen` and update action `codex-cli updater`. An `exec` turn from the same install ran `ls` and answered. 0010 has since been removed: Codex now runs from the user's standalone install, and `codex update` runs the package's installer (see "The self-updating Codex, end to end on 10.9") |
 | TUI starts in Terminal with a prompt, not an Objective-C exception | passed on 2026-10-15 (maintainer): the trust prompt, then the TUI; a full turn ran a command and answered. No FSEvents lines on the screen at startup or quit |
 | `FSEventsPurgeEventsForDeviceUpToEventId: f2d_purge_events_for_device_up_to_event_id_rpc() failed: 5` on stderr | seen in `codex exec` output, a few lines per run; harmless. notify 8.2.0, Codex's file watcher, calls it whenever it restarts an FSEvents stream, and Apple's header says only root may call it. 10.9 prints the failure. notify removed the call in 9.0.0-rc.2 (#795); Codex 0.161.0 pins 8.2.0, so it goes away when Codex moves to notify 9 |
 
@@ -57,9 +57,10 @@ Measured on 2026-10-14 on an arm64 Mac running macOS 27.0.1, at the same source 
 
 ## Installed native package on 10.9
 
-Measured on 2026-10-15 on ultimate-hat (Mac OS X 10.9.5). The native package
-`codex-cli-0.161.0-mavericks.1` was installed there at 16:02 EDT with `sudo installer`, on the
-maintainer's instruction.
+Measured on 2026-10-15 on ultimate-hat (Mac OS X 10.9.5), with the earlier packaging, which put both
+binaries in the pkg. The native package `codex-cli-0.161.0-mavericks.1` was installed there at
+16:02 EDT with `sudo installer`, on the maintainer's instruction. "The self-updating Codex, end to
+end on 10.9" below measures the current packaging.
 
 | Check | Result |
 |---|---|
@@ -68,6 +69,61 @@ maintainer's instruction.
 | An interactive TUI workflow with the installed `codex` (maintainer, in this repo) | passed: the model read `build/build-codex.sh` and ran it with no arguments; it printed `usage: build-codex.sh native|cross` and exited 2, as it should, and the TUI quit cleanly |
 | Login on a clean `CODEX_HOME` | passed: `codex login --device-auth`, then `codex exec "say hi"` answered "Hi!" with the default model `gpt-6-luna` |
 | `failed to refresh available models: request timed out` on the clean profile | intermittent; seen twice in the maintainer's clean-profile run. The models manager gives the request 5 s (`manager.rs:421`). Three reruns on a clean profile: once exit 1, once an error at +5 s, once clean, where the models request took 1.2 s with a 200, of which about 0.5 s was the lazy root load at the first certificate check. `exec` still answered in the maintainer's run. It was not attributed to the port |
+
+## The self-updating Codex, end to end on 10.9
+
+### Measured with an earlier patch series
+
+Measured on 2026-10-17 on ultimate-hat, natively built with a series that still had 0001 (every
+HTTPS client on rustls), and with `codex-path/rg` still a link. Three tarballs of that one build
+(`-mavericks.1`, `.2`, and `.3` with `mavergreen_min_pkg` `20261018.1`) were signed with a
+throwaway key and served from a `file://` channel (`CODEX_BUILDS_URL`), with a scratch `HOME` and
+`CODEX_HOME`. The channel itself was not live (`latest.json` answered 404).
+
+| Check | Result |
+|---|---|
+| A first run with an empty channel | passed: `codex: could not install Codex: Could not fetch the build metadata for Codex latest from file:///…/latest.json.`, exit 1 |
+| The launcher's first run seeds `-mavericks.1` into `packages/standalone` | passed: the launcher's line, then the installer's (`Resolved version: 0.161.0-mavericks.1`, `installed successfully`), then `codex-cli 0.161.0`, in 3.9 s. `current` names the release, `auto-update-version` is written, and the manifest's `mavergreenBuild` is the build |
+| `codex exec` runs a turn, with a `code_mode_only` model through the launcher | passed: `gpt-5.6-terra` ran `ls` in the read-only sandbox and answered, with no "host executable was not found" |
+| The startup notice offers `-mavericks.2` | passed from a seeded version cache, since the channel was not live: `Update available · 0.161.0 → 0.161.0-mavericks.2`, with the installer as the update command. The background refresh asked only the channel's `latest.json`, and nothing at `api.github.com/repos/openai`, `chatgpt.com/codex/install`, `releases.openai.com` or `formulae.brew.sh`. The "from" side showed `0.161.0`; the notice now shows both build identities for a rebuild |
+| `check_for_update_on_startup = false` | passed: no notice with it, the notice without it |
+| `codex update` installs `-mavericks.2` | passed through a test shim for the fixed installer path (the old-scheme pkg on that host had no installer there): `Updating Codex CLI from 0.161.0-mavericks.1 to 0.161.0-mavericks.2`, exit 0. A second run said `already installed` |
+| `install.sh --release 0.161.0-mavericks.1` steps back | passed: `current` moved back and `auto-update-version` was removed; `codex update` then moved to `.2` again |
+| `codex doctor` reports the standalone installer | passed: the standalone runtime and package path, update action `standalone installer`, the cached latest build, and the channel's 404. doctor now also prints `running build:` and `update channel:` lines |
+| `codex app-server daemon start` and a TUI with the daemon on: `Error: package link escapes its root` | failed: the daemon copies the CLI's package into its own root and refuses an entry that resolves outside it, as the absolute `codex-path/rg` link did, so the TUI failed unless run with `--no-daemon`. `codex-path/rg` is now a script that execs the `rg` package's `rg`. With such a script in a variant tarball, the daemon started, the TUI connected to it over its socket and a turn answered |
+
+### Pending
+
+These checks wait for the AquaTransport release with the TLS fixes Codex's native-tls needs. Each
+runs natively on ultimate-hat with the current series, with a `file://` builds channel, builds of
+one Codex version (`-mavericks.1`, `.2`, and a `.3` that needs a newer pkg) signed with a throwaway
+key that the test pkg ships, and a scratch `HOME` and `CODEX_HOME`.
+
+| Check | Result |
+|---|---|
+| The native release build of the current series compiles: the TUI's update check and `run_update_prompt_if_needed` are built only without debug assertions | pending |
+| The launcher's first run seeds `-mavericks.1` into `packages/standalone` | pending |
+| `codex exec` runs a turn, with a `code_mode_only` model through the launcher | pending |
+| The startup notice offers `-mavericks.2` and shows both build identities | pending |
+| `codex update` installs `-mavericks.2` | pending |
+| `codex doctor` shows `running build:` and `update channel:` | pending |
+| The app-server daemon starts with the `codex-path/rg` script, and the TUI connects to it | pending |
+| A scheduled background update moves the daemon to `-mavericks.2`, the daemon restarts into it, and the next scheduled update still runs | pending |
+| `.3`, whose `mavergreen_min_pkg` is newer than the installed pkg, makes `codex update` open the package's updater, say so and install nothing | pending |
+| The daemon's update for `.3` installs nothing and logs why | pending |
+| A first run with a pkg too old for the newest build fails and says how to get a newer pkg | pending |
+| A `code_mode_only` model finds `codex-code-mode-host` through the launcher without patch 0009 | pending |
+| A `~/.codex` copied from a modern Mac, with OpenAI's standalone and daemon releases in it: the launcher replaces `current`; what the daemon then does | pending |
+
+### First runs in CI
+
+| Check | Result |
+|---|---|
+| The first `builds.yml` publish against GitHub: the release created with `--latest=false`, the uploads, the `latest.json` replace, the re-point loop, assets fetched by id (`Accept: application/octet-stream`, following the redirect), pruning, the 10.9 job checking the family key's signature, and the key-log scan | pending |
+| A second publish: the stale-ID and same-ID refusals, and `build/build-id.sh auto` reading the published state | pending |
+| The first `release.yml` publish: its 10.9 job seeds from the real HTTPS channel (`/usr/bin/curl` reaching github.com is measured on ultimate-hat; the redirect to the asset host is not), the appcast, and the pkg becoming the repo's Latest | pending |
+| Sparkle offers a second pkg, and `sudo mavergreen uninstall codex-cli` leaves `~/.codex` alone | pending |
+| Where the `codex-builds` release sits on the Releases page after the first few pkgs; if it sits first, the channel moves to a repo of its own | pending |
 
 ## Native versus cross
 
