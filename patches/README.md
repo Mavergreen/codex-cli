@@ -118,7 +118,7 @@ at the end says what each did and why it went.
   as an update, while `codex --version` keeps printing OpenAI's version. Upstream's update check
   compares versions with `parse_version`, which reads only `x.y.z`, so it cannot tell
   `0.161.0-mavericks.2` from `0.161.0-mavericks.1`. The build's identity travels in its package
-  manifest instead.
+  manifest instead, which `packaging/build-codex-package.sh` writes.
 - **Invariant kept:** `codex --version` and the workspace version are OpenAI's. A manifest without
   `mavergreenBuild` reads as before, and its build is the plain Codex version.
 - **When to reconsider:** when the channel, the package's installer or its updater moves. Nothing

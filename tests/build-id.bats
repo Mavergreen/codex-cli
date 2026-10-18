@@ -9,6 +9,8 @@ setup() {
   product="$BATS_TEST_TMPDIR/product"
   mkdir -p "$product"
   cp -R "$PRODUCT_ROOT/build" "$PRODUCT_ROOT/components" "$PRODUCT_ROOT/patches" "$product/"
+  mkdir -p "$product/packaging"
+  cp "$PRODUCT_ROOT/packaging/build-codex-package.sh" "$product/packaging/"
   version=$(tr -d '[:space:]' < "$product/components/codex/version")
   export CODEX_BUILDS_ASSET_LIST="$BATS_TEST_TMPDIR/assets"
   export CODEX_BUILDS_JSON_DIR="$BATS_TEST_TMPDIR/json"
@@ -18,7 +20,7 @@ setup() {
 
 state_of() {
   (cd "$product" && cat components/codex/version build/codex-revision components/rust/version \
-    components/clang-22/version patches/*.patch | shasum -a 256 | awk '{print $1}')
+    components/clang-22/version patches/*.patch packaging/build-codex-package.sh | shasum -a 256 | awk '{print $1}')
 }
 
 # ship CODEX_VERSION N STATE: the channel gains that build, as the asset list and its JSON
@@ -97,9 +99,9 @@ STATE=$(state_of)
 PUBLISH=yes" ]
 }
 
-@test "STATE is the digest of the four pins and then every patch, in C glob order" {
+@test "STATE is the digest of the four pins, every patch in C glob order, then the tarball's layout script" {
   expected=$(cd "$PRODUCT_ROOT" && cat components/codex/version build/codex-revision components/rust/version \
-    components/clang-22/version patches/*.patch | shasum -a 256 | awk '{print $1}')
+    components/clang-22/version patches/*.patch packaging/build-codex-package.sh | shasum -a 256 | awk '{print $1}')
   run_id auto
   [ "$status" -eq 0 ]
   [ "$(printf '%s\n' "$output" | sed -n 's/^STATE=//p')" = "$expected" ]
@@ -110,6 +112,16 @@ PUBLISH=yes" ]
   run_id auto
   [ "$(printf '%s\n' "$output" | sed -n 's/^PUBLISH=//p')" = "no" ]
   printf '\n# edited\n' >> "$product/patches/0004-user-verification-unsupported.patch"
+  run_id auto
+  [ "$status" -eq 0 ]
+  [ "$output" = "ID=$version-mavericks.2
+STATE=$(state_of)
+PUBLISH=yes" ]
+}
+
+@test "changing only the tarball's layout script changes STATE and publishes the next N" {
+  ship "$version" 1 "$(state_of)"
+  printf '\n# edited\n' >> "$product/packaging/build-codex-package.sh"
   run_id auto
   [ "$status" -eq 0 ]
   [ "$output" = "ID=$version-mavericks.2
@@ -141,7 +153,7 @@ PUBLISH=yes" ]
 }
 
 @test "a missing pin file stops the run and is named" {
-  for pin in build/codex-revision components/rust/version components/clang-22/version; do
+  for pin in build/codex-revision components/rust/version components/clang-22/version packaging/build-codex-package.sh; do
     mv "$product/$pin" "$product/$pin.away"
     run_id auto
     [ "$status" -ne 0 ]

@@ -32,16 +32,18 @@ case "$CODEX" in
   *) echo "build-id: components/codex/version is not x.y.z: $CODEX" >&2; exit 1 ;;
 esac
 
-# the four pins, then every patch (the C-locale glob order), so a patch-only change is a new build.
+# the four pins, then every patch (the C-locale glob order), so a patch-only change is a new build,
+# then the script that lays out the tarball users install, so a change to that layout is one too.
 # A pipeline hides a failed cat, so every input is checked before any digest is computed.
 cd "$ROOT"
-for input in components/codex/version build/codex-revision components/rust/version components/clang-22/version; do
+for input in components/codex/version build/codex-revision components/rust/version components/clang-22/version \
+  packaging/build-codex-package.sh; do
   [ -f "$input" ] || { echo "build-id: no $input" >&2; exit 1; }
 done
 set -- patches/*.patch
 [ -f "$1" ] || { echo "build-id: no patches/*.patch" >&2; exit 1; }
 STATE=$(cat components/codex/version build/codex-revision components/rust/version \
-  components/clang-22/version "$@" | shasum -a 256 | awk '{print $1}')
+  components/clang-22/version "$@" packaging/build-codex-package.sh | shasum -a 256 | awk '{print $1}')
 
 LISTING=
 if [ -n "${CODEX_BUILDS_ASSET_LIST:-}" ]; then
