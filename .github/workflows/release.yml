@@ -1,5 +1,8 @@
 name: release
 
+# The pkg stream: the launcher, the installer and the Sparkle updater, versioned YYYYMMDD.N. It
+# carries no Codex binary; builds.yml publishes those to the codex-builds channel. Only a dispatch
+# publishes.
 on:
   push:
     branches: [main]
@@ -27,7 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 240
+    timeout-minutes: 45
     outputs:
       ver: ${{ steps.ver.outputs.ver }}
       publish: ${{ steps.ver.outputs.publish }}
@@ -48,81 +51,75 @@ jobs:
       - name: Record the pre-build tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
 
-      # A Renovate bump of components/codex/version alone fails here, naming the commit build/codex-revision needs,
-      # before anything is built, signed or published.
-      - name: The upstream pin is a stable release and its commit
-        run: sh build/check-upstream-pin.sh --remote
-
-      - name: Version + publish decision
+      # CMake reads VERSION for the updater, so it is written before configuring.
+      - name: Version (YYYYMMDD.N) + publish decision
         id: ver
         env:
           LOCAL_RELEASE: ${{ inputs.local_release }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          mode=auto
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$LOCAL_RELEASE" = true ]; then mode=local; fi
-          out="$(sh build/version.sh "$mode")"
-          full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
-          rel="$(printf '%s\n' "$out" | sed -n 's/^RELEASE=//p')"
+          base="$(tr -d '[:space:]' < UPSTREAM_VERSION)"
+          maxn=0
+          for t in $(git tag --list "$base.*"); do
+            n="${t##*.}"
+            case "$n" in ''|*[!0-9]*) : ;; *) [ "$n" -gt "$maxn" ] && maxn="$n" ;; esac
+          done
+          ver="$base.$((maxn + 1))"
           pub=no
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
-            pub="$rel"
-          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            if [ "$mode" = local ] || [ "$rel" = yes ]; then
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ "$LOCAL_RELEASE" = true ]; then
               pub=yes
             else
               digest="$(sh "$SHIPYARD_SCRIPTS/release-state.sh")"
-              answer="$(sh "$SHIPYARD_SCRIPTS/release-needed.sh" --digest "$digest" --version "$full")"
+              answer="$(sh "$SHIPYARD_SCRIPTS/release-needed.sh" --digest "$digest" --version "$ver")"
               echo "release-needed: $answer"
-              if [ "$answer" = PUBLISH ]; then
-                pub=yes
-                out="$(sh build/version.sh local)"
-                full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
-              fi
+              if [ "$answer" = PUBLISH ]; then pub=yes; fi
             fi
           fi
-          printf '%s\n' "$full" > VERSION
-          { echo "ver=$full"; echo "publish=$pub"; } >> "$GITHUB_OUTPUT"
-          echo "version=$full publish=$pub"
+          printf '%s\n' "$ver" > VERSION
+          { echo "ver=$ver"; echo "publish=$pub"; } >> "$GITHUB_OUTPUT"
+          echo "version=$ver publish=$pub"
 
-      # build-codex.sh fetches the pinned Mavergreen Rust and clang-22 pkgs, the pinned Codex commit
-      # and OpenAI's rusty_v8 archive itself, and writes $BUILD_ROOT/codex-cross.
-      - name: Cross-build Codex
-        run: sh build/build-codex.sh cross
-
-      # CODEX_CROSS_ONLY_MANIFEST: CI has no native build to compare with, so the cross manifest is checked
-      # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
-      - name: Configure, build the updater, then run the compat guard tests
+      # The launcher refuses to run without an AquaTransport release that has the fixes Codex needs. While
+      # the pin says "unreleased" no such release exists, so a publish stops here, before anything builds;
+      # every other run only checks that the pin is well formed (on-mavericks still fails, saying why).
+      - name: AquaTransport pin
+        env:
+          PUBLISH: ${{ steps.ver.outputs.publish }}
         run: |
-          shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
-          shipyard-cmake --build --preset cross
-          shipyard-ctest --preset cross
+          set -eu
+          if [ "$PUBLISH" = yes ]; then
+            sh build/check-aquatransport-pin.sh
+          else
+            sh build/check-aquatransport-pin.sh --allow-unreleased
+          fi
 
-      - name: Locate the build
-        run: |
-          {
-            echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross"
-            echo "CODEX_OUT=$(sh build/resolve-build-root.sh)/codex-cross"
-          } >> "$GITHUB_ENV"
+      # The pkg carries no Codex binary, so no Codex is built here and CMake registers no Codex guard
+      # tests; the updater, the one compiled thing, is guarded as it is built.
+      - name: Configure (cross, pinned 10.9 SDK, with the updater)
+        run: shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON
+
+      - name: Build + compat guard
+        run: shipyard-cmake --build --preset cross
 
       - name: Run the repo's tests
         run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
 
-      - name: Check the pinned ingredients
-        run: sh "$SHIPYARD_SCRIPTS/check-ingredient-pins.sh"
+      - name: Locate the build
+        run: echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross" >> "$GITHUB_ENV"
 
       - name: Package the .pkg
         env:
           VER: ${{ steps.ver.outputs.ver }}
         run: |
           set -eu
-          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$CODEX_OUT" "$VER" "$BUILD/dist")"
+          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$VER" "$BUILD/dist")"
           [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 
-      - name: The package yields exactly the built Codex
-        run: sh tests/package-test.sh "$PKG" "$CODEX_OUT"
+      - name: The package carries the launcher, the installer and the updater, and no Codex
+        run: sh tests/package-test.sh "$PKG"
 
       - name: Release notes
         env:
@@ -171,7 +168,9 @@ jobs:
         if: steps.ver.outputs.publish == 'yes'
         env:
           VER: ${{ steps.ver.outputs.ver }}
-        run: sh "$SHIPYARD_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "$BUILD/dist/codex-cli.xml" --version "$VER"
+        run: |
+          sh "$SHIPYARD_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "$BUILD/dist/codex-cli.xml" \
+            --version "$VER" --tag-glob '[0-9]*.[0-9]*'
 
       - name: The build must not have written into the source tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh"
@@ -181,12 +180,15 @@ jobs:
           name: codex-cli
           path: ${{ env.BUILD }}/dist/*
 
-  # The cross-built pkg, installed on a real Mac OS X 10.9 guest. Non-voice and logged out: no
+  # The pkg, installed on a real Mac OS X 10.9 guest with the products it requires, runs Codex
+  # through the launcher from the published codex-builds channel, as a user's first run does. With
+  # no build on the channel this fails, so no pkg publishes before the first build. Logged out: no
   # secrets reach this job but the VM image key.
   on-mavericks:
     needs: [build]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -194,27 +196,66 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The pkg carries this pin, and its launcher refuses every command while it says
+      # "unreleased", so the guest would fail deep in the run. Say why here instead.
+      - name: The AquaTransport pin is set
+        run: |
+          set -eu
+          if [ "$(tr -d '[:space:]' < components/aquatransport/min-version)" = unreleased ]; then
+            echo "::error::AquaTransport pin is unreleased; set it when the fixed AquaTransport ships (components/aquatransport/min-version and tree/share/codex-cli/aquatransport-min-version)"
+            exit 1
+          fi
+          sh build/check-aquatransport-pin.sh
       - uses: actions/download-artifact@v8
         with:
           name: codex-cli
           path: dist
+      - name: Fetch the rg and ed25519 packages codex-cli requires
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for p in rg ed25519; do
+            dl="deps/$p"
+            gh release download -R "Mavergreen/$p" --pattern '*.pkg' --pattern SHA256SUMS --dir "$dl"
+            set -- "$dl"/*.pkg
+            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "::error::expected one .pkg in Mavergreen/$p's latest release, got: $*"; exit 1; }
+            name="$(basename "$1")"
+            sum="$(awk -v f="$name" '$2 == f' "$dl/SHA256SUMS")"
+            [ -n "$sum" ] || { echo "::error::$name is not in that release's SHA256SUMS"; exit 1; }
+            ( cd "$dl" && printf '%s\n' "$sum" | sha256sum -c - )
+          done
       - uses: Mavergreen/mavericks-vm@v1
         with:
           image-key: ${{ secrets.MAVERICKS_VM_KEY }}
           copyback: false
           debug-on-error: true
           run: |
+            set -eu
             sw_vers
-            pkg="$(ls dist/codex-cli-*.pkg | head -n 1)"
-            sudo installer -pkg "$pkg" -target /
-            bin=/usr/local/mavergreen/codex-cli/bin
-            "$bin/codex" --version
-            "$bin/codex" --help >/dev/null
-            "$bin/codex-code-mode-host" --help >/dev/null
-            # the link farm exports codex alone; --version only proves the symlinked codex starts (it never looks for the host)
-            /usr/local/mavergreen/bin/codex --version
+            sudo -n true || { echo "the guest's user cannot sudo without a password, and installer needs root"; exit 1; }
+            set -- dist/codex-cli-*.pkg
+            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "expected one codex-cli .pkg in the artifact, found: $*"; exit 1; }
+            for p in deps/rg/*.pkg deps/ed25519/*.pkg "$1"; do sudo /usr/sbin/installer -pkg "$p" -target /; done
+            pkgutil --pkg-info Wowfunhappy.AquaTransport >/dev/null 2>&1 || { echo "the guest image has no Wowfunhappy.AquaTransport package, which the launcher requires; the Mavericks VM image must carry it"; exit 1; }
+            aq="$(pkgutil --pkg-info Wowfunhappy.AquaTransport | sed -n 's/^version: *//p')"
+            aqmin="$(tr -d '[:space:]' < components/aquatransport/min-version)"
+            echo "the guest has AquaTransport $aq; the package needs $aqmin or newer"
+            [ "$(printf %s "$aq" | tr -d .)" -ge "$(printf %s "$aqmin" | tr -d .)" ] || { echo "the guest's AquaTransport $aq is older than the pin $aqmin: the Mavericks VM image (Mavergreen/mavericks-vm) must carry at least the pinned release"; exit 1; }
+            url=https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/latest.json
+            want="$(/usr/bin/curl -fsSL --connect-timeout 20 --max-time 60 "$url" | sed -n 's/.*"mavergreen_build":"\([^"]*\)".*/\1/p')"
+            [ -n "$want" ] || { echo "the codex-builds channel names no build at $url: publish a build before a pkg"; exit 1; }
+            std="$HOME/.codex/packages/standalone"
+            codex=/usr/local/mavergreen/bin/codex
+            # the first run seeds the standalone install from the published channel
+            v="$("$codex" --version)"
+            [ "$v" = "codex-cli ${want%-mavericks.*}" ] || { echo "codex --version printed '$v', not 'codex-cli ${want%-mavericks.*}'"; exit 1; }
+            cur="$(basename "$(readlink "$std/current")")"
+            [ "$cur" = "$want-x86_64-apple-darwin" ] || { echo "the current release is '$cur', not $want"; exit 1; }
+            "$codex" --help >/dev/null
+            "$std/current/bin/codex-code-mode-host" --help >/dev/null
             [ ! -e /usr/local/mavergreen/bin/codex-code-mode-host ] || { echo "the host must not be exported"; exit 1; }
-            "$bin/codex" sandbox -- /usr/bin/true
+            "$codex" sandbox -- /usr/bin/true
 
   scan:
     needs: [build]
@@ -228,6 +269,8 @@ jobs:
     secrets:
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
 
+  # publish-release.yml creates the release with GitHub's default, so the pkg becomes the repo's
+  # Latest; the codex-builds release is created with --latest=false and never takes it.
   publish:
     needs: [build, scan, on-mavericks]
     if: needs.build.outputs.publish == 'yes'

@@ -205,7 +205,7 @@ else
     fetch "$JSON" "$SCRATCH/published.json" ||
       die "$ID is already on the channel, and its $JSON cannot be fetched to compare"
     cmp -s "$SCRATCH/published.json" "$DIR/$JSON" ||
-      die "$ID is already on the channel as a different build: another run published this build number first; this one publishes nothing"
+      die "$ID is already on the channel as a different build: another run published this build number first; this one publishes nothing (dispatch builds.yml again to take the next number)"
   fi
 fi
 

@@ -10,7 +10,7 @@ setup() {
 }
 
 # source_to_scan: sets SRC to the prepared Codex source to scan.
-# CODEX_PREPARED_SRC names a tree build/fetch-codex.sh already prepared;
+# CODEX_PREPARED_SRC names a tree build/fetch-codex.sh already prepared (CI's cross build sets it);
 # with it set the guard scans that tree and fails, never skips, when it is not the pinned source.
 # Otherwise the guard prepares its own tree from the gitignored codex/ inspection checkout, and skips
 # where that is missing, exactly where tests/build-inputs.bats's fetch tests skip.

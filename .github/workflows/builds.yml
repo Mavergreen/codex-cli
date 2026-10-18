@@ -1,0 +1,430 @@
+name: builds
+
+# The Codex builds stream: each build is one tarball in upstream's package layout, published to this
+# repo's codex-builds release (never its Latest), where `codex update` and the launcher's first run
+# fetch it. The pkg is release.yml's. A push publishes only when it changes the state digest
+# build/build-id.sh computes; the paths below are every input of that digest.
+on:
+  push:
+    branches: [main]
+    paths:
+      - components/codex/version
+      - build/codex-revision
+      - components/rust/version
+      - components/clang-22/version
+      - patches/**
+      - packaging/build-codex-package.sh
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: "Publish the next build of this Codex version even though the channel already has this state"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# A run that can publish is alone in its group, so none is ever queued behind another and evicted.
+# Two runs that pick the same build number both build, but only one publishes it: the other's
+# channel-publish.sh finds that number on the channel as a different build and fails, red, without
+# overwriting it. A PR run is superseded by the PR's next push.
+concurrency:
+  group: >-
+    builds-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Not "build": release.yml's build job reports that check, and both must be required separately.
+  codex-build:
+    runs-on: macos-26
+    timeout-minutes: 240
+    outputs:
+      id: ${{ steps.id.outputs.id }}
+      next: ${{ steps.id.outputs.next }}
+      codex: ${{ steps.id.outputs.codex }}
+      publish: ${{ steps.id.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install mavericks-shipyard
+        uses: Mavergreen/shipyard/.github/actions/install@v1
+
+      - name: Record the toolchain
+        run: |
+          clang --version
+          xcodebuild -version
+
+      - name: Record the pre-build tree
+        run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
+
+      # A Renovate bump of components/codex/version alone fails here, naming the commit build/codex-revision needs,
+      # before anything is built, signed or published.
+      - name: The upstream pin is a stable release and its commit
+        run: sh build/check-upstream-pin.sh --remote
+
+      - name: Build identity + publish decision
+        id: id
+        env:
+          REBUILD: ${{ inputs.rebuild }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mode=auto
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$REBUILD" = true ]; then mode=rebuild; fi
+          rm -f BUILD_ID
+          out="$(sh build/build-id.sh "$mode")"
+          id="$(printf '%s\n' "$out" | sed -n 's/^ID=//p')"
+          state="$(printf '%s\n' "$out" | sed -n 's/^STATE=//p')"
+          wanted="$(printf '%s\n' "$out" | sed -n 's/^PUBLISH=//p')"
+          printf '%s\n' "$id" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-mavericks\.[1-9][0-9]*$' \
+            || { echo "::error::build-id.sh printed no build identity: $out"; exit 1; }
+          printf '%s\n' "$state" | grep -Eq '^[0-9a-f]{64}$' \
+            || { echo "::error::build-id.sh printed no state digest: $out"; exit 1; }
+          codex="${id%-mavericks.*}"
+          # a second build of the same binaries, staged for the 10.9 job's `codex update`; never published
+          next="${id%.*}.$((${id##*.} + 1))"
+          pub=no
+          case "$GITHUB_EVENT_NAME" in
+            push|workflow_dispatch) if [ "$GITHUB_REF" = refs/heads/main ]; then pub="$wanted"; fi ;;
+          esac
+          printf '%s\n' "$id" > BUILD_ID
+          # The test pkg's own version, YYYYMMDD.N, as release.yml computes it; CMake reads VERSION
+          # for the updater, so it is written before configuring.
+          base="$(tr -d '[:space:]' < UPSTREAM_VERSION)"
+          maxn=0
+          for t in $(git tag --list "$base.*"); do
+            n="${t##*.}"
+            case "$n" in ''|*[!0-9]*) : ;; *) [ "$n" -gt "$maxn" ] && maxn="$n" ;; esac
+          done
+          pkgver="$base.$((maxn + 1))"
+          printf '%s\n' "$pkgver" > VERSION
+          {
+            echo "id=$id"; echo "next=$next"; echo "codex=$codex"; echo "state=$state"
+            echo "publish=$pub"; echo "pkgver=$pkgver"
+          } >> "$GITHUB_OUTPUT"
+          echo "build=$id state=$state publish=$pub (build-id.sh: $wanted) test pkg=$pkgver"
+
+      # build-codex.sh fetches the pinned Mavergreen Rust and clang-22 pkgs, the pinned Codex commit
+      # and OpenAI's rusty_v8 archive itself, and writes $BUILD_ROOT/codex-cross. It reads BUILD_ID.
+      - name: Cross-build Codex
+        run: sh build/build-codex.sh cross
+
+      # CODEX_CROSS_ONLY_MANIFEST: CI has no native build to compare with, so the cross manifest is checked
+      # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
+      # CMake registers the guard tests only when it finds the built binaries, so a build that is not
+      # where CMake looks would otherwise pass with no guard at all.
+      - name: Configure, build the updater, then run the compat guard tests
+        run: |
+          set -eu
+          shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
+          shipyard-cmake --build --preset cross
+          listed="$(shipyard-ctest --preset cross -N)"
+          for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host; do
+            printf '%s\n' "$listed" | grep -Eq "Test +#[0-9]+: $t\$" \
+              || { printf '%s\n' "$listed"; echo "::error::CTest has no $t test: CMake did not find the cross build"; exit 1; }
+          done
+          shipyard-ctest --preset cross
+
+      # CODEX_PREPARED_SRC names the patched source the cross build compiled, so the repo's tests
+      # scan it for fetches of OpenAI's builds (tests/no-upstream-fetch.bats). With it set, that
+      # test fails rather than skips when it cannot scan.
+      - name: Locate the build
+        run: |
+          {
+            echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross"
+            echo "CODEX_OUT=$(sh build/resolve-build-root.sh)/codex-cross"
+            echo "CODEX_PREPARED_SRC=$(sh build/resolve-build-root.sh)/codex-src"
+          } >> "$GITHUB_ENV"
+
+      - name: Run the repo's tests
+        run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
+
+      - name: Package the build, and a second one for the update check
+        env:
+          ID: ${{ steps.id.outputs.id }}
+          NEXT: ${{ steps.id.outputs.next }}
+          CODEX: ${{ steps.id.outputs.codex }}
+          STATE: ${{ steps.id.outputs.state }}
+        run: |
+          set -eu
+          minpkg="$(tr -d '[:space:]' < components/codex/min-pkg)"
+          ch="$BUILD/channel"
+          nx="$BUILD/vm/next"
+          rm -rf "$ch" "$BUILD/vm"
+          tarball="$(sh packaging/build-codex-package.sh "$CODEX_OUT" "$ID" "$ch")"
+          [ -f "$tarball" ] || { echo "::error::build-codex-package.sh did not print a tarball path: $tarball"; exit 1; }
+          sh build/channel-json.sh --id "$ID" --codex-version "$CODEX" --tarball "$tarball" \
+            --min-pkg "$minpkg" --state "$STATE" > "$ch/codex-build-$ID.json"
+          cp "$ch/codex-build-$ID.json" "$ch/latest.json"
+          second="$(sh packaging/build-codex-package.sh "$CODEX_OUT" "$NEXT" "$nx")"
+          [ -f "$second" ] || { echo "::error::build-codex-package.sh did not print a tarball path: $second"; exit 1; }
+          sh build/channel-json.sh --id "$NEXT" --codex-version "$CODEX" --tarball "$second" \
+            --min-pkg "$minpkg" --state "$STATE" > "$nx/codex-build-$NEXT.json"
+          ls -l "$ch" "$nx"
+
+      - name: Fetch the signer (Mavergreen's ed25519)
+        if: steps.id.outputs.publish == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag="$(gh release view -R Mavergreen/ed25519 --json tagName -q .tagName)"
+          dest="$(sh "$SHIPYARD_SCRIPTS/fetch_product_pkg.sh" ed25519 "$tag" "$RUNNER_TEMP/ed25519")"
+          [ -x "$dest/bin/ed25519-sign" ] && [ -x "$dest/bin/ed25519-verify" ] \
+            || { echo "::error::ed25519 $tag has no bin/ed25519-sign and bin/ed25519-verify"; exit 1; }
+          echo "ED25519=$dest/bin" >> "$GITHUB_ENV"
+
+      # This is the one job that holds the key, so scan-for-key.yml scans its log;
+      # publish uploads the signed directory with no key. The 10.9 job then checks
+      # exactly the bytes publish uploads, against the key the package ships.
+      # channel-publish.sh sign only reads the channel (the staleness and package
+      # checks), and passes the key from the environment to the signer's stdin.
+      - name: Sign the staged build with the family key
+        if: steps.id.outputs.publish == 'yes'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.id.outputs.id }}
+        run: |
+          set -eu
+          printenv SPARKLE_PRIVATE_KEY | grep -q . || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
+          sh build/channel-publish.sh sign --repo Mavergreen/codex-cli --tag codex-builds --dir "$BUILD/channel" \
+            --id "$ID" --key-env SPARKLE_PRIVATE_KEY --signer "$ED25519/ed25519-sign"
+
+      - name: The signature verifies against the key the package ships
+        if: steps.id.outputs.publish == 'yes'
+        env:
+          ID: ${{ steps.id.outputs.id }}
+        run: |
+          set -eu
+          json="$BUILD/channel/codex-build-$ID.json"
+          "$ED25519/ed25519-verify" -p "$(cat tree/share/codex-cli/ed25519_key.pub)" "$json" "$(cat "$json.sig")" \
+            || { echo "::error::the family key's signature does not verify against tree/share/codex-cli/ed25519_key.pub"; exit 1; }
+
+      # Never published: the 10.9 job installs it to run the launcher against this build.
+      - name: Package a test .pkg
+        env:
+          PKGVER: ${{ steps.id.outputs.pkgver }}
+        run: |
+          set -eu
+          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$PKGVER" "$BUILD/vm")"
+          [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
+          sh tests/package-test.sh "$pkg"
+
+      - name: The build must not have written into the source tree
+        run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codex-build-channel
+          path: ${{ env.BUILD }}/channel/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codex-build-vm
+          path: ${{ env.BUILD }}/vm/
+
+  # The test pkg, installed on a real Mac OS X 10.9 guest with the products it requires, runs this
+  # build through the launcher from the staged channel and starts the app-server daemon, then updates
+  # both the standalone install and the daemon to a staged second build. A publishing run's staged build carries the family key's signature, which the package's own key
+  # checks; otherwise, and always for the second build, a key made in the guest signs, and the
+  # installed package is made to trust it. No secrets reach this job but the VM image key.
+  on-mavericks:
+    needs: [codex-build]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The test pkg carries this pin, and its launcher refuses every command while it says
+      # "unreleased", so the guest would fail deep in the run. Say why here instead.
+      - name: The AquaTransport pin is set
+        run: |
+          set -eu
+          if [ "$(tr -d '[:space:]' < components/aquatransport/min-version)" = unreleased ]; then
+            echo "::error::AquaTransport pin is unreleased; set it when the fixed AquaTransport ships (components/aquatransport/min-version and tree/share/codex-cli/aquatransport-min-version)"
+            exit 1
+          fi
+          sh build/check-aquatransport-pin.sh
+      - uses: actions/download-artifact@v8
+        with:
+          name: codex-build-channel
+          path: channel
+      - uses: actions/download-artifact@v8
+        with:
+          name: codex-build-vm
+          path: vm
+      - name: Fetch the rg and ed25519 packages codex-cli requires
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for p in rg ed25519; do
+            dl="deps/$p"
+            gh release download -R "Mavergreen/$p" --pattern '*.pkg' --pattern SHA256SUMS --dir "$dl"
+            set -- "$dl"/*.pkg
+            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "::error::expected one .pkg in Mavergreen/$p's latest release, got: $*"; exit 1; }
+            name="$(basename "$1")"
+            sum="$(awk -v f="$name" '$2 == f' "$dl/SHA256SUMS")"
+            [ -n "$sum" ] || { echo "::error::$name is not in that release's SHA256SUMS"; exit 1; }
+            ( cd "$dl" && printf '%s\n' "$sum" | sha256sum -c - )
+          done
+      - uses: Mavergreen/mavericks-vm@v1
+        env:
+          CX_ID: ${{ needs.codex-build.outputs.id }}
+          CX_NEXT: ${{ needs.codex-build.outputs.next }}
+          CX_CODEX: ${{ needs.codex-build.outputs.codex }}
+        with:
+          image-key: ${{ secrets.MAVERICKS_VM_KEY }}
+          envs: 'CX_ID CX_NEXT CX_CODEX'
+          copyback: false
+          debug-on-error: true
+          run: |
+            set -eu
+            sw_vers
+            sudo -n true || { echo "the guest's user cannot sudo without a password, and installer needs root"; exit 1; }
+            set -- vm/codex-cli-*.pkg
+            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "expected one codex-cli .pkg in the artifact, found: $*"; exit 1; }
+            for p in deps/rg/*.pkg deps/ed25519/*.pkg "$1"; do sudo /usr/sbin/installer -pkg "$p" -target /; done
+            pkgutil --pkg-info Wowfunhappy.AquaTransport >/dev/null 2>&1 || { echo "the guest image has no Wowfunhappy.AquaTransport package, which the launcher requires; the Mavericks VM image must carry it"; exit 1; }
+            aq="$(pkgutil --pkg-info Wowfunhappy.AquaTransport | sed -n 's/^version: *//p')"
+            aqmin="$(tr -d '[:space:]' < components/aquatransport/min-version)"
+            echo "the guest has AquaTransport $aq; the package needs $aqmin or newer"
+            [ "$(printf %s "$aq" | tr -d .)" -ge "$(printf %s "$aqmin" | tr -d .)" ] || { echo "the guest's AquaTransport $aq is older than the pin $aqmin: the Mavericks VM image (Mavergreen/mavericks-vm) must carry at least the pinned release"; exit 1; }
+            ed=/usr/local/mavergreen/ed25519/bin
+            pub=/usr/local/mavergreen/codex-cli/share/codex-cli/ed25519_key.pub
+            ch="$PWD/channel"
+            std="$HOME/.codex/packages/standalone"
+            codex=/usr/local/mavergreen/bin/codex
+            # sign_here JSON: sign with a key made in this guest, which the installed package then trusts
+            sign_here() {
+              if [ ! -f "$HOME/guest-key.pub" ]; then
+                "$ed/ed25519-keygen" -f "$HOME/guest-key" >/dev/null
+                sudo cp "$HOME/guest-key.pub" "$pub"
+              fi
+              "$ed/ed25519-sign" -f "$HOME/guest-key" "$1" > "$1.sig"
+            }
+            dmn="$HOME/.codex/packages/app-server-daemon"
+            # selected BUILD: fail unless the standalone install's current release is BUILD
+            selected() {
+              cur="$(basename "$(readlink "$std/current")")"
+              [ "$cur" = "$1-x86_64-apple-darwin" ] || { echo "the current release is '$cur', not $1"; exit 1; }
+            }
+            # daemon_selected BUILD: fail unless the daemon's own package root selects BUILD and
+            # follows the latest channel, as its scheduled updates need
+            daemon_selected() {
+              cur="$(basename "$(readlink "$dmn/current")")"
+              [ "$cur" = "$1-x86_64-apple-darwin" ] || { echo "the daemon's current release is '$cur', not $1"; exit 1; }
+              rec="$(cat "$dmn/auto-update-version" 2>/dev/null || true)"
+              [ "$rec" = "$1-x86_64-apple-darwin" ] || { echo "the daemon's auto-update-version is '$rec', not $1-x86_64-apple-darwin"; exit 1; }
+            }
+            if [ -s "$ch/latest.json.sig" ]; then
+              echo "the staged build carries the family key's signature; the package's own key checks it"
+            else
+              echo "not a publishing run, so nothing holds the family key: a key made here signs the staged build"
+              sign_here "$ch/codex-build-$CX_ID.json"
+              cp "$ch/codex-build-$CX_ID.json.sig" "$ch/latest.json.sig"
+            fi
+            CODEX_BUILDS_URL="file://$ch"
+            export CODEX_BUILDS_URL
+            # the first run seeds the standalone install from the staged channel
+            v="$("$codex" --version)"
+            [ "$v" = "codex-cli $CX_CODEX" ] || { echo "codex --version printed '$v', not 'codex-cli $CX_CODEX'"; exit 1; }
+            selected "$CX_ID"
+            "$codex" --help >/dev/null
+            "$std/current/bin/codex-code-mode-host" --help >/dev/null
+            [ ! -e /usr/local/mavergreen/bin/codex-code-mode-host ] || { echo "the host must not be exported"; exit 1; }
+            "$codex" sandbox -- /usr/bin/true
+            # the daemon copies the standalone release into its own package root, named for the build
+            "$codex" app-server daemon start
+            daemon_selected "$CX_ID"
+            # a second build lands on the channel; codex update must offer it and install it
+            cp "vm/next/codex-package-x86_64-apple-darwin-$CX_NEXT.tar.gz" "vm/next/codex-build-$CX_NEXT.json" "$ch/"
+            sign_here "$ch/codex-build-$CX_NEXT.json"
+            cp "$ch/codex-build-$CX_NEXT.json" "$ch/latest.json"
+            cp "$ch/codex-build-$CX_NEXT.json.sig" "$ch/latest.json.sig"
+            status=0; out="$("$codex" update 2>&1)" || status=$?
+            printf '%s\n' "$out"
+            [ "$status" -eq 0 ] || { echo "codex update exited $status"; exit 1; }
+            case "$out" in
+              *"Updating Codex CLI from $CX_ID to $CX_NEXT"*) ;;
+              *) echo "codex update did not offer $CX_NEXT over $CX_ID"; exit 1 ;;
+            esac
+            selected "$CX_NEXT"
+            v="$("$codex" --version)"
+            [ "$v" = "codex-cli $CX_CODEX" ] || { echo "after the update, codex --version printed '$v'"; exit 1; }
+            # the daemon's update: its updater runs the package's installer in the daemon's guarded
+            # mode (CODEX_INSTALL_DAEMON_ONLY, CODEX_INSTALL_IF_LATEST), as a scheduled update does,
+            # moves the daemon's root to the second build and restarts the running daemon into it
+            status=0; out="$("$codex" app-server daemon update 2>&1)" || status=$?
+            printf '%s\n' "$out"
+            [ "$status" -eq 0 ] || { echo "codex app-server daemon update exited $status"; exit 1; }
+            case "$out" in
+              *'"status":"updated"'*) ;;
+              *) echo "codex app-server daemon update did not update the daemon"; exit 1 ;;
+            esac
+            case "$out" in
+              *"running daemon was restarted"*) ;;
+              *) echo "codex app-server daemon update did not restart the running daemon"; exit 1 ;;
+            esac
+            daemon_selected "$CX_NEXT"
+            out="$("$codex" app-server daemon version)"
+            printf '%s\n' "$out"
+            case "$out" in
+              *'"appServerVersion":"'"$CX_CODEX"'"'*) ;;
+              *) echo "after its update, the daemon does not answer with app-server $CX_CODEX"; exit 1 ;;
+            esac
+            "$codex" app-server daemon stop
+
+  scan:
+    needs: [codex-build]
+    if: always() && (needs.codex-build.outputs.publish == 'yes')
+    permissions:
+      actions: read
+      contents: read
+    uses: Mavergreen/shipyard/.github/workflows/scan-for-key.yml@v1
+    with:
+      artifact: codex-build-*
+    secrets:
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+
+  # channel-publish.sh upload checks the signed directory (each signature against the key the
+  # package ships, with the runner's OpenSSL 3) and the channel again (staleness, the same build
+  # number published by another run, the package requirement). It creates the release with
+  # --latest=false if absent, uploads, replaces latest.json, points latest.json back at the newest
+  # build if a concurrent run published one meanwhile, then prunes by the retention rule. It holds
+  # no key.
+  publish:
+    needs: [codex-build, on-mavericks, scan]
+    if: needs.codex-build.outputs.publish == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: codex-build-channel
+          path: ${{ runner.temp }}/channel
+
+      - name: Publish to the codex-builds channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ needs.codex-build.outputs.id }}
+        run: |
+          sh build/channel-publish.sh upload --repo Mavergreen/codex-cli --tag codex-builds \
+            --dir "$RUNNER_TEMP/channel" --id "$ID" --verify-with tree/share/codex-cli/ed25519_key.pub

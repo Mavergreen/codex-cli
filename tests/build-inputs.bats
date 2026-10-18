@@ -5,7 +5,6 @@ setup() {
   export MAVERGREEN_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   export MAVERICKS_ROOT="$MAVERGREEN_ROOT"
   export SHIPYARD_SCRIPTS="${SHIPYARD_SCRIPTS:-/home/schmonz/Documents/trees/mavergreen-shipyard/scripts}"
-  export MAVERICKS_TAGS=""
   export MAVERICKS_BUILD_ROOT="$BATS_TEST_TMPDIR/local-build"
 }
 
@@ -16,22 +15,6 @@ need_codex_checkout() {
   revision=$(cat "$MAVERGREEN_ROOT/build/codex-revision")
   git -C "$MAVERGREEN_ROOT/codex" cat-file -e "$revision^{commit}" 2>/dev/null ||
     skip "codex/ is not a git checkout holding the pinned revision $revision"
-}
-
-@test "version resolution follows the family upstream and packaging axes" {
-  upstream=$(tr -d '[:space:]' < "$MAVERGREEN_ROOT/UPSTREAM_VERSION")
-  run sh "$MAVERGREEN_ROOT/build/version.sh" auto
-  [ "$status" -eq 0 ]
-  [ "$output" = "FULL=$upstream-mavericks.1
-TAG=$upstream-mavericks.1
-RELEASE=yes" ]
-
-  export MAVERICKS_TAGS="$upstream-mavericks.1"
-  run sh "$MAVERGREEN_ROOT/build/version.sh" local
-  [ "$status" -eq 0 ]
-  [ "$output" = "FULL=$upstream-mavericks.2
-TAG=$upstream-mavericks.2
-RELEASE=yes" ]
 }
 
 @test "build root is host-local and cannot be inside the product source" {

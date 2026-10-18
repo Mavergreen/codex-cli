@@ -32,7 +32,7 @@
   ],
   "packageRules": [
     {
-      "description": "Renovate moves components/codex/version but cannot derive the tag's commit, so build/codex-revision stays on the old commit and release.yml's upstream-pin check fails the PR (it names the commit to use). Not an automerge exception: automerge stays on, and the failing check is what holds the PR until a human edits build/codex-revision.",
+      "description": "Renovate moves components/codex/version but cannot derive the tag's commit, so build/codex-revision stays on the old commit and builds.yml's upstream-pin check fails the PR's codex-build check (it names the commit to use). Not an automerge exception: automerge stays on, and the failing codex-build check, required on main beside build, is what holds the PR until a human edits build/codex-revision.",
       "matchDepNames": ["openai/codex"],
       "prBodyNotes": ["Renovate bumped `components/codex/version` only. Update `build/codex-revision` to the commit of this release's `rust-v<version>` tag on this branch (the failing `check-upstream-pin` step prints it), and refresh `patches/` if they no longer apply. See INGREDIENTS.md \"Releasing\"."]
     }

@@ -1,60 +1,18 @@
 #!/usr/bin/env bats
 # platform: host-agnostic -- fixtures and plain sh; runs on ultimate-hat and modern macOS
 
-# The release workflow's version axes (<upstream>-mavericks.N) and its upstream-pin guard. Version
-# resolution runs shipyard's version.sh through build/version.sh with a scratch UPSTREAM_VERSION and
-# the shipped tags in MAVERICKS_TAGS; the pin guard runs against a scratch product and a local
-# repository standing in for openai/codex.
+# The pins the two release streams version from: UPSTREAM_VERSION, the package's own date, and the
+# Codex pin guard, which runs against a scratch product and a local repository standing in for
+# openai/codex.
 setup() {
   export PRODUCT_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export SHIPYARD_SCRIPTS="${SHIPYARD_SCRIPTS:-/home/schmonz/Documents/trees/mavergreen-shipyard/scripts}"
-  export MAVERICKS_UPSTREAM_FILE="$BATS_TEST_TMPDIR/UPSTREAM_VERSION"
-  export MAVERICKS_TAGS=""
   product="$BATS_TEST_TMPDIR/product"
   mkdir -p "$product/build"
   cp "$PRODUCT_ROOT"/build/*.sh "$product/build/"
 }
 
-# resolve MODE UPSTREAM TAGS: version.sh's three lines for a scratch UPSTREAM_VERSION and shipped tags
-resolve() {
-  printf '%s\n' "$2" > "$MAVERICKS_UPSTREAM_FILE"
-  MAVERICKS_TAGS="$3" sh "$PRODUCT_ROOT/build/version.sh" "$1"
-}
-
-@test "a new upstream version releases as -mavericks.1" {
-  run resolve auto 0.162.0 "0.161.0-mavericks.1
-0.161.0-mavericks.2"
-  [ "$status" -eq 0 ]
-  [ "$output" = "FULL=0.162.0-mavericks.1
-TAG=0.162.0-mavericks.1
-RELEASE=yes" ]
-}
-
-@test "the shipped upstream version is not released again by a plain push" {
-  run resolve auto 0.161.0 "0.161.0-mavericks.1"
-  [ "$status" -eq 0 ]
-  [ "$output" = "FULL=0.161.0-mavericks.1
-TAG=0.161.0-mavericks.1
-RELEASE=no" ]
-}
-
-@test "a packaging-only release of the same upstream takes the next .N past the highest shipped" {
-  run resolve local 0.161.0 "0.161.0-mavericks.1
-0.161.0-mavericks.3
-0.160.0-mavericks.9"
-  [ "$status" -eq 0 ]
-  [ "$output" = "FULL=0.161.0-mavericks.4
-TAG=0.161.0-mavericks.4
-RELEASE=yes" ]
-}
-
 @test "UPSTREAM_VERSION is the package's own date" {
   grep -Eq '^[0-9]{8}$' "$PRODUCT_ROOT/UPSTREAM_VERSION"
-}
-
-@test "a mode other than auto or local is refused" {
-  run resolve nightly 0.161.0 ""
-  [ "$status" -ne 0 ]
 }
 
 # pin_check VERSION REVISION [ARGS]: check-upstream-pin.sh on a scratch product pinning them

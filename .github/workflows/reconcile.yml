@@ -12,10 +12,100 @@ permissions:
   actions: write
 
 jobs:
+  # Until the AquaTransport release with the fixes Codex needs ships, the pin says "unreleased", the
+  # launcher refuses to run, and every builds.yml and release.yml run fails at its 10.9 job. Nothing
+  # can publish, so the backstops dispatch nothing rather than start a 4-hour build each night.
+  pin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      released: ${{ steps.pin.outputs.released }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Is the AquaTransport pin set?
+        id: pin
+        run: |
+          set -eu
+          pin="$(tr -d '[:space:]' < components/aquatransport/min-version)"
+          if [ "$pin" = unreleased ]; then
+            echo "::notice::the AquaTransport pin (components/aquatransport/min-version) is unreleased, so no build or pkg can pass its 10.9 job; dispatching nothing until it is set"
+            echo "released=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "the AquaTransport pin is $pin"
+            echo "released=yes" >> "$GITHUB_OUTPUT"
+          fi
+
   reconcile:
+    needs: [pin]
+    if: needs.pin.outputs.released == 'yes'
     permissions:
       contents: read
       actions: write
     uses: Mavergreen/shipyard/.github/workflows/reconcile.yml@v1
     with:
       dispatch-field: reconcile=true
+
+  # The builds channel's backstop: when the newest build on the channel was not made from main's
+  # build state (build/build-id.sh's STATE), dispatch builds.yml, which publishes the next build.
+  builds:
+    needs: [pin]
+    if: needs.pin.outputs.released == 'yes'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Does the channel's newest build carry main's build state?
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          url=https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/latest.json
+          code="$(curl -sSL --connect-timeout 20 --max-time 60 -o "$RUNNER_TEMP/latest.json" -w '%{http_code}' "$url")" \
+            || { echo "::error::cannot fetch $url"; exit 1; }
+          case "$code" in
+            200)
+              published="$(sed -n 's/.*"mavergreen_state":"\([0-9a-f]*\)".*/\1/p' "$RUNNER_TEMP/latest.json")"
+              [ -n "$published" ] || { echo "::error::$url records no mavergreen_state"; exit 1; }
+              out="$(sh build/build-id.sh auto)"
+              state="$(printf '%s\n' "$out" | sed -n 's/^STATE=//p')"
+              [ -n "$state" ] || { echo "::error::build/build-id.sh printed no STATE"; exit 1; }
+              echo "channel: $published, main: $state"
+              if [ "$published" = "$state" ]; then answer=SKIP; else answer=PUBLISH; fi ;;
+            404)
+              echo "the channel has no latest.json: nothing has been built"
+              answer=PUBLISH ;;
+            *) echo "::error::$url answered HTTP $code"; exit 1 ;;
+          esac
+          echo "answer=$answer" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch the builds run
+        if: steps.state.outputs.answer == 'PUBLISH'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # A run already on its way publishes (or fails to publish) this state; a second would only
+          # build the same thing. If it fails, tomorrow's reconcile dispatches again.
+          active=0
+          for st in queued in_progress waiting pending requested; do
+            n="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow builds.yml --branch main --status "$st" --json databaseId -q length)"
+            active=$((active + n))
+          done
+          if [ "$active" -gt 0 ]; then
+            echo "::notice::no build on the channel carries main's build state, but $active builds.yml run(s) on main are queued or running; dispatching nothing"
+            exit 0
+          fi
+          echo "::notice::no build on the channel carries main's build state; dispatching builds.yml"
+          gh workflow run builds.yml --ref main
