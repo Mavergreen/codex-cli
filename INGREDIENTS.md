@@ -92,7 +92,8 @@ with the arguments unchanged, when that is a complete Mavergreen build (its `cod
 names a `mavergreenBuild`). On the first run there is none, so it says `installing Codex (first
 run; this downloads Codex and can take a minute)`, runs the installer non-interactively, and then
 runs what it installed; if the installer fails, it says why and exits 1. It seeds the newest build
-`latest.json` names, as Claude's launcher does.
+`latest.json` names, as Claude's launcher does, not a build pinned in the pkg as pi's does: the
+retention rule below would delete a pinned build within months and break an older pkg's first run.
 It points `~/.local/bin/codex` at itself, as Claude's launcher does with `claude`, unless that path
 is someone else's, which it leaves alone and mentions once; the installer never touches it or a
 shell profile, so there is one `codex` on `PATH`.
@@ -122,6 +123,55 @@ in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cl
 registry with no override. It stays off by default, as in mavergreen-gh. The updater's version is the
 pkg's own, from `VERSION` (else `UPSTREAM_VERSION`), as mavergreen-claude-code's is, because Sparkle
 compares the feed's version with the bundle's. The updater never links the CLI binary.
+
+## The builds channel
+
+The channel is the GitHub release `codex-builds` on `Mavergreen/codex-cli`, titled "Codex builds
+(fetched by codex update)" and created once with `--latest=false`, so it is never the release
+GitHub marks Latest; the family's Sparkle feed is the Latest release's, which is always a pkg. Its
+tag never moves. Everything reads it at its fixed download URL,
+`https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/`, never through the GitHub
+API and its anonymous limit.
+
+| Asset | What |
+| --- | --- |
+| `codex-package-x86_64-apple-darwin-<ID>.tar.gz` | one build |
+| `codex-build-<ID>.json`, `.json.sig` | that build's metadata and its signature |
+| `latest.json`, `latest.json.sig` | byte copies of the newest build's metadata and signature |
+
+`<ID>` is the build identity, `<x.y.z>-mavericks.<N>`: Codex's version and this product's build
+number for it, from 1. `codex --version` prints only `x.y.z`; `codex doctor` and the startup notice
+show the identity. The metadata is one line shaped like a GitHub release, so the installer's parser
+(upstream's) reads it: `tag_name` (`rust-v<ID>`), `mavergreen_build`, `mavergreen_codex_version`,
+`mavergreen_min_pkg`, `mavergreen_state` (the build state below) and one asset with its
+`sha256:` digest. The signature is the base64 line that the family EdDSA key's `ed25519-sign`
+prints for the metadata file's bytes; the installer refuses metadata whose signature does not
+verify, and the sha256 inside then vouches for the tarball.
+
+`build/build-id.sh` decides each build's identity and whether to publish it. The build state is a
+sha256 over, in order, `components/codex/version`, `build/codex-revision`, `components/rust/version`,
+`components/clang-22/version`, every `patches/*.patch` in `LC_ALL=C` order, and
+`packaging/build-codex-package.sh`, which decides what each tarball holds. A run publishes only
+when that state differs from the newest build of the same Codex version on the channel, and the
+build number is the next one for that version; `build-id.sh rebuild` always takes the next.
+`build/channel-json.sh` writes the metadata, and `build/channel-publish.sh` signs and uploads
+(below). It refuses a build older than one already on the channel, and a same-numbered build
+whose metadata differs.
+
+**Retention.** After each publish, `build/channel-prune.sh` keeps a build if it is one of the newest
+10 builds, the last build of one of the newest 30 `major.minor`s, or the last build of a minor
+divisible by 10 or of a major (kept forever); "last" is the highest patch, then the highest build
+number. Everything else is deleted. A build's membership depends only on its own version and what was
+published after it, so a build kept forever is never deleted later. The counts are
+`channel-publish.sh upload`'s `--keep-newest` and `--keep-minors`.
+
+**A build that needs a newer pkg.** When `components/codex/min-pkg` names a pkg version, every build
+records it as `mavergreen_min_pkg`, and `channel-publish.sh` refuses to publish a build that names a
+pkg newer than the repo's Latest release. The installer compares it with the installed pkg's
+`mavergreen.plist` version: when the pkg is older, it installs nothing and exits 3. A run with
+someone at the terminal opens the package's updater; a guarded run, such as the daemon's background
+update, only says why. The installer never falls back to an older build the installed pkg could
+run.
 
 ## License notices
 

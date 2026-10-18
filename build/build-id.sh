@@ -9,8 +9,8 @@
 #          any other failure to read it stops the run. Tests name the channel by files:
 #          CODEX_BUILDS_ASSET_LIST (asset names, one per line) and CODEX_BUILDS_JSON_DIR (a directory
 #          of codex-build-<ID>.json); real runs ask gh, and fetch the newest build's JSON by its asset
-#          id from the paginated listing (build/channel-assets.sh --ids), since gh's lookup by name
-#          reads an asset list that may be capped.
+#          id from the paginated listing (build/channel-assets.sh --ids), as channel-publish.sh does,
+#          since gh's lookup by name reads an asset list that may be capped.
 set -eu
 
 if [ "$#" -ne 1 ]; then
