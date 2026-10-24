@@ -151,6 +151,6 @@ build() {
   run build cross
   [ "$status" -eq 0 ]
   [[ "$output" == *"a dev build"* ]] || false
-  grep -qx "version=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/codex/version")-mavericks.0" \
+  grep -qx "version=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" version)-mavericks.0" \
     "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }

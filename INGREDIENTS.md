@@ -2,7 +2,7 @@
 
 | Ingredient | Pin | Use |
 | --- | --- | --- |
-| OpenAI Codex | `components/codex/version` `0.161.0`; `build/codex-revision` `979011409de0a60b52f179721948e65531d26144`. Renovate (`github-releases` on `openai/codex`, tags `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` never match) bumps `components/codex/version` only; the commit is a manual edit, see "Releasing". A bump publishes a Codex build, never a pkg | CLI source and Cargo workspace, built into the Codex builds the package installs |
+| OpenAI Codex | `components/codex/version`: `REF=rust-v0.161.0`, `DIGEST=979011409de0a60b52f179721948e65531d26144`, the family's tag-with-commit pin. Renovate (`git-refs` on `openai/codex`, with a versioning that admits only `rust-v<x.y.z>`, so prereleases such as `rust-v0.162.0-alpha.1` are never proposed) moves REF and DIGEST together. A bump publishes a Codex build, never a pkg | CLI source and Cargo workspace, built into the Codex builds the package installs |
 | Mavergreen Rust toolchain (`rust` on 10.9, `rust-cross` on a modern Mac) | `components/rust/version` (`1.99.0-mavericks.2`, the first release whose `rustc` defers its back-fill to a linker that already links `librecaulk.a`, as clang-22's `clang++` does); the released `.pkg` is verified against the release's `SHA256SUMS` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/rust`, `-mavericks.N` versioning); a merged bump publishes a Codex build, never a pkg. `build/check-rust-pin.sh` refuses a pin whose upstream version is older than Codex's `rust-toolchain.toml` channel (`1.95.0`); a newer one builds it | Rust compiler, Cargo, and target support for `x86_64-apple-darwin` on 10.9 |
 | Mavergreen clang-22 (`clang22` on 10.9, `clang22-cross` on a modern Mac, and `libcxx22`) | `components/clang-22/version` (`22.1.1-mavericks.8`). Each pkg is verified against the release's `SHA256SUMS` by `build/fetch-clang-22.sh` and extracted under the build root, never installed. Renovate tracks it (`github-releases` on `Mavergreen/clang-22`, `-mavericks.N` versioning); a merged bump publishes a Codex build, never a pkg | C and C++ compiler for Codex's native dependencies (`CC_x86_64_apple_darwin`, `CXX_x86_64_apple_darwin`), and its `clang++` is the linker (`CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER`). `libcxx22` is the libc++ runtime that the build-time `protoc` runs on, natively only. It is never linked into the shipped binaries |
 | Mavergreen shipyard | `v1.0.487` or later: that release (shipyard commit `b3b9a91`) added the `codex-cli` registry row the updater and packaging need. The fetch scripts verify their downloads (Rust, clang-22 and `rusty_v8`) with `shipyard_fetch_verified`, called by its canonical name in `build/fetch-release-pkg.sh` and `build/fetch-rusty-v8.sh`, so they do not depend on the `mav_*` aliases. The workflows pin `Mavergreen/shipyard/...@v1`, which Renovate's github-actions manager tracks, and `@v1` moving publishes nothing by itself | SDK, build mode, source fetch, compatibility, and package helpers |
@@ -61,7 +61,7 @@ channel has its own backstop in `reconcile.yml` (see "Releasing").
 ## No repackage-on-ingredient-bump caller here
 
 The pkg bakes in no build ingredient: it carries no Codex binary, so `components/codex/version`,
-`build/codex-revision`, `components/rust/version`, `components/clang-22/version` and `patches/` are
+`components/rust/version`, `components/clang-22/version` and `patches/` are
 ingredients of the Codex builds alone, as is `packaging/build-codex-package.sh`, which lays out each
 build's tarball. A merged change to any of them publishes a build through `builds.yml`'s own push
 filter, and a caller would only dispatch a pkg release that changes nothing. The pkg's other
@@ -175,7 +175,7 @@ prints for the metadata file's bytes; the installer refuses metadata whose signa
 verify, and the sha256 inside then vouches for the tarball.
 
 `build/build-id.sh` decides each build's identity and whether to publish it. The build state is a
-sha256 over, in order, `components/codex/version`, `build/codex-revision`, `components/rust/version`,
+sha256 over, in order, `components/codex/version`, `components/rust/version`,
 `components/clang-22/version`, every `patches/*.patch` in `LC_ALL=C` order, and
 `packaging/build-codex-package.sh`, which decides what each tarball holds. A run publishes only
 when that state differs from the newest build of the same Codex version on the channel, and the
@@ -217,10 +217,10 @@ section 4(b)); `patches/README.md` says what each patch changes.
 The binaries also contain open-source dependencies under their own licenses, listed in Codex's
 pinned [`codex-rs/Cargo.lock`](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/Cargo.lock).
 No third-party notices file is shipped, which matches upstream's own releases (maintainer decision,
-2026-10-15). Codex's tree at `build/codex-revision` has none: besides `LICENSE` and `NOTICE` it has
+2026-10-15). Codex's tree at the pinned commit has none: besides `LICENSE` and `NOTICE` it has
 only `docs/license.md`, which points at `LICENSE`, and `codex-rs/deny.toml`, cargo-deny's
 configuration, which includes a license policy for its dependencies. The link names the commit, so
-a Codex bump updates it here along with `build/codex-revision`.
+a Codex bump updates it here along with the DIGEST in `components/codex/version`.
 
 ## Deviations
 
@@ -269,7 +269,7 @@ Two streams are released from this repo, and no ordinary commit to `main` publis
 
 | Stream | What | Version | Published by | Offered by |
 | --- | --- | --- | --- | --- |
-| Codex builds | one tarball per build, on the `codex-builds` channel | `<x.y.z>-mavericks.<N>` | `builds.yml`, when a push to `main` changes the build state (a merged bump of `components/codex/version`, `build/codex-revision`, `components/rust/version` or `components/clang-22/version`, or a merged change to `patches/*.patch` or `packaging/build-codex-package.sh`), or by dispatch | `codex` itself: the startup notice, `codex update`, and the daemon's background updates |
+| Codex builds | one tarball per build, on the `codex-builds` channel | `<x.y.z>-mavericks.<N>` | `builds.yml`, when a push to `main` changes the build state (a merged bump of `components/codex/version`, `components/rust/version` or `components/clang-22/version`, or a merged change to `patches/*.patch` or `packaging/build-codex-package.sh`), or by dispatch | `codex` itself: the startup notice, `codex update`, and the daemon's background updates |
 | The pkg | the launcher, the installer, `requires` and the updater | `YYYYMMDD.N` | `release.yml`, by dispatch only | Sparkle |
 
 A packaging-only release (a new `.N` of `UPSTREAM_VERSION`'s date, or a new date after bumping it):
@@ -298,19 +298,19 @@ by hand:
 Then the first pkg, by the `local_release` dispatch above (shipyard's nightly backstop may dispatch
 `release.yml` as well); its `on-mavericks` holds it back until the build is on the channel.
 
-**Bumping Codex takes two edits, and only one is automatic.** The family has a convention for a tag
-pinned together with its commit (Renovate's `git-refs`/`currentDigest`, as in porthole's `SKALIBS_REF`
-and recaulk's `components/macports-legacy-support/version`), but it pins both in one file. Here the
-tag is `components/codex/version`, and the commit is `build/codex-revision`, which scripts and tests
-read as a bare SHA. Renovate bumps `components/codex/version` alone, so the gap is guarded rather
-than closed: `build/check-upstream-pin.sh --remote` is the first step after install in `builds.yml`,
-and fails the PR before anything is built, printing the commit that `rust-v<version>` points at and
-naming `build/codex-revision`. Until that edit is made on the Renovate branch (with `patches/`
-refreshed if they no longer apply), the PR stays red and does not automerge. The same step refuses
-a prerelease or otherwise non-`x.y.z` version: `0.162.0-alpha.1-mavericks.1` has no order the
-update check can compare, so the form is unsupported rather than mapped. Follow-up: one file holding
-both (`<sha> # <version>`, with a second manager on the version for the same dependency) would close
-the gap; it needs the readers updated and shipyard's convention confirmed for two files.
+**A Codex bump is one automatic Renovate PR.** `components/codex/version` pins the tag with its
+commit, as the family does (`REPO`, `REF`, `DIGEST`, like recaulk's
+`components/macports-legacy-support/version`), and Renovate's `git-refs` moves REF and DIGEST
+together, writing the commit an annotated tag points at (measured with Renovate 44.181.3 on
+2026-10-24: `rust-v0.164.0` gave its commit `6aaac69`, not the tag object `fe3b294`; Renovate 41
+wrote the tag object). Every script reads the pin through `build/codex-pin.sh`, which prints the
+version, tag, commit or repository and refuses a malformed pin. `build/check-upstream-pin.sh
+--remote`, the first step after install in `builds.yml`, fails the PR before anything is built if
+DIGEST is not the commit REF points at, naming that commit: a moved tag or a hand edit of one line.
+A bump whose patches no longer apply fails the build, and the PR stays red until `patches/` is
+refreshed on its branch. The pin refuses a prerelease or otherwise non-`x.y.z` tag:
+`0.162.0-alpha.1-mavericks.1` has no order the update check can compare, so the form is
+unsupported rather than mapped.
 
 `builds.yml` has a `codex-build` job on `macos-26` (the upstream-pin check, the build identity and
 publish decision, the cross build, the updater, the compat guard tests, the repo tests, the

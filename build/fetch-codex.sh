@@ -6,21 +6,17 @@ MAVERICKS_BUILD_DIR=$HERE
 export MAVERICKS_BUILD_DIR
 . "$HERE/lib.sh"
 
-CODEX_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/codex/version")
-REVISION=$(tr -d '[:space:]' < "$HERE/codex-revision")
+CODEX_VERSION=$(sh "$HERE/codex-pin.sh" version)
+CODEX_TAG=$(sh "$HERE/codex-pin.sh" tag)
+REVISION=$(sh "$HERE/codex-pin.sh" revision)
 BUILD_ROOT=$(mavericks_build_root)
 DEST="$BUILD_ROOT/codex-src"
 
-case "$REVISION" in
-  ''|*[!0-9a-f]*) echo "fetch-codex: invalid codex-revision" >&2; exit 2 ;;
-esac
-[ "${#REVISION}" -eq 40 ] || { echo "fetch-codex: codex-revision must be a full commit SHA" >&2; exit 2; }
-
-CODEX_REPOSITORY=${CODEX_REPOSITORY:-https://github.com/openai/codex.git}
+CODEX_REPOSITORY=${CODEX_REPOSITORY:-$(sh "$HERE/codex-pin.sh" repository)}
 sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
-  "$CODEX_REPOSITORY" "rust-v$CODEX_VERSION" "$REVISION" "$DEST"
+  "$CODEX_REPOSITORY" "$CODEX_TAG" "$REVISION" "$DEST"
 [ "$(git -C "$DEST" rev-parse HEAD)" = "$REVISION" ] || {
-  echo "fetch-codex: checkout does not match build/codex-revision" >&2; exit 1;
+  echo "fetch-codex: checkout is not the DIGEST of components/codex/version" >&2; exit 1;
 }
 
 # spec: tests/build-inputs.bats "fetch reuses its own prepared checkout without touching it" -- a
@@ -31,8 +27,7 @@ sh "$SHIPYARD_SCRIPTS/clone_pinned.sh" \
 STAMP="$DEST/.git/mavergreen-prepared"
 KEEP=
 inputs_id() {
-  cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/components/codex/version" \
-    "$HERE/codex-revision" | shasum -a 256 | awk '{ print $1 }'
+  cat "$MAVERICKS_ROOT/patches"/*.patch "$HERE/fetch-codex.sh" "$MAVERICKS_ROOT/components/codex/version" | shasum -a 256 | awk '{ print $1 }'
 }
 tree_status() { git -C "$DEST" status --porcelain --ignored --untracked-files=all; }
 tree_id() { { tree_status; git -C "$DEST" diff HEAD; } | shasum -a 256 | awk '{ print $1 }'; }

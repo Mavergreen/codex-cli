@@ -11,7 +11,7 @@ setup() {
   cp -R "$PRODUCT_ROOT/build" "$PRODUCT_ROOT/components" "$PRODUCT_ROOT/patches" "$product/"
   mkdir -p "$product/packaging"
   cp "$PRODUCT_ROOT/packaging/build-codex-package.sh" "$product/packaging/"
-  version=$(tr -d '[:space:]' < "$product/components/codex/version")
+  version=$(sh "$product/build/codex-pin.sh" version)
   export CODEX_BUILDS_ASSET_LIST="$BATS_TEST_TMPDIR/assets"
   export CODEX_BUILDS_JSON_DIR="$BATS_TEST_TMPDIR/json"
   mkdir -p "$CODEX_BUILDS_JSON_DIR"
@@ -19,7 +19,7 @@ setup() {
 }
 
 state_of() {
-  (cd "$product" && cat components/codex/version build/codex-revision components/rust/version \
+  (cd "$product" && cat components/codex/version components/rust/version \
     components/clang-22/version patches/*.patch packaging/build-codex-package.sh | shasum -a 256 | awk '{print $1}')
 }
 
@@ -99,8 +99,8 @@ STATE=$(state_of)
 PUBLISH=yes" ]
 }
 
-@test "STATE is the digest of the four pins, every patch in C glob order, then the tarball's layout script" {
-  expected=$(cd "$PRODUCT_ROOT" && cat components/codex/version build/codex-revision components/rust/version \
+@test "STATE is the digest of the three pins, every patch in C glob order, then the tarball's layout script" {
+  expected=$(cd "$PRODUCT_ROOT" && cat components/codex/version components/rust/version \
     components/clang-22/version patches/*.patch packaging/build-codex-package.sh | shasum -a 256 | awk '{print $1}')
   run_id auto
   [ "$status" -eq 0 ]
@@ -153,7 +153,7 @@ PUBLISH=yes" ]
 }
 
 @test "a missing pin file stops the run and is named" {
-  for pin in build/codex-revision components/rust/version components/clang-22/version packaging/build-codex-package.sh; do
+  for pin in components/codex/version components/rust/version components/clang-22/version packaging/build-codex-package.sh; do
     mv "$product/$pin" "$product/$pin.away"
     run_id auto
     [ "$status" -ne 0 ]

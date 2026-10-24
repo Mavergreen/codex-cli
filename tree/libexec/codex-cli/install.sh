@@ -3,7 +3,7 @@
 # Mavergreen's Codex installer, derived from OpenAI's scripts/install/install.sh.
 #
 # Source: https://github.com/openai/codex, scripts/install/install.sh at revision
-#   979011409de0a60b52f179721948e65531d26144 (the revision in build/codex-revision).
+#   979011409de0a60b52f179721948e65531d26144 (the DIGEST in components/codex/version).
 # License: Apache-2.0; the LICENSE and NOTICE of Codex travel with it in share/doc/codex-cli/.
 #
 # Changes from upstream:

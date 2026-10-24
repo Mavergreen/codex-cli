@@ -6,7 +6,7 @@ setup() {
   export SHIPYARD_SCRIPTS="${SHIPYARD_SCRIPTS:-/home/schmonz/Documents/trees/mavergreen-shipyard/scripts}"
   export MAVERICKS_BUILD_ROOT="$BATS_TEST_TMPDIR/local-build"
   mkdir -p "$MAVERICKS_BUILD_ROOT/codex-native" "$MAVERICKS_BUILD_ROOT/codex-cross"
-  source_revision=$(cat "$PRODUCT_ROOT/build/codex-revision")
+  source_revision=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" revision)
   rust_version=$(cat "$PRODUCT_ROOT/components/rust/version")
   clang_version=$(cat "$PRODUCT_ROOT/components/clang-22/version")
   printf 'mode=native\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_version=%s\nrusty_v8_version=150.4.0\nclang_version=%s\nprotoc_runtime=libcxx22-%s\nsdk=MacOSX10.9.sdk\n' \

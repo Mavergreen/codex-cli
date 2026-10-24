@@ -20,7 +20,7 @@ done
 for f in codex-voice-host codex-resources; do
   [ ! -e "$OUT_IN/$f" ] || { echo "build-codex-package: $OUT_IN/$f: voice is not packaged" >&2; exit 1; }
 done
-VER=$(tr -d '[:space:]' < "$REPO/components/codex/version")
+VER=$(sh "$REPO/build/codex-pin.sh" version)
 printf '%s\n' "$ID" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-mavericks\.[1-9][0-9]*$' \
   || { echo "build-codex-package: BUILD-ID $ID is not <x.y.z>-mavericks.<N>, N >= 1" >&2; exit 1; }
 [ "${ID%-mavericks.*}" = "$VER" ] \

@@ -69,7 +69,7 @@ rust_version=$(field rust_version)
 rusty_v8_version=$(field rusty_v8_version)
 [ "$target" = "$EXPECTED_TARGET" ] || { echo "verify-artifact: target mismatch ($target)" >&2; exit 1; }
 [ "$deployment_target" = 10.9 ] || { echo "verify-artifact: deployment target must be 10.9" >&2; exit 1; }
-[ "$source_revision" = "$(tr -d '[:space:]' < "$HERE/codex-revision")" ] || {
+[ "$source_revision" = "$(sh "$HERE/codex-pin.sh" revision)" ] || {
   echo "verify-artifact: Codex source revision mismatch" >&2; exit 1;
 }
 [ "$rust_version" = "$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/rust/version")" ] || {

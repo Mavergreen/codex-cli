@@ -48,8 +48,8 @@ commit before they were arranged into `patches/`.
 ## The package's Codex installer
 
 `tree/libexec/codex-cli/install.sh` is derived from OpenAI's `scripts/install/install.sh`, from
-`openai/codex` at revision `979011409de0a60b52f179721948e65531d26144` (the one in
-`build/codex-revision`). Codex is Apache-2.0; its `LICENSE` and `NOTICE`, copied from that revision,
+`openai/codex` at revision `979011409de0a60b52f179721948e65531d26144` (the DIGEST in
+`components/codex/version`). Codex is Apache-2.0; its `LICENSE` and `NOTICE`, copied from that revision,
 travel with the installer in `tree/share/doc/codex-cli/`. The file's header lists the same changes:
 
 1. release metadata and the package come from Mavergreen's builds channel (`CODEX_BUILDS_URL`), not

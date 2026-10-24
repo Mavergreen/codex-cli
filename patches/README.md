@@ -1,7 +1,7 @@
 # Patches
 
-`build/fetch-codex.sh` applies every `*.patch` here, in lexical order, to the Codex commit in
-`build/codex-revision`. Each patch also applies on its own to that commit, because `git apply
+`build/fetch-codex.sh` applies every `*.patch` here, in lexical order, to the Codex commit
+pinned in `components/codex/version`. Each patch also applies on its own to that commit, because `git apply
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
 rather than OpenAI's. Patches 0004 to 0007 are Wowfunhappy's; `PROVENANCE.md` says where each came
@@ -63,7 +63,7 @@ at the end says what each did and why it went.
   daemon socket is a broader deny, so the daemon boundary still holds.
 - **When to reconsider:** when the floor rises past 10.9, or upstream guards these rules itself.
 - **Trimmed:** Wowfunhappy's runtime patch also changed `codex-rs/cli/src/debug_sandbox.rs` to
-  deny TIOCSTI by number. That section is dropped. At `build/codex-revision`, `debug_sandbox.rs`
+  deny TIOCSTI by number. That section is dropped. At the pinned commit, `debug_sandbox.rs`
   already writes the deny with the numeric `libc::TIOCSTI`, and the old hunk no longer applies.
 
 ## 0008-pty-addchdir-runtime-lookup.patch

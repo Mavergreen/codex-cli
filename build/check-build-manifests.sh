@@ -28,7 +28,7 @@ field() { sed -n "s/^$1=//p" "$2"; }
 # spec: --cross-only -- with no native manifest the cross manifest is its own reference for the
 #       fields that are only compared between modes
 if [ "$CROSS_ONLY" = yes ]; then NATIVE=$CROSS; fi
-EXPECTED_SOURCE=$(tr -d '[:space:]' < "$HERE/codex-revision")
+EXPECTED_SOURCE=$(sh "$HERE/codex-pin.sh" revision)
 EXPECTED_RUST=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/rust/version")
 EXPECTED_CLANG=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/clang-22/version")
 

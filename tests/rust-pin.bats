@@ -85,7 +85,7 @@ guard() {
 # pinned revision's history, and a clean checkout (CI's actions/checkout, a git archive copy) lacks
 # it. Skip unless it holds the pinned revision; build-codex.sh runs check-rust-pin on the real fetch.
 need_codex_checkout() {
-  revision=$(cat "$PRODUCT_ROOT/build/codex-revision")
+  revision=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" revision)
   git -C "$PRODUCT_ROOT/codex" cat-file -e "$revision^{commit}" 2>/dev/null ||
     skip "codex/ is not a git checkout holding the pinned revision $revision"
 }
@@ -93,7 +93,7 @@ need_codex_checkout() {
 @test "the committed pin builds the pinned Codex revision's channel" {
   need_codex_checkout
   git -C "$PRODUCT_ROOT/codex" show \
-    "$(cat "$PRODUCT_ROOT/build/codex-revision"):codex-rs/rust-toolchain.toml" > "$toolchain"
+    "$(sh "$PRODUCT_ROOT/build/codex-pin.sh" revision):codex-rs/rust-toolchain.toml" > "$toolchain"
   run sh "$PRODUCT_ROOT/build/check-rust-pin.sh" "$source_dir"
   [ "$status" -eq 0 ]
   [[ "$output" == *"(components/rust/version $(cat "$PRODUCT_ROOT/components/rust/version")) builds channel "* ]] || false

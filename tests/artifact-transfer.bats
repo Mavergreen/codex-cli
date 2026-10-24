@@ -12,7 +12,7 @@ setup() {
   export BUILD_MANIFEST="$MAVERICKS_BUILD_ROOT/input/build-manifest"
   export ARCHIVE="$MAVERICKS_BUILD_ROOT/input/codex.tar"
   export CHECKSUM="$ARCHIVE.sha256"
-  make_manifest x86_64-apple-darwin 10.9 "$(cat "$PRODUCT_ROOT/build/codex-revision")" \
+  make_manifest x86_64-apple-darwin 10.9 "$(sh "$PRODUCT_ROOT/build/codex-pin.sh" revision)" \
     "$(cat "$PRODUCT_ROOT/components/rust/version")"
   make_binary x86_64 "$CODEX_ARTIFACT"
   make_binary x86_64 "$HOST_ARTIFACT"

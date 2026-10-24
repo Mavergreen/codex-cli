@@ -15,7 +15,7 @@ setup() {
 # Otherwise the guard prepares its own tree from the gitignored codex/ inspection checkout, and skips
 # where that is missing, exactly where tests/build-inputs.bats's fetch tests skip.
 source_to_scan() {
-  revision=$(cat "$MAVERGREEN_ROOT/build/codex-revision")
+  revision=$(sh "$MAVERGREEN_ROOT/build/codex-pin.sh" revision)
   if [ -n "${CODEX_PREPARED_SRC:-}" ]; then
     [ -d "$CODEX_PREPARED_SRC/codex-rs" ] || {
       echo "CODEX_PREPARED_SRC=$CODEX_PREPARED_SRC holds no codex-rs/" >&2

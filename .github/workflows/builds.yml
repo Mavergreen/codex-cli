@@ -9,7 +9,6 @@ on:
     branches: [main]
     paths:
       - components/codex/version
-      - build/codex-revision
       - components/rust/version
       - components/clang-22/version
       - patches/**
@@ -62,7 +61,7 @@ jobs:
       - name: Record the pre-build tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
 
-      # A Renovate bump of components/codex/version alone fails here, naming the commit build/codex-revision needs,
+      # A Codex pin whose DIGEST is not its REF tag's commit fails here, naming the commit,
       # before anything is built, signed or published.
       - name: The upstream pin is a stable release and its commit
         run: sh build/check-upstream-pin.sh --remote

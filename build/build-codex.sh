@@ -45,14 +45,14 @@ if [ -s "$MAVERICKS_ROOT/BUILD_ID" ]; then
 elif [ -s "$MAVERICKS_ROOT/VERSION" ]; then
   VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/VERSION")
 else
-  VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/codex/version")-mavericks.0
+  VERSION=$(sh "$HERE/codex-pin.sh" version)-mavericks.0
   echo "build-codex: no BUILD_ID: a dev build, $VERSION, never publishable" >&2
 fi
 [ -n "$VERSION" ] || { echo "build-codex: no version: BUILD_ID or VERSION is empty" >&2; exit 1; }
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \
-    "$(cat "$HERE/codex-revision")" "$RUST_PIN" "$RUSTY_V8_VERSION"
+    "$(sh "$HERE/codex-pin.sh" revision)" "$RUST_PIN" "$RUSTY_V8_VERSION"
   printf 'clang_version=%s\nprotoc_runtime=%s\nsdk=%s\n' "$CLANG_VERSION" "$PROTOC_RUNTIME" "${SDK##*/}"
 } > "$ARTIFACT/build-manifest"
 printf '%s\n' "$ARTIFACT"

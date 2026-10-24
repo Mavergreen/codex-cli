@@ -9,7 +9,7 @@ set -eu
 . "$(dirname "$0")/lib/harness.sh"
 h_setup
 BP="$H_REPO/packaging/build-codex-package.sh"
-VER="$(tr -d '[:space:]' < "$H_REPO/components/codex/version")"
+VER="$(sh "$H_REPO/build/codex-pin.sh" version)"
 ID="$VER-mavericks.3"
 
 A="$H/artifact"
