@@ -114,7 +114,7 @@ fi
 # verify_sig DIR FILE: DIR/FILE.sig verifies over DIR/FILE against $VERIFY_WITH. OpenSSL takes an
 # Ed25519 public key as a SubjectPublicKeyInfo: this fixed 12-byte DER prefix, then the raw 32 bytes.
 verify_sig() {
-  tr -d '[:space:]' < "$1/$2.sig" | openssl base64 -d -A > "$SCRATCH/sig" ||
+  tr -d '[:space:]' < "$1/$2.sig" | openssl enc -d -base64 -A > "$SCRATCH/sig" ||
     die "$2.sig is not base64"
   openssl pkeyutl -verify -pubin -inkey "$SCRATCH/key.der" -keyform DER -rawin \
     -in "$1/$2" -sigfile "$SCRATCH/sig" > /dev/null 2>&1 ||
@@ -124,7 +124,7 @@ if [ -n "$VERIFY_WITH" ]; then
   [ -f "$VERIFY_WITH" ] || die "no public key at $VERIFY_WITH"
   command -v openssl > /dev/null 2>&1 || die "--verify-with needs openssl on PATH"
   { printf '\060\052\060\005\006\003\053\145\160\003\041\000'
-    tr -d '[:space:]' < "$VERIFY_WITH" | openssl base64 -d -A; } > "$SCRATCH/key.der" ||
+    tr -d '[:space:]' < "$VERIFY_WITH" | openssl enc -d -base64 -A; } > "$SCRATCH/key.der" ||
     die "cannot read the public key $VERIFY_WITH"
   [ "$(wc -c < "$SCRATCH/key.der" | tr -d ' ')" -eq 44 ] ||
     die "$VERIFY_WITH is not a base64 raw Ed25519 public key (32 bytes)"
