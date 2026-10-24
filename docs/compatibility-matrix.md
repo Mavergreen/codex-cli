@@ -218,3 +218,28 @@ current series.
 | A request through a proxy | pending |
 | An OTLP trace exporter against a TLS 1.3-only local server | pending |
 
+
+## Voice, a first native probe
+
+Not shipped; this is how far `codex-voice-host` got on ultimate-hat on 2026-10-24, at the pinned
+Codex commit, in a debug build (`build/cargo-dev.sh`-style environment, scratch changes only).
+Upstream builds macOS voice with Bazel for macOS 14, and the helper needs a native runtime: GLib
+2.88, GStreamer 1.28.6 (core, base, good) and opus 1.6.1, with seven plugins (`app`,
+`audioconvert`, `audioresample`, `coreelements`, `opus`, `rtp`, `rtpmanager`). Devices go through
+cpal and CoreAudio, not a GStreamer plugin.
+
+| Symptom | Cause | Fix tried | Source |
+|---|---|---|---|
+| `glib-sys`, `gobject-sys`, `gio-sys` and four `gstreamer-*-sys` build scripts: `The system library glib-2.0 ... was not found` | the helper links GLib and GStreamer through pkg-config, which `codex-build-env.sh` sets to `/usr/bin/false` | pkg-config pointed at a scratch GStreamer prefix and pkgsrc's GLib 2.88.1 | reproduced |
+| `opusic-sys`: `libc++abi: terminating due to uncaught exception of type std::bad_cast`, cmake killed by SIGABRT after "Generating done" | the native build runs cargo with clang-22's libc++ in `DYLD_INSERT_LIBRARIES` and `DYLD_FORCE_FLAT_NAMESPACE`, which every child inherits; pkgsrc's `cmake` aborts under it. Replaying the same cmake command without those variables succeeds | a `CMAKE` wrapper that unsets the three `DYLD_*` variables; `opusic-sys` then builds | reproduced |
+| GStreamer 1.28.6 `gstmacos.m`: `use of undeclared identifier 'NSEventTypeApplicationDefined'` and `'NSEventSubtypeApplicationActivated'` | the 10.12 SDK's names for constants the 10.9 SDK calls `NSApplicationDefined` and `NSApplicationActivatedEventType` | renamed to the 10.9 names; core, base and good then build, all seven plugins included | reproduced |
+| GStreamer: `gi18n-lib.h: 'libintl.h' file not found` | pkgsrc's GLib expects pkgsrc gettext's `include/gettext`; upstream's runtime uses proxy-libintl instead | `CFLAGS=-I/opt/pkg/include/gettext` (scratch only) | reproduced, pkgsrc-specific |
+| final link: `undefined symbol: AudioComponentFindNext`, `AudioUnitRender`, `AudioOutputUnitStart` and seven more `AudioUnit*`/`AudioComponent*` | on 10.9 these are in `AudioUnit.framework`; newer SDKs export them from `AudioToolbox`, which is all `objc2-audio-toolbox` links | `-framework AudioUnit` | reproduced |
+| final link: `undefined symbol: AudioHardwareCreateProcessTap`, `AudioHardwareDestroyProcessTap`, `AudioHardwareCreateAggregateDevice`, `AudioHardwareDestroyAggregateDevice` | cpal 0.18.2's loopback (system-audio capture) device; 10.9's CoreAudio has none of them (process taps are macOS 14.2) | `-Wl,-U` for the four, so they resolve at load time to nothing. The helper opens only the default microphone and speaker, never a loopback device, but a real fix compiles cpal's loopback out | reproduced |
+| none: the helper links, `codex-voice-host --build-commit` prints `dev` on 10.9, and shipyard's compat guard reports it clean | | | measured |
+
+Not yet measured: the helper's lifecycle against a prepared runtime (upstream's `packaged_runtime`
+test needs a runtime prepared by `third_party/voice/build_native.py` and
+`prepare_built_runtime.py`, which require Python 3.12 and their own build receipts), real capture and
+playback, the TUI's voice path, a cross build, and packaging the runtime under
+`codex-resources/voice`.

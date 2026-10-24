@@ -241,8 +241,9 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
   alone.
 - **No voice.** No build has `codex-voice-host` or `codex-resources/voice`, so Codex's voice
   features are unsupported. `packaging/build-codex-package.sh` refuses an artifact that has either.
-  Voice is deferred, not dropped: nobody has yet tried building `codex-voice-host` on 10.9, so what
-  it needs is unmeasured.
+  Voice is deferred, not dropped: a first native probe linked `codex-voice-host` on 10.9 with
+  scratch changes (`docs/compatibility-matrix.md`, "Voice, a first native probe"), and its runtime
+  and packaging are not yet built here.
 - **No `shell_zsh_fork`.** Upstream's macOS package carries OpenAI's prebuilt zsh fork in
   `codex-resources/` for this feature, which is under development and off by default. It is
   OpenAI's binary, so no build carries it, and the feature is unsupported.
