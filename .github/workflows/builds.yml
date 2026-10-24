@@ -166,13 +166,13 @@ jobs:
             --min-pkg "$minpkg" --state "$STATE" > "$nx/codex-build-$NEXT.json"
           ls -l "$ch" "$nx"
 
-      - name: Fetch the signer (Mavergreen's ed25519)
+      - name: Fetch the signer (Mavergreen's ed25519, as pinned)
         if: steps.id.outputs.publish == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          tag="$(gh release view -R Mavergreen/ed25519 --json tagName -q .tagName)"
+          tag="$(tr -d '[:space:]' < components/ed25519/version)"
           dest="$(sh "$SHIPYARD_SCRIPTS/fetch_product_pkg.sh" ed25519 "$tag" "$RUNNER_TEMP/ed25519")"
           [ -x "$dest/bin/ed25519-sign" ] && [ -x "$dest/bin/ed25519-verify" ] \
             || { echo "::error::ed25519 $tag has no bin/ed25519-sign and bin/ed25519-verify"; exit 1; }
@@ -263,21 +263,12 @@ jobs:
         with:
           name: codex-build-vm
           path: vm
-      - name: Fetch the rg and ed25519 packages codex-cli requires
+      - name: Fetch the pinned rg and ed25519 packages codex-cli requires
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          for p in rg ed25519; do
-            dl="deps/$p"
-            gh release download -R "Mavergreen/$p" --pattern '*.pkg' --pattern SHA256SUMS --dir "$dl"
-            set -- "$dl"/*.pkg
-            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "::error::expected one .pkg in Mavergreen/$p's latest release, got: $*"; exit 1; }
-            name="$(basename "$1")"
-            sum="$(awk -v f="$name" '$2 == f' "$dl/SHA256SUMS")"
-            [ -n "$sum" ] || { echo "::error::$name is not in that release's SHA256SUMS"; exit 1; }
-            ( cd "$dl" && printf '%s\n' "$sum" | sha256sum -c - )
-          done
+          for p in rg ed25519; do sh build/fetch-required-pkg.sh "$p" deps; done
       - uses: Mavergreen/mavericks-vm@v1
         env:
           CX_ID: ${{ needs.codex-build.outputs.id }}

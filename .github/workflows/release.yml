@@ -210,21 +210,12 @@ jobs:
         with:
           name: codex-cli
           path: dist
-      - name: Fetch the rg and ed25519 packages codex-cli requires
+      - name: Fetch the pinned rg and ed25519 packages codex-cli requires
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          for p in rg ed25519; do
-            dl="deps/$p"
-            gh release download -R "Mavergreen/$p" --pattern '*.pkg' --pattern SHA256SUMS --dir "$dl"
-            set -- "$dl"/*.pkg
-            [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "::error::expected one .pkg in Mavergreen/$p's latest release, got: $*"; exit 1; }
-            name="$(basename "$1")"
-            sum="$(awk -v f="$name" '$2 == f' "$dl/SHA256SUMS")"
-            [ -n "$sum" ] || { echo "::error::$name is not in that release's SHA256SUMS"; exit 1; }
-            ( cd "$dl" && printf '%s\n' "$sum" | sha256sum -c - )
-          done
+          for p in rg ed25519; do sh build/fetch-required-pkg.sh "$p" deps; done
       - uses: Mavergreen/mavericks-vm@v1
         with:
           image-key: ${{ secrets.MAVERICKS_VM_KEY }}

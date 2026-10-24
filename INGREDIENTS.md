@@ -24,7 +24,11 @@ Not ingredients: `rg` and `ed25519` are required at install and run time
 (`tree/share/codex-cli/requires`, checked by the pkg's preinstall and by the launcher), not shipped
 in this package. Each build's `codex-path/rg` is a two-line script that runs the `rg` package's
 `/usr/local/mavergreen/rg/bin/rg`, so no other `rg` is fetched or pinned, and the installer checks
-each build's signature with the `ed25519` package's `ed25519-verify`.
+each build's signature with the `ed25519` package's `ed25519-verify`. What CI tests against is
+pinned all the same: the 10.9 smokes install, and `builds.yml` signs with, the releases named in
+`components/rg/version` and `components/ed25519/version`, which `build/fetch-required-pkg.sh` fetches
+and checks against that release's `SHA256SUMS` and Renovate's `github-releases` moves. The pins say
+what was tested, not what a user needs: `requires` asks for the packages, at any version.
 
 Codex is fetched into a host-local build root with shipyard's `clone_pinned.sh`. The exact Codex
 commit is verified before committed `patches/*.patch` files are applied. `patches/README.md` says
@@ -260,6 +264,7 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
 
 - scheme: the package is its own upstream (Codex reaches users through the builds channel, pinned in components/codex/version), so it versions itself by date as YYYYMMDD.N with no -mavericks.N axis
 - builds-channel: Codex builds are signed and published to this repo's codex-builds release by build/channel-publish.sh from .github/workflows/builds.yml, not by shipyard, until shipyard has machinery for a builds channel
+- unpinned:build/channel-publish.sh: before it publishes a build whose metadata names a min-pkg, it reads this repo's own Latest release, because the check is that the pkg the build needs is already offered to users, which only the newest release can say; a pin would be the very staleness it guards against. Reconsider if shipyard's builds-channel machinery takes over that check
 
 The items under "Deviations" are product facts, not exceptions to a family check.
 
@@ -317,7 +322,7 @@ publish decision, the cross build, the updater, the compat guard tests, the repo
 tarball and its metadata, a second tarball one build number later, signing with the family key, a
 check that the signature verifies against the key the pkg ships, and a test pkg), `on-mavericks`,
 `scan` (key-log scan of the job that held the key) and `publish`, which needs all three and holds
-no key. `on-mavericks` installs the `rg` and `ed25519` packages and the test pkg in a real 10.9 VM,
+no key. `on-mavericks` installs the pinned `rg` and `ed25519` packages and the test pkg in a real 10.9 VM,
 points the launcher at the staged channel with `CODEX_BUILDS_URL`, and checks that the first run
 seeds the build, `codex --version`, `--help`, `codex-code-mode-host --help`, that the host is not
 exported, `codex sandbox -- /usr/bin/true`, that a daemon start seeds the daemon's own package

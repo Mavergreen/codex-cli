@@ -28,6 +28,24 @@
       "depNameTemplate": "Mavergreen/clang-22",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-mavericks\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The rg package the 10.9 smokes install beside codex-cli's: a Mavergreen/rg release tag, bare.",
+      "managerFilePatterns": ["/^components/rg/version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "Mavergreen/rg",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-mavericks\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The ed25519 package: the signer builds.yml uses and the smokes install. A Mavergreen/ed25519 release tag, bare; its upstream version is a date, YYYYMMDD.",
+      "managerFilePatterns": ["/^components/ed25519/version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "Mavergreen/ed25519",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "regex:^(?<major>\\d{8})-mavericks\\.(?<minor>\\d+)$"
     }
   ]
 }
