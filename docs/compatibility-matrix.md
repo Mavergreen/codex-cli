@@ -94,8 +94,8 @@ throwaway key and served from a `file://` channel (`CODEX_BUILDS_URL`), with a s
 
 ### Pending
 
-These checks wait for the AquaTransport release with the TLS fixes Codex's native-tls needs. Each
-runs natively on ultimate-hat with the current series, with a `file://` builds channel, builds of
+These checks need AquaTransport 2026.10.25 or newer, the release with the TLS fixes Codex's
+native-tls needs. Each runs natively on ultimate-hat with the current series, with a `file://` builds channel, builds of
 one Codex version (`-mavericks.1`, `.2`, and a `.3` that needs a newer pkg) signed with a throwaway
 key that the test pkg ships, and a scratch `HOME` and `CODEX_HOME`.
 
@@ -198,20 +198,20 @@ on 10.9.
 | The two `codex-otel` OTLP tests above, without 0001, run natively on ultimate-hat (10.9), 50 times each, one at a time with `build/cargo-dev.sh test -p codex-otel --test tests -- <name>`, 2026-10-24 | no failures: `…sends_traces_to_collector_with_bounded_shutdown_in_tokio_runtime` 50 of 50, `…times_out_when_collector_stalls_during_bounded_shutdown` 50 of 50. Both talk plain HTTP to a loopback collector, so AquaTransport is not involved. The earlier failures do not recur without 0001 |
 | `cargo fmt` with upstream's options, and `cargo clippy -p codex-http-client -p codex-otel -p codex-responses-api-proxy --tests` | clean |
 
-### TLS, pending the AquaTransport release
+### TLS with native-tls
 
 Patch 0001 is dropped, so Codex's HTTPS clients use native-tls, which goes through AquaTransport.
 WebSockets (`codex-websocket-client` always uses rustls) and the OTLP gRPC exporter still verify
-through rustls, with roots `rustls-native-certs` reads from the 10.9 keychain. These checks wait for
-the AquaTransport release with the TLS fixes Codex's native-tls needs, and are run natively on
-ultimate-hat with a scratch `CODEX_HOME`. The measurements above that name 0001 do not apply to the
+through rustls, with roots `rustls-native-certs` reads from the 10.9 keychain. These checks need
+AquaTransport 2026.10.25, the first release with the TLS fixes Codex's native-tls needs, and are run
+natively on ultimate-hat with a scratch `CODEX_HOME`. The measurements above that name 0001 do not apply to the
 current series.
 
 | Check | Result |
 |---|---|
 | The six `codex-http-client` tests that 0001 ignored (the native-TLS-to-rustls retry), run alone with `build/cargo-dev.sh test -p codex-http-client --lib -- <names>` | one passes (`request_failures_classify_real_untrusted_certificate_handshakes`). Five fail on 10.9 with AquaTransport 2026.09.21 and also with AquaTransport's TLS fix inserted: `retries_a_native_tls_protocol_failure_once_with_rustls`, `retries_a_native_tls_failure_after_another_request_caches_rustls`, `successful_rustls_fallback_replays_the_request_and_reuses_the_destination`, `retries_a_tls_protocol_failure_when_request_url_contains_certificate_markers` and `does_not_retry_a_non_replayable_streaming_request`. Each gets `Error { code: -9806, message: "connection closed via error" }` from native-tls, and Codex retries with rustls only on "bad protocol version". The cause is a second AquaTransport gap: `my_SSLHandshake` reports every handshake failure as errSSLClosedAbort (-9806), where stock Secure Transport gives -9836 for the protocol_version alert these tests send. With AquaTransport switched off for the test binary, all five pass. The failures are the tests' alone, and harmless on 10.9: the fallback they test exists because modern macOS's Secure Transport lacks TLS 1.3, and AquaTransport speaks TLS 1.0 to 1.3, so on 10.9 nothing needs it. They are not ignored; they pass once AquaTransport returns stock's codes |
-| The same five tests against the released AquaTransport | pending |
-| `codex-otel` and `codex-responses-api-proxy` tests, with their HTTPS clients on native-tls | pending |
+| The same six tests with AquaTransport 2026.10.25 installed, 2026-10-25 | all six pass |
+| `codex-otel` and `codex-responses-api-proxy` tests, with their HTTPS clients on native-tls, AquaTransport 2026.10.25 installed, 2026-10-25 | the proxy 10 of 10. `codex-otel` 74 of 74 with `-- --test-threads=1`, 1 ignored by upstream. Run in parallel, two `buffered_operations` tests fail with or without AquaTransport: they share global metrics state, which upstream's cargo-nextest, one process per test, never shares. Not a 10.9 effect |
 | `codex login --device-auth` on a clean `CODEX_HOME` | pending |
 | `codex exec` over HTTPS and WebSockets, with no reconnects and no fallback from WebSockets | pending |
 | A WebSocket turn on a 10.9 host without AquaTransport's ModernRootCertificates (rustls with the keychain's roots) | pending |

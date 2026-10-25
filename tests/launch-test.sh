@@ -18,7 +18,7 @@ LINK="$HOME/.local/bin/codex"
 
 mkdir -p "$T" "$MG/bin" "$H/links"
 cp -R "$H_REPO/tree/." "$T/"
-# the package's pin is unreleased until AquaTransport has the fix; these tests are not about it
+# a fixed AquaTransport pin, so these tests do not depend on the package's; they are not about it
 printf '2026.10.20\n' > "$T/share/codex-cli/aquatransport-min-version"
 CODEX_AQUATRANSPORT_VERSION=2026.10.20
 export CODEX_AQUATRANSPORT_VERSION
