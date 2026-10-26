@@ -233,7 +233,10 @@ jobs:
   # both the standalone install and the daemon to a staged second build. A publishing run's staged build carries the family key's signature, which the package's own key
   # checks; otherwise, and always for the second build, a key made in the guest signs, and the
   # installed package is made to trust it. No secrets reach this job but the VM image key.
+  # Its check name differs from release.yml's on-mavericks: main requires both, and GitHub matches
+  # required checks by name.
   on-mavericks:
+    name: builds-on-mavericks
     needs: [codex-build]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
