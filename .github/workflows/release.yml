@@ -121,6 +121,10 @@ jobs:
       - name: The package carries the launcher, the installer and the updater, and no Codex
         run: sh tests/package-test.sh "$PKG"
 
+      # the README's one-liner fetches it from the latest release, beside the pkg it installs
+      - name: The one-line installer
+        run: cp packaging/install.sh "$BUILD/dist/install.sh"
+
       - name: Release notes
         env:
           VER: ${{ steps.ver.outputs.ver }}
