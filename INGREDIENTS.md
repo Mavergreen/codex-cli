@@ -49,7 +49,7 @@ its package's `bin/`. The host links V8, so the build fetches OpenAI's prebuilt
 `rusty_v8` archive with `build/fetch-rusty-v8.sh` (the one declared non-Mavergreen input) and records
 `rusty_v8_version` in the build manifest. No build includes `codex-voice-host`, the
 native voice runtime, or `codex-resources/voice`; voice support is deferred. The native build on ultimate-hat was last run on 2026-10-17,
-in `MAVERICKS_BUILD_ROOT=/Users/schmonz/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Testing the
+in `MAVERICKS_BUILD_ROOT=$HOME/Library/Caches/mm-build` (macOS sweeps `$TMPDIR` nightly). Testing the
 current self-updating layout end to end on 10.9 waits for the AquaTransport release with the TLS fixes
 Codex needs: see `docs/compatibility-matrix.md`.
 
