@@ -2,7 +2,10 @@
 
 OpenAI `codex` for Mac OS X 10.9 Mavericks.
 
-## Updating
+Well, actually, it's just a script named `codex` that fetches and installs our latest 10.9 build.
 
-Codex's own update check is turned off, because the updates it offers wouldn't run on 10.9.
-Instead, like other Mavergreen products, this package's Sparkle updater offers updates to our latest 10.9 build.
+## How to use
+
+```sh
+curl -fsSL https://github.com/Mavergreen/codex-cli/releases/latest/download/install.sh | sh
+```
