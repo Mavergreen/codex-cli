@@ -40,11 +40,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # publish does not need on-mavericks while INGREDIENTS.md's on-target deviation stands;
-      # this fails once mavericks-vm@v1 no longer warrants it
-      - name: The on-target deviation still has its reason
-        run: sh build/check-on-target-exit.sh
-
       - name: Install mavericks-shipyard
         uses: Mavergreen/shipyard/.github/actions/install@v1
 
@@ -99,17 +94,6 @@ jobs:
           else
             sh build/check-aquatransport-pin.sh --allow-unreleased
           fi
-
-      # on-mavericks refuses a pkg while the channel names no build, or every first run would fail;
-      # while publish does not need on-mavericks, a publishing run refuses here instead
-      - name: The channel names a build
-        if: steps.ver.outputs.publish == 'yes'
-        run: |
-          set -eu
-          url=https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/latest.json
-          want="$(curl -fsSL --connect-timeout 20 --max-time 60 "$url" | sed -n 's/.*"mavergreen_build":"\([^"]*\)".*/\1/p')" || want=""
-          [ -n "$want" ] || { echo "::error::the codex-builds channel names no build at $url: publish a build before a pkg"; exit 1; }
-          echo "the channel's build is $want"
 
       # The pkg carries no Codex binary, so no Codex is built here and CMake registers no Codex guard
       # tests; the updater, the one compiled thing, is guarded as it is built.
@@ -283,8 +267,7 @@ jobs:
   # publish-release.yml creates the release with GitHub's default, so the pkg becomes the repo's
   # Latest; the codex-builds release is created with --latest=false and never takes it.
   publish:
-    # not on-mavericks, while INGREDIENTS.md's on-target deviation stands
-    needs: [build, scan]
+    needs: [build, scan, on-mavericks]
     if: needs.build.outputs.publish == 'yes'
     permissions:
       contents: write
