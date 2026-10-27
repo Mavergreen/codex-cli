@@ -53,12 +53,14 @@ EOF
   done
   # platform: DYLD_LIBRARY_PATH matches by leaf name, so the inserted libc++ also answers for 10.9's
   #           /usr/lib/libc++.1.dylib and must be a real one: 10.9's own, copied. A modern Mac keeps
-  #           its libc++ only in the dyld shared cache, but SIP strips DYLD_* from the protected
-  #           /usr/bin/env there, so a stand-in compiled by cc is never loaded.
+  #           its libc++ only in the dyld shared cache, so the stand-in is compiled by cc. Where SIP
+  #           is on, dyld ignores DYLD_* in the protected /usr/bin/env and it is never loaded; on
+  #           GitHub's macOS runners SIP is off, and it is inserted into env and mkdir, which are
+  #           arm64e, and into any arm64 tool, so it carries both slices.
   printf 'void stand_in(void) {}\n' > "$BATS_TEST_TMPDIR/empty.c"
   for pair in libc++abi.dylib:libc++abi.1.dylib libc++.1.dylib:libc++.1.dylib; do
     cp "/usr/lib/${pair%%:*}" "$BATS_TEST_TMPDIR/clang/libcxx22/lib/${pair#*:}" 2>/dev/null ||
-      cc -dynamiclib -o "$BATS_TEST_TMPDIR/clang/libcxx22/lib/${pair#*:}" "$BATS_TEST_TMPDIR/empty.c"
+      cc -dynamiclib -arch arm64 -arch arm64e -o "$BATS_TEST_TMPDIR/clang/libcxx22/lib/${pair#*:}" "$BATS_TEST_TMPDIR/empty.c"
   done
   printf '#!/bin/sh\necho "%s/$1"\n' "$BATS_TEST_TMPDIR/clang" > "$product/build/fetch-clang-22.sh"
 
