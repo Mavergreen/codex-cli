@@ -80,13 +80,16 @@ EOF
 # set -e ignores a pipeline that starts with !.
 cargo_lacks() { ! grep -q "^$1=" "$cargo_env"; }
 
+# succeeded: the build exited 0, or the test fails showing what it printed, which bats would not.
+succeeded() { [ "$status" -eq 0 ] || { printf '%s\n' "$output"; false; }; }
+
 build() {
   MODE_FOR_TEST=$1 PATH="$stand_ins/bin:$PATH" sh "$product/build/build-codex.sh" "$1"
 }
 
 @test "a cross build hands the SDK to the target's links alone, and no SDKROOT to cargo" {
   SDKROOT=/elsewhere RUSTFLAGS=-Cfoo CARGO_ENCODED_RUSTFLAGS=-Cbar run build cross
-  [ "$status" -eq 0 ]
+  succeeded
   [ "${lines[${#lines[@]}-1]}" = "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross" ]
   cargo_lacks SDKROOT
   cargo_lacks RUSTFLAGS
@@ -98,7 +101,7 @@ build() {
 
 @test "a native build keeps SDKROOT and sets no target rustflags" {
   SDKROOT=/elsewhere RUSTFLAGS=-Cfoo run build native
-  [ "$status" -eq 0 ]
+  succeeded
   grep -qx "SDKROOT=$sdk" "$cargo_env"
   cargo_lacks CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS
   cargo_lacks RUSTFLAGS
@@ -118,7 +121,7 @@ build() {
 
 @test "a build puts the source's LICENSE and NOTICE in the artifact" {
   run build native
-  [ "$status" -eq 0 ]
+  succeeded
   root="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native"
   cmp "$source_dir/LICENSE" "$root/LICENSE"
   cmp "$source_dir/NOTICE" "$root/NOTICE"
@@ -135,7 +138,7 @@ build() {
 @test "the build manifest carries the identity in BUILD_ID" {
   printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
   run build cross
-  [ "$status" -eq 0 ]
+  succeeded
   grep -qx "version=0.161.0-mavericks.7" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }
 
@@ -143,13 +146,13 @@ build() {
   printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
   printf '0.161.0-mavericks.2\n' > "$product/VERSION"
   run build cross
-  [ "$status" -eq 0 ]
+  succeeded
   grep -qx "version=0.161.0-mavericks.7" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }
 
 @test "without BUILD_ID or VERSION the manifest says -mavericks.0 and the build says it is a dev build" {
   run build cross
-  [ "$status" -eq 0 ]
+  succeeded
   [[ "$output" == *"a dev build"* ]] || false
   grep -qx "version=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" version)-mavericks.0" \
     "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
