@@ -50,6 +50,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # publish does not need builds-on-mavericks while INGREDIENTS.md's on-target deviation stands;
+      # this fails once mavericks-vm@v1 no longer warrants it
+      - name: The on-target deviation still has its reason
+        run: sh build/check-on-target-exit.sh
+
       - name: Install mavericks-shipyard
         uses: Mavergreen/shipyard/.github/actions/install@v1
 
@@ -233,8 +238,8 @@ jobs:
   # both the standalone install and the daemon to a staged second build. A publishing run's staged build carries the family key's signature, which the package's own key
   # checks; otherwise, and always for the second build, a key made in the guest signs, and the
   # installed package is made to trust it. No secrets reach this job but the VM image key.
-  # Its check name differs from release.yml's on-mavericks: main requires both, and GitHub matches
-  # required checks by name.
+  # Its check name differs from release.yml's on-mavericks, since GitHub matches required checks by
+  # name. While INGREDIENTS.md's on-target deviation stands, it runs but gates nothing.
   on-mavericks:
     name: builds-on-mavericks
     needs: [codex-build]
@@ -398,7 +403,8 @@ jobs:
   # build if a concurrent run published one meanwhile, then prunes by the retention rule. It holds
   # no key.
   publish:
-    needs: [codex-build, on-mavericks, scan]
+    # not on-mavericks, while INGREDIENTS.md's on-target deviation stands
+    needs: [codex-build, scan]
     if: needs.codex-build.outputs.publish == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 30

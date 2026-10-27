@@ -266,6 +266,7 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
 - scheme: the package is its own upstream (Codex reaches users through the builds channel, pinned in components/codex/version), so it versions itself by date as YYYYMMDD.N with no -mavericks.N axis
 - builds-channel: Codex builds are signed and published to this repo's codex-builds release by build/channel-publish.sh from .github/workflows/builds.yml, not by shipyard, until shipyard has machinery for a builds channel
 - unpinned:build/channel-publish.sh: before it publishes a build whose metadata names a min-pkg, it reads this repo's own Latest release, because the check is that the pkg the build needs is already offered to users, which only the newest release can say; a pin would be the very staleness it guards against. Reconsider if shipyard's builds-channel machinery takes over that check
+- on-target: for the first release, neither workflow's publish needs its 10.9 job (builds.yml's builds-on-mavericks, release.yml's on-mavericks), and main does not require them; both still run. mavericks-vm@v1 carries Aqua Transport 2026.10.09, older than the pin, so the guest refuses the package, and on 2026-10-26 the runner's apt-get install of QEMU stalled in about 1 of 3 installs. The first release is instead to be accepted by hand on ultimate-hat (10.9.5, Aqua Transport 2026.10.25) before its pkg is published. release.yml's build job refuses a publishing run while the channel names no build, the guard on-mavericks gave. exit: once mavericks-vm@v1 carries packer-plugin-macosx v0.20261005.9 (Aqua Transport 2026.10.25) and its apt step no longer stalls, make both publish jobs need their 10.9 job again, require both on main, and delete this entry and build/check-on-target-exit.sh, which both workflows run and which fails from then on
 
 The items under "Deviations" are product facts, not exceptions to a family check.
 
@@ -321,7 +322,8 @@ unsupported rather than mapped.
 publish decision, the cross build, the updater, the compat guard tests, the repo tests, the
 tarball and its metadata, a second tarball one build number later, signing with the family key, a
 check that the signature verifies against the key the pkg ships, and a test pkg), `on-mavericks`,
-`scan` (key-log scan of the job that held the key) and `publish`, which needs all three and holds
+`scan` (key-log scan of the job that held the key) and `publish`, which needs `codex-build` and
+`scan` (and `on-mavericks` again once "Conformance deviations"' on-target entry is gone) and holds
 no key. `on-mavericks` installs the pinned `rg` and `ed25519` packages and the test pkg in a real 10.9 VM,
 points the launcher at the staged channel with `CODEX_BUILDS_URL`, and checks that the first run
 seeds the build, `codex --version`, `--help`, `codex-code-mode-host --help`, that the host is not
@@ -341,7 +343,8 @@ the repo tests, the pkg, the package test, notes, feeds, conformance), `on-maver
 pkg and its requirements in a real 10.9 VM, and checks that the first run seeds the build the
 published channel names, `codex --help`, `codex-code-mode-host --help`, that the host is not
 exported, and `codex sandbox -- /usr/bin/true`; no login and no secrets beyond the VM key), `scan`
-and `publish`, which needs `build`, `scan` and `on-mavericks`. The pkg becomes the repo's Latest.
+and `publish`, which needs `build` and `scan` (and `on-mavericks` again once "Conformance
+deviations"' on-target entry is gone). The pkg becomes the repo's Latest.
 
 The nightly `reconcile.yml` runs shipyard's backstop for the pkg and its own for the channel: when
 the channel's newest build was not made from `main`'s build state, and no `builds.yml` run is in
