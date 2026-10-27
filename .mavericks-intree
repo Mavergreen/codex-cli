@@ -1,1 +1,2 @@
 VERSION  # shipyard resolves the version during CMake configuration
+BUILD_ID  # builds.yml writes the identity it chose before the build, for build-codex.sh to read
