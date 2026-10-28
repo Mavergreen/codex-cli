@@ -14,5 +14,8 @@ export MAVERICKS_BUILD_DIR
 work=$(mktemp -d "${TMPDIR:-/tmp}/upstream-features-test.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 revision=$(sh "$ROOT/build/codex-pin.sh" revision)
-shipyard_curl "https://raw.githubusercontent.com/openai/codex/$revision/codex-rs/features/src/lib.rs" "$work/lib.rs"
+repository=$(sh "$ROOT/build/codex-pin.sh" repository)
+repository=${repository#https://github.com/}
+repository=${repository%.git}
+shipyard_curl "https://raw.githubusercontent.com/$repository/$revision/codex-rs/features/src/lib.rs" "$work/lib.rs"
 sh "$ROOT/build/check-upstream-features.sh" "$work/lib.rs"

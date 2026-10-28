@@ -27,6 +27,7 @@ awk '
   FILENAME == ARGV[2] { reachable[$1] = 1; order[++n] = $1; next }
   {
     line = $0
+    sub(/\r$/, "", line)
     sub(/#.*/, "", line)
     sub(/[ \t]+$/, "", line)
     if (line ~ /^[ \t]*$/) next

@@ -68,6 +68,12 @@ check() { sh "$PRODUCT_ROOT/build/check-upstream-features.sh" "$table" "$ledger"
   [ "$status" -eq 0 ]
 }
 
+@test "CRLF line endings are read as plain ones" {
+  printf 'alpha works\r\ngamma deferred a reason\r\n' > "$ledger"
+  run check
+  [ "$status" -eq 0 ]
+}
+
 @test "all problems are reported, not just the first" {
   printf 'alpha works\nomega works\n' > "$ledger"
   run check

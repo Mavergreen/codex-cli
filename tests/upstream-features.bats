@@ -54,6 +54,7 @@ drop_after() {
   drop_after 'id: Feature::X' 'key: "filler_3"'
   run features all "$table"
   [ "$status" -eq 1 ]
+  [[ "$output" == *"no key"* ]] || false
 }
 
 @test "a one-line FeatureSpec is still read" {
@@ -88,6 +89,63 @@ drop_after() {
 @test "only the FEATURES list is read, not a FeatureSpec elsewhere in the file" {
   { printf 'fn info(self) -> &'"'"'static FeatureSpec {\n    &FEATURES[0]\n}\n'; cat "$table"; } > "$table.new"
   mv "$table.new" "$table"
+  run features all "$table"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 50 ]
+}
+
+# with_first ENTRY-TEXT: puts ENTRY-TEXT (sed replacement text, \n as \\n) first in the FEATURES list
+with_first() {
+  sed "s/^pub const FEATURES: &\\[FeatureSpec\\] = &\\[\$/&\\
+$1/" "$table" > "$table.new"
+  mv "$table.new" "$table"
+}
+
+@test "UnderDevelopment with default on is reachable" {
+  feature_table "$table" 50 "early UnderDevelopment on"
+  run features reachable "$table"
+  [ "$status" -eq 0 ]
+  [ "$output" = early ]
+}
+
+@test "a default_enabled that is not a literal counts as on" {
+  feature_table "$table" 50
+  with_first '    FeatureSpec { id: Feature::A, key: "alpha", stage: Stage::Stable, default_enabled: !cfg!(windows) },'
+  run features all "$table"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "alpha Stable on" ]
+}
+
+@test "a stage chosen by cfg! between Removed and Stable counts as Stable" {
+  feature_table "$table" 50
+  with_first '    FeatureSpec { id: Feature::A, key: "alpha", stage: if cfg!(windows) { Stage::Removed } else { Stage::Stable }, default_enabled: true },'
+  run features reachable "$table"
+  [ "$status" -eq 0 ]
+  [ "$output" = alpha ]
+}
+
+@test "a comment inside the list names no stage, key or entry" {
+  feature_table "$table" 50
+  with_first '    \/\/ FeatureSpec { key: "ghost", stage: Stage::Stable, default_enabled: true },\
+    FeatureSpec { id: Feature::A, key: "alpha",\
+        \/\/ was Stage::Deprecated before 0.170\
+        stage: Stage::Stable, default_enabled: true },'
+  run features all "$table"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 51 ]
+  [ "${lines[0]}" = "alpha Stable on" ]
+}
+
+@test "a field whose name ends in key is not the key" {
+  feature_table "$table" 50
+  with_first '    FeatureSpec { id: Feature::A, legacy_key: "old_alpha", key: "alpha", stage: Stage::Stable, default_enabled: true },'
+  run features reachable "$table"
+  [ "$status" -eq 0 ]
+  [ "$output" = alpha ]
+}
+
+@test "a FeatureSpec after the list is not read" {
+  printf 'fn later() -> FeatureSpec {\n    FeatureSpec { key: "late", stage: Stage::Stable, default_enabled: true }\n}\n' >> "$table"
   run features all "$table"
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" -eq 50 ]

@@ -21,7 +21,7 @@ browser_use_external         works  inert here: a gate for OpenAI's desktop app,
 browser_use_full_cdp_access  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 code_mode_host               works  patch 0009 finds the host beside a symlinked codex on 10.9
 compaction_image_budget      works
-computer_use                 works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+computer_use                 works  inert here: the CLI only passes its requirements on to app-server clients, and the computer use itself runs in OpenAI's desktop app, which does not run on 10.9
 content_item_kinds           works
 daemon_auto_start            works  patches 0012 and 0013 keep the daemon on the Mavergreen channel
 enable_request_compression   works
@@ -51,6 +51,7 @@ shell_tool                   works
 shell_zsh_fork               deferred  needs OpenAI's patched zsh, which no build carries (INGREDIENTS.md); not yet reachable upstream
 skill_mcp_dependency_install works
 skill_search                 works
+secret_auth_storage          works  on by default only on Windows (cfg!(windows)), which the parser counts as on
 sleep_tool                   works
 system_proxy_fallback        works
 tool_call_mcp_elicitation    works
