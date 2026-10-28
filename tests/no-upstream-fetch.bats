@@ -35,6 +35,19 @@ source_to_scan() {
   SRC=$MAVERICKS_BUILD_ROOT/codex-src
 }
 
+# outside_test_modules: reads grep -n's FILE:LINE:TEXT matches and prints those that do not lie in an
+# inline test module, a "#[cfg(test)]" line followed by "mod tests {", which Rust compiles only for
+# cargo test, as the guard's --exclude of *_tests.rs and tests/ leaves out test files.
+outside_test_modules() {
+  while IFS= read -r match; do
+    [ -n "$match" ] || continue
+    file=${match%%:*} rest=${match#*:} line=${rest%%:*}
+    start=$(awk 'prev ~ /^[ \t]*#\[cfg\(test\)\][ \t]*$/ && /^[ \t]*mod tests[ \t]*\{/ { print NR; exit } { prev = $0 }' "$file")
+    [ -n "$start" ] && [ "$line" -gt "$start" ] && continue
+    printf '%s\n' "$match"
+  done
+}
+
 # The desktop-app installer is out of scope: it never runs on a Mac that can build this port.
 @test "no shipped source fetches or runs an OpenAI Codex build" {
   source_to_scan
@@ -48,7 +61,9 @@ source_to_scan() {
     -e 'releases.openai.com' \
     -e 'formulae.brew.sh' \
     "$SRC/codex-rs"
-  [ "$status" -eq 1 ] || { printf 'upstream fetches remain:\n%s\n' "$output"; return 1; }
+  [ "$status" -le 1 ] || { printf 'grep failed:\n%s\n' "$output"; return 1; }
+  shipped=$(printf '%s\n' "$output" | outside_test_modules)
+  [ -z "$shipped" ] || { printf 'upstream fetches remain:\n%s\n' "$shipped"; return 1; }
 }
 
 @test "a CODEX_PREPARED_SRC that is not the pinned source fails the guard rather than skipping it" {
