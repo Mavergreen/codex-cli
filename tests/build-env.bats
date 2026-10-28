@@ -42,11 +42,12 @@ EOF
   chmod +x "$rust/bin/cargo" "$rust/bin/rustc"
   printf '#!/bin/sh\necho "%s"\n' "$rust" > "$product/build/fetch-rust.sh"
 
-  # clang22 and clang22-cross get compilers and an SDKs/ for build-codex.sh to link the SDK into;
-  # libcxx22 gets the two dylibs the native cargo runs with inserted.
+  # clang22 and clang22-cross get compilers and, as their pkgs carry it, an SDKs that links to a
+  # ../sdk109/SDKs nothing extracted, for build-codex.sh to link the SDK into; libcxx22 gets the
+  # two dylibs the native cargo runs with inserted.
   for product_name in clang22 clang22-cross libcxx22; do
-    mkdir -p "$BATS_TEST_TMPDIR/clang/$product_name/bin" "$BATS_TEST_TMPDIR/clang/$product_name/SDKs" \
-      "$BATS_TEST_TMPDIR/clang/$product_name/lib"
+    mkdir -p "$BATS_TEST_TMPDIR/clang/$product_name/bin" "$BATS_TEST_TMPDIR/clang/$product_name/lib"
+    ln -s ../sdk109/SDKs "$BATS_TEST_TMPDIR/clang/$product_name/SDKs"
     printf '#!/bin/sh\n' > "$BATS_TEST_TMPDIR/clang/$product_name/bin/clang"
     printf '#!/bin/sh\n' > "$BATS_TEST_TMPDIR/clang/$product_name/bin/clang++"
     chmod +x "$BATS_TEST_TMPDIR/clang/$product_name/bin/clang" "$BATS_TEST_TMPDIR/clang/$product_name/bin/clang++"

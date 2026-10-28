@@ -63,7 +63,13 @@ codex_build_env() {
   case "$MODE" in native) CLANG_PRODUCT=clang22 ;; cross) CLANG_PRODUCT=clang22-cross ;; esac
   CLANG_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/clang-22/version")
   CLANG_PREFIX=$(sh "$BUILD_DIR/fetch-clang-22.sh" "$CLANG_PRODUCT")
-  mkdir -p "$CLANG_PREFIX/../var/$CLANG_PRODUCT/SDKs"
+  # platform: the product's SDKs is a link to a directory its pkg does not carry: ../sdk109/SDKs,
+  #           which Longboat's sdk109 fills on an install (../var/$CLANG_PRODUCT/SDKs before
+  #           22.1.8-mavericks.11). Extracted, not installed, it dangles until made here.
+  if sdks=$(readlink "$CLANG_PREFIX/SDKs"); then
+    case "$sdks" in /*) ;; *) sdks="$CLANG_PREFIX/$sdks" ;; esac
+    mkdir -p "$sdks"
+  fi
   ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
   [ -x "$CLANG_PREFIX/bin/clang" ] && [ -x "$CLANG_PREFIX/bin/clang++" ] &&
     [ -d "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk/usr/include" ] || {
