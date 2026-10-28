@@ -11,7 +11,9 @@ set -eu
 h_setup
 MG="$H/root/usr/local/mavergreen"
 T="$MG/codex-cli"
-A=0.161.0-mavericks.1
+# the pinned Codex version: build-codex-package.sh refuses a build of any other
+CV=$(sh "$H_REPO/build/codex-pin.sh" version)
+A=$CV-mavericks.1
 RT=x86_64-apple-darwin
 S="$HOME/.codex/packages/standalone"
 LINK="$HOME/.local/bin/codex"
@@ -171,7 +173,7 @@ h_assert_contains "$(cat "$H/err")" "left alone" "and noted"
 # even with somebody at a tty
 fresh
 h_fake_open
-h_channel 0.161.0-mavericks.2 20991231.1
+h_channel "$CV-mavericks.2" 20991231.1
 GOOD_URL="$CODEX_BUILDS_URL"
 rm -f "$H/open-calls"
 CODEX_INSTALL_ASSUME_TTY=1 launch

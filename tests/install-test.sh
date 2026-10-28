@@ -17,8 +17,10 @@ export CODEX_HOME
 CODEX_INSTALL_ASSUME_TTY=1
 export CODEX_INSTALL_ASSUME_TTY
 S="$CODEX_HOME/packages/standalone"
-A=0.161.0-mavericks.1
-B=0.161.0-mavericks.2
+# the pinned Codex version: build-codex-package.sh refuses a build of any other
+CV=$(sh "$H_REPO/build/codex-pin.sh" version)
+A=$CV-mavericks.1
+B=$CV-mavericks.2
 RT=x86_64-apple-darwin
 
 h_fake_verify
@@ -128,7 +130,7 @@ h_assert_eq "$S/releases/$A-$RT" "$(cur)" "current is unchanged without a signat
 mv "$H/channel/latest.json.sig.away" "$H/channel/latest.json.sig"
 
 # a tarball whose sha256 differs from the JSON's
-C=0.161.0-mavericks.3
+C=$CV-mavericks.3
 h_channel $C
 zeros=0000000000000000000000000000000000000000000000000000000000000000
 sed "s/sha256:[0-9a-f]*/sha256:$zeros/" "$H/channel/codex-build-$C.json" > "$H/x.json"
@@ -153,7 +155,7 @@ CODEX_BUILDS_URL="$(h_url "$H/channel")"
 export CODEX_BUILDS_URL
 
 # a build that needs a newer pkg
-D=0.161.0-mavericks.4
+D=$CV-mavericks.4
 h_channel $D 20261101.1
 run
 h_assert_eq 3 "$rc" "an old pkg exits 3 ($out)"
@@ -182,7 +184,7 @@ h_fake_pkg 20261101.2
 run
 h_assert_eq 0 "$rc" "a pkg at 20261101.2 satisfies 20261101.1 ($out)"
 h_assert_eq "$S/releases/$D-$RT" "$(cur)" "the build installs once the pkg is new enough"
-E=0.161.0-mavericks.5
+E=$CV-mavericks.5
 h_channel $E 20261101.10
 h_fake_pkg 20261101.9
 run
@@ -195,7 +197,7 @@ h_channel $E 20261101.10
 run --release $E
 h_assert_eq 0 "$rc" "a later date satisfies an earlier one"
 # an unreadable pkg version is older than any non-empty min-pkg
-F=0.161.0-mavericks.6
+F=$CV-mavericks.6
 h_channel $F 20200101.1
 rm "$CODEX_PKG_ROOT/mavergreen.plist"
 run
@@ -223,7 +225,7 @@ unpack() {
   mkdir "$H/repack"
   tar -xzf "$H/channel/codex-package-x86_64-apple-darwin-$1.tar.gz" -C "$H/repack"
 }
-G=0.161.0-mavericks.7
+G=$CV-mavericks.7
 h_channel $G
 unpack $G
 chmod 0644 "$H/repack/codex-path/rg"
@@ -234,7 +236,7 @@ h_assert_eq "$S/releases/$G-$RT" "$(cur)" "current moves to that build"
 h_assert_eq "" "$(find "$S/releases/$G-$RT/codex-path" -type l)" "codex-path/rg is installed as a file, not a link"
 h_assert_eq 755 "$(stat -f %Lp "$S/releases/$G-$RT/codex-path/rg")" "the installer makes codex-path/rg executable"
 h_assert_ok cmp "$H/repack/codex-path/rg" "$S/releases/$G-$RT/codex-path/rg"
-G2=0.161.0-mavericks.8
+G2=$CV-mavericks.8
 h_channel $G2
 unpack $G2
 rm "$H/repack/codex-path/rg"
@@ -245,7 +247,7 @@ h_assert_eq 1 "$rc" "a build without codex-path/rg is refused ($out)"
 h_assert_eq "$before_cur" "$(cur)" "current is unchanged by a build without codex-path/rg"
 
 # a build whose codex reports another x.y.z is refused
-V=0.161.0-mavericks.9
+V=$CV-mavericks.9
 h_channel $V
 unpack $V
 printf '#!/bin/sh\necho "codex-cli 0.160.0"\n' > "$H/repack/bin/codex"
@@ -257,14 +259,14 @@ h_assert_eq "$before_cur" "$(cur)" "current is unchanged by a build with the wro
 
 # an overflowing, short or odd min-pkg refuses
 for bad in 99999999999999999999.1 2026101.1 20261017.12345 20261017 abcdefgh.1 ; do
-  h_channel 0.161.0-mavericks.10 "$bad"
+  h_channel "$CV-mavericks.10" "$bad"
   run
   h_assert_eq 1 "$rc" "min-pkg $bad exits 1 ($out)"
   h_assert_eq "$before_cur" "$(cur)" "min-pkg $bad leaves current alone"
 done
 
 # a guarded run, or one with no tty, opens nothing; interactive-looking runs open the updater
-h_channel 0.161.0-mavericks.11 99999999.1
+h_channel "$CV-mavericks.11" 99999999.1
 h_fake_pkg 20261017.1
 rm -f "$H/open-calls"
 if ( : </dev/tty ) 2>/dev/null; then
@@ -281,7 +283,7 @@ h_assert_absent "$H/open-calls" "a daemon-marked run opens nothing"
 h_fake_pkg 20261017.1
 
 # a missing plist is reported as such, not as PlistBuddy's complaint
-h_channel 0.161.0-mavericks.12 20200101.1
+h_channel "$CV-mavericks.12" 20200101.1
 rm "$CODEX_PKG_ROOT/mavergreen.plist"
 run
 h_assert_eq 3 "$rc" "a missing plist exits 3"
@@ -332,7 +334,7 @@ h_assert_eq "$B-$RT" "$(cat "$D/auto-update-version")" "the record follows"
 
 # a guarded run that hits the pkg requirement exits 3 and opens nothing, whichever marker guards it
 # (CODEX_INSTALL_ASSUME_TTY=1 is set throughout: the markers alone must guard)
-h_channel 0.161.0-mavericks.20 99999999.1
+h_channel "$CV-mavericks.20" 99999999.1
 rm -f "$H/open-calls"
 # (the IF_ guards need a selected release, so they run with DAEMON_ONLY as the daemon does; the others alone;
 #  the last is the daemon's own environment, CODEX_NON_INTERACTIVE included)
