@@ -243,10 +243,17 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
   features are unsupported. `packaging/build-codex-package.sh` refuses an artifact that has either.
   Voice is deferred, not dropped: a first native probe linked `codex-voice-host` on 10.9 with
   scratch changes (`docs/compatibility-matrix.md`, "Voice, a first native probe"), and its runtime
-  and packaging are not yet built here.
+  and packaging are not yet built here. `realtime_conversation` is `deferred` in the feature ledger.
 - **No `shell_zsh_fork`.** Upstream's macOS package carries OpenAI's prebuilt zsh fork in
   `codex-resources/` for this feature, which is under development and off by default. It is
-  OpenAI's binary, so no build carries it, and the feature is unsupported.
+  OpenAI's binary, so no build carries it, and the feature is unsupported. The patch and the zsh
+  commit it applies to are public (`codex-rs/shell-escalation/README.md`), so a family build could
+  carry one. It is `deferred` in the feature ledger.
+- **Every reachable upstream feature has a verdict.** `components/codex/features` holds one line
+  per feature upstream turns on by default or offers in `/experimental`: `works`, `needs-work` or
+  `deferred`, the last two with a reason. `tests/upstream-features-test.sh` reads the feature table
+  at the pinned commit and fails while a reachable feature has no line, so a Codex update cannot go
+  green until each feature it adds has been judged. A verdict changes nothing in the build.
 - **No `codex app`.** `codex app` downloads and opens OpenAI's desktop app, which is not a Codex CLI
   build and does not run on 10.9. It is left as upstream's, unpatched, and unsupported.
 - **`codex-path/rg` is the family's `rg`.** Upstream's package carries BurntSushi's macOS `rg` in

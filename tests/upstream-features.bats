@@ -37,8 +37,8 @@ drop_after() {
   feature_table "$table" 45 "alpha Stable on" "beta Removed on" "gamma Experimental off" "delta Deprecated on"
   run features reachable "$table"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"$table"* ]]
-  [[ "$output" == *49* ]]
+  [[ "$output" == *"$table"* ]] || false
+  [[ "$output" == *49* ]] || false
 }
 
 @test "an entry without default_enabled fails" {
@@ -46,7 +46,7 @@ drop_after() {
   drop_after 'key: "filler_7"' default_enabled
   run features all "$table"
   [ "$status" -eq 1 ]
-  [[ "$output" == *filler_7* ]]
+  [[ "$output" == *filler_7* ]] || false
 }
 
 @test "an entry without a key fails" {

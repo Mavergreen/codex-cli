@@ -16,22 +16,22 @@ check() { sh "$PRODUCT_ROOT/build/check-upstream-features.sh" "$table" "$ledger"
   printf 'alpha works\ngamma deferred upstream offers it only on hardware 10.9 lacks\n' > "$ledger"
   run check
   [ "$status" -eq 0 ]
-  [[ "$output" == *"2 reachable features, each with a verdict"* ]]
+  [[ "$output" == *"2 reachable features, each with a verdict"* ]] || false
 }
 
 @test "a reachable feature without a line fails, naming it" {
   printf 'alpha works\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *gamma* ]]
-  [[ "$output" == *"fix:"* ]]
+  [[ "$output" == *gamma* ]] || false
+  [[ "$output" == *"fix:"* ]] || false
 }
 
 @test "a verdict for a feature upstream no longer has fails" {
   printf 'alpha works\ngamma works\nomega works\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *omega* ]]
+  [[ "$output" == *omega* ]] || false
 }
 
 @test "a verdict for a known but unreachable feature is allowed" {
@@ -44,22 +44,22 @@ check() { sh "$PRODUCT_ROOT/build/check-upstream-features.sh" "$table" "$ledger"
   printf 'alpha maybe\ngamma works\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *maybe* ]]
+  [[ "$output" == *maybe* ]] || false
 }
 
 @test "needs-work or deferred without a reason fails" {
   printf 'alpha needs-work\ngamma deferred\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *alpha* ]]
-  [[ "$output" == *gamma* ]]
+  [[ "$output" == *alpha* ]] || false
+  [[ "$output" == *gamma* ]] || false
 }
 
 @test "a duplicate key fails" {
   printf 'alpha works\nalpha works\ngamma works\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *alpha* ]]
+  [[ "$output" == *alpha* ]] || false
 }
 
 @test "comments, blank lines and trailing spaces are fine" {
@@ -72,8 +72,8 @@ check() { sh "$PRODUCT_ROOT/build/check-upstream-features.sh" "$table" "$ledger"
   printf 'alpha works\nomega works\n' > "$ledger"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *gamma* ]]
-  [[ "$output" == *omega* ]]
+  [[ "$output" == *gamma* ]] || false
+  [[ "$output" == *omega* ]] || false
 }
 
 @test "a table the parser refuses fails the check" {
@@ -86,5 +86,5 @@ check() { sh "$PRODUCT_ROOT/build/check-upstream-features.sh" "$table" "$ledger"
 @test "a missing ledger fails, naming it" {
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *"$ledger"* ]]
+  [[ "$output" == *"$ledger"* ]] || false
 }

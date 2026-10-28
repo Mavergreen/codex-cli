@@ -22,7 +22,7 @@ sh "$HERE/upstream-features.sh" reachable "$LIB" > "$work/reachable"
 
 # One pass over three files, told apart by which has been read: every upstream key, the reachable
 # keys, then the ledger with its comments and surrounding blanks gone.
-awk -v ledger="$LEDGER" '
+awk '
   FILENAME == ARGV[1] { known[$1] = 1; next }
   FILENAME == ARGV[2] { reachable[$1] = 1; order[++n] = $1; next }
   {
@@ -43,7 +43,7 @@ awk -v ledger="$LEDGER" '
   function problem(msg) { printf "check-upstream-features: %s\n", msg > "/dev/stderr"; bad = 1 }
   END {
     for (i = 1; i <= n; i++)
-      if (!(order[i] in judged)) problem(order[i] ": reachable upstream, with no verdict in " ledger)
+      if (!(order[i] in judged)) problem(order[i] ": reachable upstream, with no verdict")
     if (bad) {
       printf "    fix: add \"<key> works\" (or needs-work/deferred with a reason) to components/codex/features for each feature named, and remove lines for features upstream dropped\n" > "/dev/stderr"
       exit 1
