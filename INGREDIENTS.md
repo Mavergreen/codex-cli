@@ -231,6 +231,14 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
 - **Generic updater icon.** The updater passes `ALLOW_GENERIC` and ships no `.icns`: Codex's mark is
   OpenAI's, and this is an unofficial build that must not read as official. `updater/ICON-CREDIT.txt`
   says why and what ends the deviation, as mavergreen-rg does.
+- **Two C++ runtimes in one binary.** OpenAI's prebuilt rusty_v8 archive carries V8's own static
+  libc++abi and a private libc++ (`std::__Cr`), so V8's throws and catches use those, while the rest
+  of Codex's C++ links the system's libc++ (`-lc++`) with 10.9's libc++abi and Recaulk. Two
+  exception runtimes, with two identities for the standard exception types, is the crash class the
+  family's one-runtime rule exists to remove. It has been so since the first build,
+  `0.161.0-mavericks.1`. The exit is a V8 built against the family's one runtime: a from-source
+  rusty_v8 built the way Mavergreen/nodejs builds V8, or the prebuilt archive with its libc++abi
+  members removed, if V8's private libc++ links against 10.9's libc++abi and Recaulk.
 - **Codex is not built by CMake.** The CMake project imports the two executables that
   `build/build-codex.sh` made, to run the compatibility guards on them; each build is packaged by
   `packaging/build-codex-package.sh` from that output rather than from CMake install rules.
