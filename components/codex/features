@@ -12,14 +12,18 @@
 # upstream has but does not yet make reachable.
 
 analytics_plan_history       works
+api_key_cyber_access_programs works
 api_key_model_discovery      works
 apps                         works
 auth_elicitation             works
+bedrock_setup_wizard         works  probably: Amazon Bedrock sign-in goes through the same TLS stack as every other provider
 browser_annotation_api       works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 browser_use                  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 browser_use_external         works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 browser_use_full_cdp_access  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+cli_daybreak                 works
 code_mode_host               works  patch 0009 finds the host beside a symlinked codex on 10.9
+code_mode_interrupt          works
 compaction_image_budget      works
 computer_use                 works  inert here: the CLI only passes its requirements on to app-server clients, and the computer use itself runs in OpenAI's desktop app, which does not run on 10.9
 content_item_kinds           works
@@ -37,25 +41,31 @@ in_app_dictation             works  inert here: a gate for OpenAI's desktop app,
 in_app_local_automation      works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 in_app_updates               works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
 in_app_voice                 works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+incremental_tools            works
+instant_interrupt            works
 login_shell_package_path     works
+mcp_oauth_refresh_coordination works  probably: the credential store is the Keychain, whose SecItem API 10.9 has
 mentions_v2                  works
 multi_agent                  works
 network_proxy                works  probably: its Seatbelt rules are among those patches 0006 and 0007 keep parseable on 10.9
 plugin_sharing               works
 plugins                      works
+prediction_preserve_parent_tools works
 prevent_idle_sleep           works  IOKit's IOPMAssertionCreateWithName is on 10.9
 realtime_conversation        deferred  voice: no build carries codex-voice-host or codex-resources/voice (INGREDIENTS.md, "No voice")
+reasoning_effort_override    works
 remote_plugin                works
+secret_auth_storage          works  on by default only on Windows (cfg!(windows)), which the parser counts as on
 shell_snapshot               works
 shell_tool                   works
 shell_zsh_fork               deferred  needs OpenAI's patched zsh, which no build carries (INGREDIENTS.md); not yet reachable upstream
 skill_mcp_dependency_install works
 skill_search                 works
-secret_auth_storage          works  on by default only on Windows (cfg!(windows)), which the parser counts as on
 sleep_tool                   works
 system_proxy_fallback        works
 tool_call_mcp_elicitation    works
 tool_suggest                 works
+ultrafast_mode               works
 unbounded_connection_retries works
 unified_exec                 works  patch 0008 finds posix_spawn_file_actions_addchdir_np at run time
 unified_exec_tty             works
