@@ -1,3 +1,3 @@
 REPO=https://github.com/openai/codex.git
-REF=rust-v0.161.0
-DIGEST=979011409de0a60b52f179721948e65531d26144
+REF=rust-v0.165.0
+DIGEST=360319d8dee62d87e2d59fc0c21805d79519cfed
