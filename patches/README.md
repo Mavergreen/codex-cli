@@ -165,8 +165,9 @@ at the end says what each did and why it went.
   update loop, and the migration its manual update runs, read the package's installer from disk at
   0011's path instead of downloading `https://chatgpt.com/codex/install.sh`. A failed scheduled
   update is logged on the updater's stderr (`warning: scheduled update failed: …`) where upstream
-  dropped it. The installer's own stderr is not kept, so its exit 3 gets a message that says why:
-  the newest build needs a newer codex-cli package, and nothing was installed.
+  dropped it. Upstream adds the tail of the installer's stderr to a failure's message, but exit 3
+  is not a failure, so it gets its own message that says why: the newest build needs a newer
+  codex-cli package, and nothing was installed.
   `local_installer_reads_the_package_installer` in `update_loop_tests.rs` checks that the script's
   bytes come back unchanged and that a missing script is an error naming its path, and
   `an_installer_that_needs_a_newer_package_says_why` checks the exit-3 message.

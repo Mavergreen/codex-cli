@@ -1,5 +1,5 @@
 diff --git a/codex-rs/app-server-daemon/src/managed_install.rs b/codex-rs/app-server-daemon/src/managed_install.rs
-index ce3107f..190b624 100644
+index 1afe10c..e27f0de 100644
 --- a/codex-rs/app-server-daemon/src/managed_install.rs
 +++ b/codex-rs/app-server-daemon/src/managed_install.rs
 @@ -105,11 +105,9 @@ pub(crate) fn is_stable_standalone_release(codex_home: &Path, codex_bin: &Path)
@@ -18,7 +18,7 @@ index ce3107f..190b624 100644
              .is_ok_and(|selected| selected == release_name)
          && std::fs::canonicalize(codex_bin).is_ok_and(|bin| bin.starts_with(&release))
 diff --git a/codex-rs/app-server-daemon/src/managed_install_path_tests.rs b/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
-index b227c7e..a79d7a9 100644
+index e076e7f..8619782 100644
 --- a/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
 +++ b/codex-rs/app-server-daemon/src/managed_install_path_tests.rs
 @@ -111,6 +111,36 @@ fn updater_only_runs_for_stable_installer_owned_releases() {
@@ -59,10 +59,10 @@ index b227c7e..a79d7a9 100644
  #[tokio::test]
  async fn older_managed_binary_does_not_claim_updater_support() {
 diff --git a/codex-rs/app-server-daemon/src/prepare_install.rs b/codex-rs/app-server-daemon/src/prepare_install.rs
-index ecf2501..92587cf 100644
+index ef09b6d..25b60ae 100644
 --- a/codex-rs/app-server-daemon/src/prepare_install.rs
 +++ b/codex-rs/app-server-daemon/src/prepare_install.rs
-@@ -9,6 +9,7 @@ use anyhow::Result;
+@@ -11,6 +11,7 @@ use anyhow::Result;
  use anyhow::anyhow;
  use codex_install_context::CodexPackageManifest;
  use codex_install_context::InstallContext;
@@ -70,7 +70,7 @@ index ecf2501..92587cf 100644
  
  use crate::Daemon;
  use crate::install_lock::acquire_install_lock;
-@@ -245,8 +246,19 @@ async fn prepare_from_package(
+@@ -296,8 +297,19 @@ async fn prepare_from_package(
          !stable || version == binary_version,
          "the CLI package version does not match its executable"
      );
@@ -92,10 +92,10 @@ index ecf2501..92587cf 100644
          format!("local-{digest}-{target}")
      };
 diff --git a/codex-rs/app-server-daemon/src/prepare_install_tests.rs b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
-index 810a45b..26d4088 100644
+index ee33ca8..e7c2324 100644
 --- a/codex-rs/app-server-daemon/src/prepare_install_tests.rs
 +++ b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
-@@ -180,6 +180,47 @@ async fn legacy_selection_is_not_migrated_or_refreshed() {
+@@ -242,6 +242,47 @@ async fn legacy_selection_is_not_migrated_or_refreshed() {
      assert!(!home.join("packages/app-server-daemon").exists());
  }
  
@@ -144,18 +144,18 @@ index 810a45b..26d4088 100644
  async fn standalone_seed_preserves_explicit_pin_or_latest_channel() {
      for follows_latest in [false, true] {
 diff --git a/codex-rs/app-server-daemon/src/update_loop.rs b/codex-rs/app-server-daemon/src/update_loop.rs
-index 499acd1..66e67b5 100644
+index 344aba5..b6c9fe8 100644
 --- a/codex-rs/app-server-daemon/src/update_loop.rs
 +++ b/codex-rs/app-server-daemon/src/update_loop.rs
-@@ -1,6 +1,7 @@
- //! Owns scheduled and manual installs, daemon restarts, and updater replacement.
- 
+@@ -3,6 +3,7 @@
+ use std::collections::VecDeque;
+ use std::io::Write;
  use std::path::Path;
 +use std::path::PathBuf;
  #[cfg(unix)]
  use std::process::Command as StdCommand;
  use std::process::Stdio;
-@@ -8,9 +9,8 @@ use std::time::Duration;
+@@ -12,9 +13,8 @@ use std::time::Duration;
  
  use anyhow::Context;
  use anyhow::Result;
@@ -166,7 +166,7 @@ index 499acd1..66e67b5 100644
  use futures::FutureExt;
  #[cfg(unix)]
  use std::os::unix::process::CommandExt;
-@@ -43,7 +43,8 @@ mod migration;
+@@ -48,7 +48,8 @@ mod migration;
  
  pub(crate) async fn request_manual_update(
      daemon: &Daemon,
@@ -176,7 +176,7 @@ index 499acd1..66e67b5 100644
  ) -> Result<crate::UpdateOutput> {
      if daemon
          .pid_file
-@@ -51,32 +52,23 @@ pub(crate) async fn request_manual_update(
+@@ -56,11 +57,7 @@ pub(crate) async fn request_manual_update(
          .is_some_and(|name| name == crate::LEGACY_PID_FILE_NAME)
          && manual_update::supported(daemon)?
      {
@@ -189,9 +189,10 @@ index 499acd1..66e67b5 100644
      }
      manual_update::request(daemon).await
  }
- 
- const INITIAL_UPDATE_DELAY: Duration = Duration::from_secs(5 * 60);
- const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
+@@ -71,23 +68,18 @@ const RESTART_RETRY_INTERVAL: Duration = Duration::from_millis(50);
+ // envelope, and the worst-case six-byte JSON escape for every captured byte.
+ const INSTALLER_STDERR_TAIL_BYTES: usize = 2 * 1024;
+ const INSTALLER_STDERR_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 -#[cfg(unix)]
 -const INSTALL_URL: &str = "https://chatgpt.com/codex/install.sh";
 -#[cfg(windows)]
@@ -205,6 +206,8 @@ index 499acd1..66e67b5 100644
 +    _http_client_factory: HttpClientFactory,
      restore_release: Option<String>,
  ) -> Result<()> {
+     let daemon = Daemon::from_environment()?;
+     crate::backend::stderr_log::start(daemon.update_pid_file.with_extension("stderr.log"));
 -    let http = RouteAwareClientPool::new_without_request_logging(
 -        http_client_factory,
 -        ClientRouteClass::Other,
@@ -212,10 +215,10 @@ index 499acd1..66e67b5 100644
      run_with_http(
 -        &http,
 +        &local_installer(),
-         &Daemon::from_environment()?,
+         &daemon,
          &current_updater_identity().await?,
          restore_release,
-@@ -229,6 +221,7 @@ async fn run_with_http(
+@@ -246,6 +238,7 @@ async fn run_with_http(
                      }
                      Ok((UpdateLoopControl::Continue, None)) => {}
                      Err(err) => {
@@ -223,19 +226,20 @@ index 499acd1..66e67b5 100644
                          let _ = crate::diagnostics::result::<()>("scheduled_update", started, Err(err));
                      }
                      Ok((UpdateLoopControl::Stop, _)) => return Ok(()),
-@@ -646,6 +639,11 @@ async fn run_installer_script(
- 
+@@ -709,6 +702,12 @@ async fn run_installer_script(
      if status.success() {
+         stderr_task.abort();
          Ok(UpdateLoopControl::Continue)
 +    } else if status.code() == Some(MAVERGREEN_NEEDS_NEWER_PACKAGE_EXIT) {
-+        // Mavergreen: the installer's stderr is not kept, so say here why it installed nothing.
++        // Mavergreen: exit 3 is not a failed install, so say here why it installed nothing.
++        stderr_task.abort();
 +        anyhow::bail!(
 +            "the newest Codex build needs a newer codex-cli package, so the package's installer installed nothing (exit 3); the package's updater offers the newer package"
 +        )
      } else {
-         anyhow::bail!("standalone Codex updater exited with status {status}")
-     }
-@@ -673,7 +671,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
+         let _ = tokio::time::timeout(INSTALLER_STDERR_DRAIN_TIMEOUT, &mut stderr_task).await;
+         stderr_task.abort();
+@@ -747,7 +746,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
  }
  
  async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
@@ -244,7 +248,7 @@ index 499acd1..66e67b5 100644
          InstallerResponse::Success(body) => Ok(body),
          InstallerResponse::Unsuccessful { status } => {
              anyhow::bail!("standalone Codex updater request failed with status {status}")
-@@ -698,22 +696,29 @@ trait InstallerHttp: Send + Sync {
+@@ -772,22 +771,29 @@ trait InstallerHttp: Send + Sync {
      ) -> impl std::future::Future<Output = Result<InstallerResponse>> + Send + 'a;
  }
  
@@ -291,7 +295,7 @@ index 499acd1..66e67b5 100644
      }
  }
 diff --git a/codex-rs/app-server-daemon/src/update_loop_tests.rs b/codex-rs/app-server-daemon/src/update_loop_tests.rs
-index 598222a..e93f653 100644
+index 02aca06..4991f5e 100644
 --- a/codex-rs/app-server-daemon/src/update_loop_tests.rs
 +++ b/codex-rs/app-server-daemon/src/update_loop_tests.rs
 @@ -6,9 +6,10 @@ use pretty_assertions::assert_eq;
@@ -306,7 +310,7 @@ index 598222a..e93f653 100644
  use super::fetch_installer_script;
  #[cfg(unix)]
  use super::manual_update::run as manual_update_once;
-@@ -37,6 +38,54 @@ async fn installer_fetch_uses_exact_url_and_preserves_bytes() {
+@@ -39,6 +40,54 @@ async fn installer_fetch_uses_exact_url_and_preserves_bytes() {
      assert_eq!(http.requested_urls(), vec![INSTALL_URL.to_string()]);
  }
  
