@@ -295,7 +295,7 @@ publish() {
   [ "$(grep -c '^release delete-asset' "$FAKE_LOG")" -eq 9 ]
   grep -Fq "release delete-asset codex-builds codex-build-1.5.0-mavericks.1.json " "$FAKE_LOG"
   # a build's JSON is deleted after its tarball and signature
-  [ "$(grep -n 'delete-asset' "$FAKE_LOG" | grep 'mavericks.1[. ]' | sed 's/.*delete-asset codex-builds \([^ ]*\) .*/\1/' | tr '\n' ' ')" = "codex-package-x86_64-apple-darwin-1.5.0-mavericks.1.tar.gz codex-build-1.5.0-mavericks.1.json.sig codex-build-1.5.0-mavericks.1.json " ]
+  [ "$(grep -n 'delete-asset' "$FAKE_LOG" | grep 'mavericks.1[ .]' | sed 's/.*delete-asset codex-builds \([^ ]*\) .*/\1/' | tr '\n' ' ')" = "codex-package-x86_64-apple-darwin-1.5.0-mavericks.1.tar.gz codex-build-1.5.0-mavericks.1.json.sig codex-build-1.5.0-mavericks.1.json " ]
   ! grep -q 'delete-asset.*mavericks.13' "$FAKE_LOG" || false
   ! grep -q 'delete-asset.*mavericks.4\.' "$FAKE_LOG" || false
   # latest.json is a byte copy of the build JSON, and so is its signature
