@@ -1,0 +1,65 @@
+# Upstream Codex features a user can reach, and this product's verdict on each.
+#
+# One line per feature: <key> <verdict> [reason]. Reachable means upstream turns it on by default
+# (any stage but Removed or Deprecated) or offers it in /experimental; build/upstream-features.sh
+# says which, from codex-rs/features/src/lib.rs at the commit components/codex/version pins.
+#   works       ships as upstream has it; an agent's "probably works" is enough, and we fix forward
+#   needs-work  needs work before it works on 10.9 (reason required)
+#   deferred    not now (reason required)
+# A verdict changes nothing in the build. A feature this product switches off is its own patch,
+# named in that feature's reason. tests/upstream-features-test.sh fails while a reachable feature
+# has no line here, or a line names a feature upstream no longer has. A line may wait for a feature
+# upstream has but does not yet make reachable.
+
+analytics_plan_history       works
+api_key_model_discovery      works
+apps                         works
+auth_elicitation             works
+browser_annotation_api       works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+browser_use                  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+browser_use_external         works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+browser_use_full_cdp_access  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+code_mode_host               works  patch 0009 finds the host beside a symlinked codex on 10.9
+compaction_image_budget      works
+computer_use                 works  inert here: the CLI only passes its requirements on to app-server clients, and the computer use itself runs in OpenAI's desktop app, which does not run on 10.9
+content_item_kinds           works
+daemon_auto_start            works  patches 0012 and 0013 keep the daemon on the Mavergreen channel
+enable_request_compression   works
+fast_mode                    works
+goals                        works
+guardian_approval            works
+guardian_reuse_parent_compaction works
+hooks                        works
+image_generation             works
+in_app_browser               works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+in_app_chat                  works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+in_app_dictation             works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+in_app_local_automation      works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+in_app_updates               works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+in_app_voice                 works  inert here: a gate for OpenAI's desktop app, which does not run on 10.9
+login_shell_package_path     works
+mentions_v2                  works
+multi_agent                  works
+network_proxy                works  probably: its Seatbelt rules are among those patches 0006 and 0007 keep parseable on 10.9
+plugin_sharing               works
+plugins                      works
+prevent_idle_sleep           works  IOKit's IOPMAssertionCreateWithName is on 10.9
+realtime_conversation        deferred  voice: no build carries codex-voice-host or codex-resources/voice (INGREDIENTS.md, "No voice")
+remote_plugin                works
+shell_snapshot               works
+shell_tool                   works
+shell_zsh_fork               deferred  needs OpenAI's patched zsh, which no build carries (INGREDIENTS.md); not yet reachable upstream
+skill_mcp_dependency_install works
+skill_search                 works
+secret_auth_storage          works  on by default only on Windows (cfg!(windows)), which the parser counts as on
+sleep_tool                   works
+system_proxy_fallback        works
+tool_call_mcp_elicitation    works
+tool_suggest                 works
+unbounded_connection_retries works
+unified_exec                 works  patch 0008 finds posix_spawn_file_actions_addchdir_np at run time
+unified_exec_tty             works
+view_image                   works
+workspace_dependencies       works
+worktrees                    works  needs git, which 10.9 has only with the Command Line Tools
+write_stdin_approval         works
