@@ -39,7 +39,7 @@ FAKE
   chmod 0755 "$_c_art/codex" "$_c_art/codex-code-mode-host"
   printf 'license\n' > "$_c_art/LICENSE"
   printf 'notice\n' > "$_c_art/NOTICE"
-  printf 'manifest\n' > "$_c_art/build-manifest"
+  printf 'manifest\nrecaulk_origin=released\n' > "$_c_art/build-manifest"
   _c_tb="$(sh "$H_REPO/packaging/build-codex-package.sh" "$_c_art" "$_c_id" "$H/channel-build-$_c_id")"
   cp "$_c_tb" "$_c_dir/$_c_asset"
   _c_sha="$(shasum -a 256 "$_c_dir/$_c_asset" | awk '{print $1}')"

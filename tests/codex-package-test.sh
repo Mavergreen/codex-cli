@@ -19,7 +19,7 @@ printf '#!/bin/sh\necho host\n' > "$A/codex-code-mode-host"
 chmod 0755 "$A/codex" "$A/codex-code-mode-host"
 printf 'license\n' > "$A/LICENSE"
 printf 'notice\n' > "$A/NOTICE"
-printf 'manifest\n' > "$A/build-manifest"
+printf 'manifest\nrecaulk_origin=released\n' > "$A/build-manifest"
 
 OUT="$H/out dir"
 TB="$OUT/codex-package-x86_64-apple-darwin-$ID.tar.gz"

@@ -20,6 +20,15 @@ done
 for f in codex-voice-host codex-resources; do
   [ ! -e "$OUT_IN/$f" ] || { echo "build-codex-package: $OUT_IN/$f: voice is not packaged" >&2; exit 1; }
 done
+# spec: build/fetch-recaulk-objc.sh header -- a build linked with a development (staged, unreleased)
+#       Objective-C provider, or one whose manifest does not say which, is never packaged, whatever
+#       BUILD-ID claims.
+ORIGIN=$(sed -n 's/^recaulk_origin=//p' "$OUT_IN/build-manifest")
+case "$ORIGIN" in
+  released) ;;
+  development) echo "build-codex-package: $OUT_IN was linked with a development Recaulk provider and is never packaged" >&2; exit 1 ;;
+  *) echo "build-codex-package: $OUT_IN/build-manifest has no recaulk_origin=released" >&2; exit 1 ;;
+esac
 VER=$(sh "$REPO/build/codex-pin.sh" version)
 printf '%s\n' "$ID" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-mavericks\.[1-9][0-9]*$' \
   || { echo "build-codex-package: BUILD-ID $ID is not <x.y.z>-mavericks.<N>, N >= 1" >&2; exit 1; }
