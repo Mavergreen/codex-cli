@@ -22,7 +22,7 @@ for notice in LICENSE NOTICE; do
   [ -s "$SOURCE/$notice" ] || { echo "build-codex: no $SOURCE/$notice" >&2; exit 1; }
 done
 TARGET_DIR="$BUILD_ROOT/codex-$MODE-target"
-codex_build_env "$MODE" "$SOURCE" "$TARGET_DIR"
+codex_build_env "$MODE" "$SOURCE" "$TARGET_DIR" "$BUILD_ROOT/objc-$MODE"
 
 ARTIFACT="$BUILD_ROOT/codex-$MODE"
 mkdir -p "$ARTIFACT"
@@ -48,11 +48,19 @@ else
   VERSION=$(sh "$HERE/codex-pin.sh" version)-mavericks.0
   echo "build-codex: no BUILD_ID: a dev build, $VERSION, never publishable" >&2
 fi
+# spec: build/fetch-recaulk-objc.sh header -- a development provider makes a dev build, whatever
+#       BUILD_ID says; packaging also refuses its recaulk_origin.
+if [ "$RECAULK_ORIGIN" = development ]; then
+  VERSION=$(sh "$HERE/codex-pin.sh" version)-mavericks.0
+  echo "build-codex: linked with a development Recaulk provider: a dev build, $VERSION, never publishable" >&2
+fi
 [ -n "$VERSION" ] || { echo "build-codex: no version: BUILD_ID or VERSION is empty" >&2; exit 1; }
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \
     "$(sh "$HERE/codex-pin.sh" revision)" "$RUST_PIN" "$RUSTY_V8_VERSION"
   printf 'clang_version=%s\nprotoc_runtime=%s\nsdk=%s\n' "$CLANG_VERSION" "$PROTOC_RUNTIME" "${SDK##*/}"
+  printf 'recaulk_origin=%s\nrecaulk_version=%s\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
+    "$RECAULK_ORIGIN" "$RECAULK_VERSION" "$RECAULK_ARCHIVE_SHA256" "$RECAULK_DECLARATION_SHA256"
 } > "$ARTIFACT/build-manifest"
 printf '%s\n' "$ARTIFACT"

@@ -5,7 +5,7 @@ pinned in `components/codex/version`. Each patch also applies on its own to that
 --check` runs on all of them before any is applied. A new patch is added only for an
 incompatibility measured on Mac OS X 10.9, or to make Codex update from this product's own builds
 rather than OpenAI's. Patches 0004 to 0007 are Wowfunhappy's; `PROVENANCE.md` says where each came
-from. 0008, 0009 and 0011 to 0013 are this product's own. 0001, 0002, 0003 and 0010 are removed,
+from. 0008, 0009 and 0011 to 0014 are this product's own. 0001, 0002, 0003 and 0010 are removed,
 and their numbers are not reused: "Removed patches"
 at the end says what each did and why it went.
 
@@ -188,6 +188,27 @@ at the end says what each did and why it went.
   `CODEX_UPDATE_FROM_RELEASE`) and their environment are upstream's. The package's installer
   implements each of them as upstream's `install.sh` does.
 - **When to reconsider:** when the package's installer moves.
+
+## 0014-explicit-recaulk-objc-linkage.patch
+
+- **What:** `codex-rs/cli/build.rs` keeps upstream's `-ObjC` and, for an x86_64 macOS target
+  (`CARGO_CFG_TARGET_OS`/`CARGO_CFG_TARGET_ARCH`, never the host), reads the file
+  `MAVERICKS_OBJC_LINK_ARGS_FILE` names and emits each line as `cargo:rustc-link-arg-bin=codex=`.
+  `build/codex-build-env.sh` writes that file from shipyard's `objc-provider-link-args.sh`: Recaulk's
+  provider archive, `-Wl,-u,___recaulk_objc_activate`, `-framework AppKit`, `-framework Carbon`
+  and the link map. The hook reruns when the file, the archive or the archive's digest
+  (`MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256`) changes. Without the variable an x86_64 macOS build
+  fails and names `build/build-codex.sh` and `build/cargo-dev.sh`.
+- **Why:** `codex login` opens the browser through the `webbrowser` crate, which sends
+  `-[NSWorkspace openURLs:withApplicationAtURL:options:configuration:error:]` (10.15). 10.9's
+  NSWorkspace has no such method, and the unrecognized selector aborts Codex. Recaulk's
+  `recaulk.nsworkspace.open-urls.v1` provider adds it on 10.9; this links it. It is build
+  integration: no browser code changes and no dependency is downgraded.
+- **Invariant kept:** the arguments reach only the `codex` binary: not `logs_client`,
+  `codex-code-mode-host`, a build script or a proc macro, and never rustflags. Every other target
+  builds as upstream's. Where NSWorkspace or a superclass already has the method, the provider adds
+  nothing (Recaulk's `register.m` is add-only).
+- **When to reconsider:** when the floor rises past 10.15, or `webbrowser` stops sending the selector.
 
 ## Removed patches
 

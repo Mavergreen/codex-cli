@@ -1,0 +1,52 @@
+diff --git a/codex-rs/cli/build.rs b/codex-rs/cli/build.rs
+index abccc48..ee6aeb5 100644
+--- a/codex-rs/cli/build.rs
++++ b/codex-rs/cli/build.rs
+@@ -2,4 +2,47 @@ fn main() {
+     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+         println!("cargo:rustc-link-arg=-ObjC");
+     }
++    mavergreen_objc_provider();
++}
++
++/// Mavergreen: on Mac OS X 10.9 the codex binary links Recaulk's Objective-C provider, which
++/// back-fills -[NSWorkspace openURLs:withApplicationAtURL:options:configuration:error:] for the
++/// webbrowser crate (`codex login`). build/codex-build-env.sh writes the linker arguments that
++/// shipyard's objc-provider-link-args.sh prints, one per line, to MAVERICKS_OBJC_LINK_ARGS_FILE:
++/// the provider archive first, then its activation root, frameworks and link map. They go to the
++/// codex binary alone, never to logs_client, codex-code-mode-host or a host build tool, and only
++/// when the target (not the host) is x86_64 macOS.
++fn mavergreen_objc_provider() {
++    println!("cargo:rerun-if-env-changed=MAVERICKS_OBJC_LINK_ARGS_FILE");
++    println!("cargo:rerun-if-env-changed=MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256");
++    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
++    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
++    if target_os != "macos" || target_arch != "x86_64" {
++        return;
++    }
++    let Some(file) = std::env::var_os("MAVERICKS_OBJC_LINK_ARGS_FILE") else {
++        panic!(
++            "MAVERICKS_OBJC_LINK_ARGS_FILE is not set: build x86_64-apple-darwin Codex with \
++             build/build-codex.sh or build/cargo-dev.sh, which link Recaulk's Objective-C provider"
++        );
++    };
++    let file = std::path::PathBuf::from(file);
++    println!("cargo:rerun-if-changed={}", file.display());
++    let text = std::fs::read_to_string(&file)
++        .unwrap_or_else(|err| panic!("cannot read {}: {err}", file.display()));
++    let args: Vec<&str> = text.lines().collect();
++    let archive = args.first().copied().unwrap_or_default();
++    if !archive.starts_with('/') || !archive.ends_with(".a") || !std::path::Path::new(archive).is_file() {
++        panic!(
++            "{} does not start with the provider archive (an absolute path to an existing .a): {archive:?}",
++            file.display()
++        );
++    }
++    println!("cargo:rerun-if-changed={archive}");
++    for arg in args {
++        if arg.is_empty() {
++            panic!("{} holds an empty line", file.display());
++        }
++        println!("cargo:rustc-link-arg-bin=codex={arg}");
++    }
+ }

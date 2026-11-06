@@ -16,5 +16,5 @@ codex_check_host "$MODE"
 BUILD_ROOT=$(mavericks_build_root)
 SOURCE="$BUILD_ROOT/codex-src"
 [ -d "$SOURCE/codex-rs" ] || { echo "cargo-dev: no $SOURCE; run build/fetch-codex.sh first" >&2; exit 1; }
-codex_build_env "$MODE" "$SOURCE" "$BUILD_ROOT/codex-dev-target"
+codex_build_env "$MODE" "$SOURCE" "$BUILD_ROOT/codex-dev-target" "$BUILD_ROOT/objc-dev"
 codex_cargo "$@"

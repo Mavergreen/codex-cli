@@ -18,10 +18,12 @@ codex_check_host() {
   }
 }
 
-# codex_build_env MODE SOURCE TARGET_DIR: export the build environment and set RUST_PREFIX, RUST_PIN, SDK,
-#   CLANG_VERSION, PROTOC_RUNTIME and RUSTY_V8_VERSION. codex_cargo then runs cargo in it.
+# codex_build_env MODE SOURCE TARGET_DIR OBJC_DIR: export the build environment and set RUST_PREFIX,
+#   RUST_PIN, SDK, CLANG_VERSION, PROTOC_RUNTIME, RUSTY_V8_VERSION and the RECAULK_* provider identity.
+#   codex_cargo then runs cargo in it. OBJC_DIR (outside SOURCE and TARGET_DIR) receives the provider's
+#   linker arguments and, at link time, linkmaps/codex.map.
 codex_build_env() {
-  MODE=$1; SOURCE=$2; TARGET_DIR=$3
+  MODE=$1; SOURCE=$2; TARGET_DIR=$3; OBJC_DIR=$4
   BUILD_ROOT=$(mavericks_build_root)
   sh "$BUILD_DIR/check-rust-pin.sh" "$SOURCE"
   RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
@@ -101,6 +103,8 @@ codex_build_env() {
     PROTOC_RUNTIME="libcxx22-$CLANG_VERSION"
   fi
 
+  codex_objc_provider "$OBJC_DIR"
+
   mkdir -p "$TARGET_DIR"
   V8_FILES=$(sh "$BUILD_DIR/fetch-rusty-v8.sh" "$SOURCE")
   # spec: build/fetch-rusty-v8.sh -- it stores the archive under rusty-v8-<Cargo.lock's v8 version>/.
@@ -118,6 +122,43 @@ codex_build_env() {
   export CARGO_HOME="$BUILD_ROOT/cargo-home"
   export CARGO_NET_GIT_FETCH_WITH_CLI=true
   export MACOSX_DEPLOYMENT_TARGET=10.9
+}
+
+# codex_objc_provider OBJC_DIR: the Recaulk Objective-C provider the codex binary links
+#   (build/fetch-recaulk-objc.sh), and shipyard's linker arguments for it in OBJC_DIR/link-args, exported
+#   as MAVERICKS_OBJC_LINK_ARGS_FILE with the archive's digest as MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256.
+#   patches/0014's codex-rs/cli/build.rs hands them to the codex binary's link alone, for an x86_64
+#   macOS target only: never as rustflags, which would reach every target, build script, proc macro
+#   and codex-code-mode-host. Sets RECAULK_PREFIX, RECAULK_ORIGIN, RECAULK_VERSION,
+#   RECAULK_ARCHIVE_SHA256 and RECAULK_DECLARATION_SHA256.
+codex_objc_provider() {
+  objc_dir=$1
+  provider=$(sh "$BUILD_DIR/fetch-recaulk-objc.sh") || {
+    echo "build-codex: no verified Recaulk Objective-C provider (build/fetch-recaulk-objc.sh above)" >&2; exit 1;
+  }
+  RECAULK_PREFIX=$(printf '%s\n' "$provider" | sed -n 1p)
+  RECAULK_ORIGIN=$(printf '%s\n' "$provider" | sed -n 2p)
+  RECAULK_VERSION=$(printf '%s\n' "$provider" | sed -n 3p)
+  mkdir -p "$objc_dir/linkmaps"
+  sh "$SHIPYARD_SCRIPTS/objc-provider-link-args.sh" --prefix "$RECAULK_PREFIX" \
+    --link-map "$objc_dir/linkmaps/codex.map" > "$objc_dir/link-args.new" || {
+    rm -f "$objc_dir/link-args.new"
+    echo "build-codex: shipyard gave no linker arguments for the provider at $RECAULK_PREFIX" >&2; exit 1;
+  }
+  # platform: build.rs reruns, and codex relinks, when the file's mtime moves; unchanged arguments
+  #           keep the old file so a rebuild does not relink for nothing.
+  if cmp -s "$objc_dir/link-args.new" "$objc_dir/link-args"; then
+    rm "$objc_dir/link-args.new"
+  else
+    mv "$objc_dir/link-args.new" "$objc_dir/link-args"
+  fi
+  archive=$(sed -n 1p "$objc_dir/link-args")
+  RECAULK_ARCHIVE_SHA256=$(shasum -a 256 "$archive" | cut -c1-64)
+  RECAULK_DECLARATION_SHA256=$(shasum -a 256 "$RECAULK_PREFIX/share/recaulk/objc-providers.json" | cut -c1-64)
+  MAVERICKS_OBJC_LINK_ARGS_FILE="$objc_dir/link-args"
+  # spec: patches/0014 -- an archive whose bytes change under the same mtime still reruns build.rs.
+  MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256=$RECAULK_ARCHIVE_SHA256
+  export MAVERICKS_OBJC_LINK_ARGS_FILE MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256
 }
 
 # codex_cargo ARGS...: cargo in SOURCE/codex-rs, under codex_build_env's environment.
