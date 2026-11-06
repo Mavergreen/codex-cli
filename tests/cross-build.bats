@@ -13,6 +13,11 @@ setup() {
     "$source_revision" "$rust_version" "$clang_version" "$clang_version" > "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
   printf 'mode=cross\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_version=%s\nrusty_v8_version=150.4.0\nclang_version=%s\nprotoc_runtime=host\nsdk=MacOSX10.9.sdk\n' \
     "$source_revision" "$rust_version" "$clang_version" > "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  # spec: build/build-codex.sh -- both builds link the same released Recaulk provider
+  for mode in native cross; do
+    printf 'recaulk_origin=released\nrecaulk_version=20261201.1\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
+      "$(printf a%.0s $(seq 64))" "$(printf b%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
+  done
 }
 
 @test "native and cross manifests agree on pinned source and toolchain" {
@@ -117,4 +122,35 @@ setup() {
 @test "an unknown check-build-manifests option is a usage error" {
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --bogus
   [ "$status" -eq 2 ]
+}
+
+@test "a development provider in either manifest cannot claim release equivalence" {
+  for mode in native cross; do
+    cp "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest" "$BATS_TEST_TMPDIR/keep"
+    sed -i.bak 's/^recaulk_origin=.*/recaulk_origin=development/; s/^recaulk_version=.*/recaulk_version=development/' \
+      "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
+    run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"development Recaulk provider"* ]] || false
+    cp "$BATS_TEST_TMPDIR/keep" "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
+  done
+  sed -i.bak 's/^recaulk_origin=.*/recaulk_origin=development/' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
+  [ "$status" -ne 0 ]
+}
+
+@test "native and cross manifests must link the same provider bytes" {
+  for field in recaulk_version recaulk_archive_sha256 recaulk_declaration_sha256; do
+    cp "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest" "$BATS_TEST_TMPDIR/keep"
+    sed -i.bak "s/^$field=.*/$field=20261202.1/" "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+    run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+    [ "$status" -ne 0 ] || { echo "accepted a different $field"; false; }
+    cp "$BATS_TEST_TMPDIR/keep" "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  done
+}
+
+@test "a manifest that does not say which provider it linked is refused" {
+  sed -i.bak '/^recaulk_/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
+  [ "$status" -ne 0 ]
 }
