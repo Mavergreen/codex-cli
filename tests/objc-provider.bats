@@ -234,3 +234,170 @@ released
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ "$(printf '%s\n' "$output" | tail -2 | sed -n 1p)" = development ]
 }
+
+# ---- the build hook: patches/0014-explicit-recaulk-objc-linkage.patch on codex-rs/cli/build.rs ----
+# spec: patches/README.md "0014" -- the provider's arguments reach the codex binary's link alone, and
+#       only for an x86_64 macOS target; the hook is real Rust, compiled with the pinned toolchain.
+
+# hook_source DIR: codex-rs/cli/build.rs as the pinned Codex has it, with 0014 applied, under DIR.
+hook_source() {
+  mkdir -p "$1/codex-rs/cli"
+  printf '%s\n' 'fn main() {' \
+    '    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {' \
+    '        println!("cargo:rustc-link-arg=-ObjC");' \
+    '    }' '}' > "$1/codex-rs/cli/build.rs"
+  (cd "$1" && git apply "$PRODUCT_ROOT/patches/0014-explicit-recaulk-objc-linkage.patch")
+}
+
+# hook_args: the staged fixture provider under a path with a space, and shipyard's linker arguments
+# for it in $args (MAVERICKS_OBJC_LINK_ARGS_FILE), its link map beside it.
+hook_args() {
+  spaced="$BATS_TEST_TMPDIR/sp ace"
+  fixture_prefix "$spaced/staged"
+  args="$spaced/link-args"
+  sh "$SHIPYARD_SCRIPTS/objc-provider-link-args.sh" --prefix "$spaced/staged" --link-map "$spaced/codex.map" > "$args"
+  [ "$(sed -n 1p "$args")" = "$(cd -P "$spaced/staged" && pwd)/lib/librecaulk-objc.a" ]
+}
+
+rust_toolchain() { rust=${CODEX_TEST_RUST_PREFIX:-$(sh "$product/build/fetch-rust.sh")}; [ -x "$rust/bin/cargo" ]; }
+
+# hook_workspace: a Cargo workspace shaped as codex-rs where it matters: codex-cli (the hook, the
+# codex and logs_client binaries, a proc-macro dependency) and codex-code-mode-host. Its x86_64
+# linker records each link's arguments in $links/NAME.args (and a line per link in $links/calls)
+# and writes an empty output; host links (build scripts, the proc macro) go on to cc.
+hook_workspace() {
+  ws="$BATS_TEST_TMPDIR/ws"
+  hook_source "$ws"
+  mkdir -p "$ws/codex-rs/cli/src/bin" "$ws/codex-rs/code-mode-host/src" "$ws/codex-rs/pm/src"
+  printf '[workspace]\nmembers = ["cli", "code-mode-host", "pm"]\nresolver = "2"\n' > "$ws/codex-rs/Cargo.toml"
+  printf '[package]\nname = "codex-cli"\nversion = "0.0.0"\nedition = "2024"\nbuild = "build.rs"\n\n[[bin]]\nname = "codex"\npath = "src/main.rs"\n\n[[bin]]\nname = "logs_client"\npath = "src/bin/logs_client.rs"\n\n[dependencies]\npm = { path = "../pm" }\n' > "$ws/codex-rs/cli/Cargo.toml"
+  printf 'pm::noop!();\nfn main() {}\n' > "$ws/codex-rs/cli/src/main.rs"
+  printf 'fn main() {}\n' > "$ws/codex-rs/cli/src/bin/logs_client.rs"
+  printf '[package]\nname = "codex-code-mode-host"\nversion = "0.0.0"\nedition = "2024"\n' > "$ws/codex-rs/code-mode-host/Cargo.toml"
+  printf 'fn main() {}\n' > "$ws/codex-rs/code-mode-host/src/main.rs"
+  printf '[package]\nname = "pm"\nversion = "0.0.0"\nedition = "2024"\n\n[lib]\nproc-macro = true\n' > "$ws/codex-rs/pm/Cargo.toml"
+  printf 'use proc_macro::TokenStream;\n#[proc_macro]\npub fn noop(_: TokenStream) -> TokenStream { TokenStream::new() }\n' > "$ws/codex-rs/pm/src/lib.rs"
+  links="$BATS_TEST_TMPDIR/links"
+  mkdir -p "$links"
+  # platform: named *-cc, not *-ld: rustc picks the linker flavor from the name.
+  cat > "$BATS_TEST_TMPDIR/record-cc" <<EOF
+#!/bin/sh
+out=; prev=
+for a in "\$@"; do [ "\$prev" != -o ] || out=\$a; prev=\$a; done
+name=\$(basename "\$out")
+case "\${name##*-}" in ????????????????) name=\${name%-*} ;; esac
+printf '%s\n' "\$@" > "$links/\$name.args"
+printf '%s\n' "\$name" >> "$links/calls"
+case "\$out" in
+  */x86_64-apple-darwin/*) : > "\$out"; chmod +x "\$out" ;;
+  *) exec cc "\$@" ;;
+esac
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/record-cc"
+}
+
+cargo_build() {
+  (cd "$ws/codex-rs" && PATH="$rust/bin:$PATH" CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$BATS_TEST_TMPDIR/record-cc" \
+    CARGO_TARGET_DIR="$ws/target" CARGO_HOME="$BATS_TEST_TMPDIR/cargo-home" CARGO_NET_OFFLINE=true \
+    CARGO_PROFILE_RELEASE_DEBUG=false MACOSX_DEPLOYMENT_TARGET=10.9 \
+    "$rust/bin/cargo" build --release --target x86_64-apple-darwin --workspace)
+}
+links_of() { grep -cx "$1" "$links/calls" || true; }
+
+@test "the hook gives the provider's arguments to the codex binary's link alone, in order, beside -ObjC" {
+  rust_toolchain
+  hook_args
+  hook_workspace
+  MAVERICKS_OBJC_LINK_ARGS_FILE="$args" run cargo_build
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [[ "$(cat "$links/codex.args")" == *"$(cat "$args")"* ]] || { cat "$links/codex.args"; false; }
+  grep -qx -- -ObjC "$links/codex.args"
+  grep -qx -- -ObjC "$links/logs_client.args"
+  for f in "$links"/*.args; do
+    [ "$f" = "$links/codex.args" ] && continue
+    ! grep -qF "librecaulk-objc.a" "$f" || { echo "$f has the provider"; false; }
+    ! grep -qF "___recaulk_objc_activate" "$f" || { echo "$f has the root"; false; }
+  done
+  [ -f "$links/codex_code_mode_host.args" ]
+}
+
+@test "an unchanged rebuild does not relink codex; a changed archive or archive digest does" {
+  rust_toolchain
+  hook_args
+  hook_workspace
+  export MAVERICKS_OBJC_LINK_ARGS_FILE="$args" MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256=one
+  run cargo_build; [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(links_of codex)" -eq 1 ]
+  run cargo_build; [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(links_of codex)" -eq 1 ]
+  sleep 1
+  printf 'x' >> "$spaced/staged/lib/librecaulk-objc.a"
+  run cargo_build; [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(links_of codex)" -eq 2 ]
+  MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256=two run cargo_build; [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(links_of codex)" -eq 3 ]
+  [ "$(links_of codex_code_mode_host)" -eq 1 ]
+}
+
+@test "an x86_64 macOS build without the args file fails and names the official wrappers" {
+  rust_toolchain
+  hook_workspace
+  unset MAVERICKS_OBJC_LINK_ARGS_FILE
+  run cargo_build
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MAVERICKS_OBJC_LINK_ARGS_FILE is not set"* ]] || false
+  [[ "$output" == *"build/build-codex.sh"* ]] || false
+  [[ "$output" == *"build/cargo-dev.sh"* ]] || false
+  [ ! -e "$links/codex.args" ]
+}
+
+# hook_binary: the patched build.rs compiled for this host, to run with chosen Cargo variables.
+hook_binary() {
+  hook_source "$BATS_TEST_TMPDIR/hook"
+  "$rust/bin/rustc" --edition 2024 -o "$BATS_TEST_TMPDIR/hook/build-script" "$BATS_TEST_TMPDIR/hook/codex-rs/cli/build.rs"
+}
+
+@test "the hook decides by the target, not the host: no provider arguments for another target" {
+  rust_toolchain
+  hook_binary
+  for target in macos:aarch64 linux:x86_64 ios:x86_64; do
+    CARGO_CFG_TARGET_OS=${target%:*} CARGO_CFG_TARGET_ARCH=${target#*:} MAVERICKS_OBJC_LINK_ARGS_FILE=/nonexistent \
+      run "$BATS_TEST_TMPDIR/hook/build-script"
+    [ "$status" -eq 0 ] || { echo "$target: $output"; false; }
+    [[ "$output" != *"rustc-link-arg-bin"* ]] || { echo "$target: $output"; false; }
+  done
+  CARGO_CFG_TARGET_OS=macos CARGO_CFG_TARGET_ARCH=aarch64 run "$BATS_TEST_TMPDIR/hook/build-script"
+  [[ "$output" == *"cargo:rustc-link-arg=-ObjC"* ]] || false
+}
+
+@test "the hook refuses an args file that does not start with an existing archive, or holds an empty line" {
+  rust_toolchain
+  hook_binary
+  hook_args
+  for bad in "$BATS_TEST_TMPDIR/sp ace/staged/lib/missing.a" "relative/librecaulk-objc.a" "-Wl,-u,___recaulk_objc_activate"; do
+    { printf '%s\n' "$bad"; sed 1d "$args"; } > "$BATS_TEST_TMPDIR/bad-args"
+    CARGO_CFG_TARGET_OS=macos CARGO_CFG_TARGET_ARCH=x86_64 MAVERICKS_OBJC_LINK_ARGS_FILE="$BATS_TEST_TMPDIR/bad-args" \
+      run "$BATS_TEST_TMPDIR/hook/build-script"
+    [ "$status" -ne 0 ] || { echo "accepted $bad"; false; }
+    [[ "$output" != *"rustc-link-arg-bin"* ]] || false
+  done
+  { cat "$args"; echo; echo -ObjC; } > "$BATS_TEST_TMPDIR/bad-args"
+  CARGO_CFG_TARGET_OS=macos CARGO_CFG_TARGET_ARCH=x86_64 MAVERICKS_OBJC_LINK_ARGS_FILE="$BATS_TEST_TMPDIR/bad-args" \
+    run "$BATS_TEST_TMPDIR/hook/build-script"
+  [ "$status" -ne 0 ]
+}
+
+@test "the provider stays rooted through -dead_strip and consumer LTO" {
+  hook_args
+  set --
+  while IFS= read -r line; do set -- "$@" "$line"; done < "$args"
+  printf 'int main(void) { return 0; }\n' > "$BATS_TEST_TMPDIR/consumer.c"
+  for flags in "-O2" "-O2 -Wl,-dead_strip" "-O2 -flto -Wl,-dead_strip"; do
+    env -i PATH=/usr/bin:/bin /usr/bin/clang -arch x86_64 -isysroot "$sdk" -mmacosx-version-min=10.9 $flags \
+      "$BATS_TEST_TMPDIR/consumer.c" "$@" -o "$BATS_TEST_TMPDIR/consumer"
+    nm "$BATS_TEST_TMPDIR/consumer" | grep -q ' T ___recaulk_objc_activate$' || { echo "$flags lost the root"; false; }
+    nm "$BATS_TEST_TMPDIR/consumer" | grep -q ' T ___recaulk_objc_workspace_open_urls$' || { echo "$flags lost the implementation"; false; }
+    otool -L "$BATS_TEST_TMPDIR/consumer" | grep -q '/AppKit.framework/' || { echo "$flags lost AppKit"; false; }
+    [ -s "$spaced/codex.map" ]
+  done
+}

@@ -4,10 +4,19 @@
 # build-codex.sh runs in a scratch copy of the product whose fetch scripts are stand-ins, against a
 # scratch shipyard whose mode and SDK are the test's. Its cargo is a stand-in that records the
 # environment it was given and writes empty binaries, so each test sees what the real cargo would.
+# The Objective-C provider is a fixture prefix (tests/lib/objc-provider-fixture.sh) that a stand-in
+# fetch_product_pkg.sh answers for the release pinned in components/recaulk/version; shipyard's own
+# provider helpers run for real, with the caller's PATH and build root, outside the stand-ins.
+. "$BATS_TEST_DIRNAME/lib/objc-provider-fixture.sh"
+
 setup() {
   export PRODUCT_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   export SHIPYARD_SCRIPTS="${SHIPYARD_SCRIPTS:-/home/schmonz/Documents/trees/mavergreen-shipyard/scripts}"
+  real_shipyard=$SHIPYARD_SCRIPTS
+  outer_root=${MAVERICKS_BUILD_ROOT:-${TMPDIR:-/tmp}/mm-build}
+  outer_path=$PATH
   export MAVERICKS_BUILD_ROOT="$BATS_TEST_TMPDIR/local-build"
+  unset CODEX_DEV_RECAULK_PREFIX MAVERICKS_OBJC_LINK_ARGS_FILE MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256
   export MAVERICKS_TAGS=""
   stand_ins="$BATS_TEST_TMPDIR/stand-ins"
   product="$BATS_TEST_TMPDIR/product"
@@ -20,6 +29,18 @@ setup() {
   rm "$shipyard/mavericks_mode.sh" "$shipyard/fetch_sdk.sh"
   printf '#!/bin/sh\necho "$MODE_FOR_TEST"\n' > "$shipyard/mavericks_mode.sh"
   printf '#!/bin/sh\necho "%s"\n' "$sdk" > "$shipyard/fetch_sdk.sh"
+  for helper in objc-provider-link-args.sh objc-build-evidence.sh objc-compat.sh; do
+    rm "$shipyard/$helper"
+    printf '#!/bin/sh\nPATH="%s" MAVERICKS_BUILD_ROOT="%s" exec sh "%s" "$@"\n' "$outer_path" "$outer_root" "$real_shipyard/$helper" \
+      > "$shipyard/$helper"
+  done
+  rm "$shipyard/fetch_product_pkg.sh"
+  provider="$BATS_TEST_TMPDIR/recaulk-release"
+  objc_fixture_prefix "$provider" "$(sh "$real_shipyard/fetch_sdk.sh" --arch x86_64)"
+  printf '#!/bin/sh\n[ "$1" = recaulk ] || exit 9\necho "$*" >> "%s"\necho "%s"\n' "$BATS_TEST_TMPDIR/recaulk-fetches" "$provider" \
+    > "$shipyard/fetch_product_pkg.sh"
+  mkdir -p "$product/components/recaulk"
+  echo 20261201.1 > "$product/components/recaulk/version"
   export SHIPYARD_SCRIPTS="$shipyard"
 
   source_dir="$BATS_TEST_TMPDIR/codex-src"
@@ -159,4 +180,104 @@ build() {
   [[ "$output" == *"a dev build"* ]] || false
   grep -qx "version=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" version)-mavericks.0" \
     "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+}
+
+# ---- the Objective-C provider: build/fetch-recaulk-objc.sh, then shipyard's linker arguments ----
+# spec: build/codex-build-env.sh codex_objc_provider -- cargo gets MAVERICKS_OBJC_LINK_ARGS_FILE (out of
+#       the source and target trees) and the archive's digest, never the provider in any rustflags.
+
+cargo_value() { sed -n "s/^$1=//p" "$cargo_env"; }
+
+# provider_reaches_cargo MODE: cargo ran with the provider's arguments file for MODE, and nothing else
+# carries them.
+provider_reaches_cargo() {
+  root=$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)
+  file=$(cargo_value MAVERICKS_OBJC_LINK_ARGS_FILE)
+  [ "$file" = "$root/objc-$1/link-args" ] || { echo "args file: $file"; false; }
+  [ "$(sed -n 1p "$file")" = "$(cd -P "$provider" && pwd)/lib/librecaulk-objc.a" ]
+  grep -qx -- -Wl,-u,___recaulk_objc_activate "$file"
+  grep -qx -- "$root/objc-$1/linkmaps/codex.map" "$file"
+  [ "$(cargo_value MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256)" = "$(objc_fixture_sha "$provider/lib/librecaulk-objc.a")" ]
+  case "$file" in "$source_dir"/*|"$root/codex-$1-target"/*) echo "args file inside the source or target tree"; false ;; esac
+  ! grep -E '^(RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_TARGET_[A-Z0-9_]*_RUSTFLAGS|CARGO_BUILD_RUSTFLAGS)=.*(recaulk|AppKit|-map)' "$cargo_env"
+}
+
+@test "a native build hands cargo the provider's linker arguments in a file, and no rustflags carry them" {
+  run build native
+  succeeded
+  provider_reaches_cargo native
+  grep -qx "SDKROOT=$sdk" "$cargo_env"
+  cargo_lacks CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS
+  grep -qx "recaulk 20261201.1 $(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/recaulk-20261201.1" "$BATS_TEST_TMPDIR/recaulk-fetches"
+}
+
+@test "a cross build hands cargo the same arguments, and its target rustflags stay the SDK's alone" {
+  run build cross
+  succeeded
+  provider_reaches_cargo cross
+  grep -qx "CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS=-C link-arg=-isysroot -C link-arg=$sdk" "$cargo_env"
+  cargo_lacks SDKROOT
+}
+
+@test "a build without a released or development provider fails before cargo runs" {
+  rm "$product/components/recaulk/version"
+  run build native
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CODEX_DEV_RECAULK_PREFIX"* ]] || false
+  [ ! -e "$cargo_env" ]
+}
+
+@test "a provider the shared check refuses fails the build before cargo runs" {
+  printf 'x' >> "$provider/lib/librecaulk-objc.a"
+  run build native
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"shipyard refused the provider declaration"* ]] || false
+  [ ! -e "$cargo_env" ]
+}
+
+@test "the manifest records the provider's origin, version, archive and declaration" {
+  printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
+  run build native
+  succeeded
+  m="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native/build-manifest"
+  grep -qx "version=0.161.0-mavericks.7" "$m"
+  grep -qx "recaulk_origin=released" "$m"
+  grep -qx "recaulk_version=20261201.1" "$m"
+  grep -qx "recaulk_archive_sha256=$(objc_fixture_sha "$provider/lib/librecaulk-objc.a")" "$m"
+  grep -qx "recaulk_declaration_sha256=$(objc_fixture_sha "$provider/share/recaulk/objc-providers.json")" "$m"
+}
+
+@test "a development provider makes a dev build whatever BUILD_ID says, and fetches no release" {
+  printf '0.161.0-mavericks.7\n' > "$product/BUILD_ID"
+  staged="$BATS_TEST_TMPDIR/sp ace/staged"
+  objc_fixture_prefix "$staged" "$(sh "$real_shipyard/fetch_sdk.sh" --arch x86_64)"
+  CODEX_DEV_RECAULK_PREFIX="$staged" run build cross
+  succeeded
+  m="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+  grep -qx "version=$(sh "$PRODUCT_ROOT/build/codex-pin.sh" version)-mavericks.0" "$m"
+  grep -qx "recaulk_origin=development" "$m"
+  grep -qx "recaulk_version=development" "$m"
+  [[ "$output" == *"never publishable"* ]] || false
+  [ "$(sed -n 1p "$(cargo_value MAVERICKS_OBJC_LINK_ARGS_FILE)")" = "$(cd -P "$staged" && pwd)/lib/librecaulk-objc.a" ]
+  [ ! -e "$BATS_TEST_TMPDIR/recaulk-fetches" ]
+}
+
+@test "unchanged arguments keep the args file's mtime, so cargo does not relink for nothing" {
+  run build native
+  succeeded
+  file="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/objc-native/link-args"
+  touch -t 200001010000.00 "$file"
+  run build native
+  succeeded
+  [ "$(stat -f %m "$file")" = "$(date -j -f %Y%m%d%H%M%S 20000101000000 +%s)" ]
+}
+
+@test "cargo-dev.sh runs cargo with the provider's arguments too" {
+  mkdir -p "$MAVERICKS_BUILD_ROOT/codex-src/codex-rs"
+  cp "$source_dir/codex-rs/rust-toolchain.toml" "$MAVERICKS_BUILD_ROOT/codex-src/codex-rs/"
+  MODE_FOR_TEST=native run sh "$product/build/cargo-dev.sh" test -p codex-install-context
+  succeeded
+  root=$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)
+  [ "$(cargo_value MAVERICKS_OBJC_LINK_ARGS_FILE)" = "$root/objc-dev/link-args" ]
+  grep -qx -- "$root/objc-dev/linkmaps/codex.map" "$root/objc-dev/link-args"
 }
