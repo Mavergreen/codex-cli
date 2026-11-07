@@ -132,8 +132,13 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   guard "$ART/codex-code-mode-host"
   if [ -n "$report" ]; then
     echo "rebuilt codex-code-mode-host: gate exit $rc, $(counts "$report")"
-    [ "$(verdicts "$report" "$SEL_OPEN")" = absent ] && pass "codex-code-mode-host is measured on its own bytes, with no openURLs send" ||
+    [ "$(verdicts "$report" "$SEL_OPEN")" = absent ] && pass "codex-code-mode-host has no openURLs send" ||
       fail "codex-code-mode-host has openURLs: $(verdicts "$report" "$SEL_OPEN")"
+    # Its own build evidence (R2 rows for objc2's NSString, NSError and NSDictionary helpers, R3 for os_info)
+    # closes every send it makes.
+    hopen=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); print scalar grep { $_->{verdict} =~ /^(unresolved|unsupported)$/ } @{$r->{findings}}' "$report")
+    [ "$rc" = 0 ] && [ "$hopen" = 0 ] && pass "the gate passes codex-code-mode-host on its own build evidence" ||
+      fail "codex-code-mode-host: gate exit $rc, $hopen sends open"
   else fail "no report for codex-code-mode-host (exit $rc): $(tail -3 "$T/r$n.log")"; fi
 
   # -- mutations of the rebuilt binary's proof: each takes away what it touches --
@@ -195,6 +200,11 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
     if ( MAVERICKS_BUILD_ROOT="$TB" sh "$ROOT/build/objc-build-evidence.sh" --check "$MODE" ) > "$T/check2.log" 2>&1; then
       fail "--check accepted a codex that changed after its proof"
     else pass "--check refuses a proof once codex changed: $(head -1 "$T/check2.log")"; fi
+    printf '\001' | dd of="$TB/codex-$MODE/codex-code-mode-host" bs=1 seek=4096 conv=notrunc 2>/dev/null
+    if ( MAVERICKS_BUILD_ROOT="$TB" sh "$ROOT/build/objc-build-evidence.sh" --check "$MODE" ) > "$T/check3.log" 2>&1 ||
+       ! grep -q 'codex-code-mode-host changed since its proof' "$T/check3.log"; then
+      fail "--check did not name a code-mode host that changed after its proof: $(head -2 "$T/check3.log")"
+    else pass "--check refuses a proof once the code-mode host changed"; fi
     rc=0; MAVERICKS_BUILD_ROOT="$TB" CODEX_DEV_RECAULK_PREFIX="$PFX" sh "$ROOT/build/compat-guard.sh" "$TB/codex-$MODE/codex" > "$T/stale-guard.log" 2>&1 || rc=$?
     [ "$rc" = 1 ] && grep -q 'no current Objective-C proof' "$T/stale-guard.log" && pass "the gate will not reuse the stale reports" || fail "the gate with a stale proof: exit $rc"
   else
