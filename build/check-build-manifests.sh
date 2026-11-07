@@ -72,6 +72,20 @@ check_manifest() {
   [ "$(field sdk "$manifest")" = "$SDK_NATIVE" ] || {
     echo "check-build-manifests: SDK differs from native in $manifest" >&2; exit 1;
   }
+  # spec: build/fetch-recaulk-objc.sh header -- the Objective-C provider codex links. A development
+  #       (staged, unreleased) provider is never release-equivalent, whatever else matches; both
+  #       modes must link the same released bytes.
+  case "$(field recaulk_origin "$manifest")" in
+    released) ;;
+    development) echo "check-build-manifests: $manifest was linked with a development Recaulk provider and cannot claim release equivalence" >&2; exit 1 ;;
+    *) echo "check-build-manifests: $manifest does not say which Recaulk provider codex linked" >&2; exit 1 ;;
+  esac
+  for f in recaulk_version recaulk_archive_sha256 recaulk_declaration_sha256; do
+    [ -n "$(field "$f" "$manifest")" ] || { echo "check-build-manifests: no $f in $manifest" >&2; exit 1; }
+    [ "$(field "$f" "$manifest")" = "$(field "$f" "$NATIVE")" ] || {
+      echo "check-build-manifests: $f differs from native in $manifest" >&2; exit 1;
+    }
+  done
 }
 
 [ "$CROSS_ONLY" = yes ] || check_manifest "$NATIVE" native

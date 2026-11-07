@@ -111,6 +111,14 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
       echo "  $s${fn:+ in *$fn*}: $v"
       case ",$v," in *,unresolved,*|*,unsupported,*|,none,) open="$open $s" ;; esac
     done
+    # The provider body's own sends close through Recaulk's source receipt (share/recaulk/objc-source.receipt).
+    body=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); print scalar grep { $_->{verdict} =~ /^(unresolved|unsupported)$/ && ($_->{function} // "") =~ /^_+recaulk_/ } @{$r->{findings}}' "$rebuilt")
+    if [ -f "$PFX/share/recaulk/objc-source.receipt" ]; then
+      [ "$body" = 0 ] && pass "the provider body's own sends close through its source receipt" ||
+        fail "$body of the provider body's own sends stay open with its source receipt"
+    else
+      fail "the provider at $PFX carries no share/recaulk/objc-source.receipt"
+    fi
     blocking=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); print scalar grep { $_->{verdict} =~ /^(unresolved|unsupported)$/ && !$_->{exception} } @{$r->{findings}}' "$rebuilt")
     if [ "$rebuilt_rc" = 0 ]; then
       [ -z "$open" ] && [ "$blocking" = 0 ] && pass "the gate passes the rebuilt codex with all six closed" ||
@@ -166,6 +174,12 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   sed 's/"@56@0:8@16@24Q32@40^@48"/"@56@0:8@16@24I32@40^@48"/' "$PFX/share/recaulk/objc-providers.json" > "$T/pfx-abi/share/recaulk/objc-providers.json"
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-abi"
   [ "$(verdicts "$report" "$SEL_OPEN")" != provided ] && [ "$rc" != 0 ] && pass "a provider declaring another ABI does not provide openURLs (exit $rc)" || fail "wrong ABI: exit $rc, openURLs $(verdicts "$report" "$SEL_OPEN")"
+  cp -R "$PFX" "$T/pfx-noreceipt"; rm -f "$T/pfx-noreceipt/share/recaulk/objc-source.receipt"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-noreceipt"
+  case "$(verdicts "$report" countByEnumeratingWithState:objects:count: ___recaulk_)" in
+    *unresolved*) pass "without its source receipt the provider body's sends stay open" ;;
+    *) fail "without its source receipt the provider body's sends are $(verdicts "$report" countByEnumeratingWithState:objects:count: ___recaulk_)" ;;
+  esac
   cp -R "$PFX" "$T/pfx-bytes"; printf 'x' >> "$T/pfx-bytes/lib/librecaulk-objc.a"
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-bytes"
   [ "$(verdicts "$report" "$SEL_OPEN")" != provided ] && [ "$rc" != 0 ] && pass "a provider archive with other bytes does not provide openURLs (exit $rc)" || fail "changed archive: exit $rc"
@@ -217,8 +231,14 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
     [ "$(verdicts "$report" "$SEL_OPEN")" = provided ] && [ "$rc" = 0 ] && pass "a consumer linked with every argument: openURLs provided, gate clean" ||
       fail "full link: openURLs $(verdicts "$report" "$SEL_OPEN") (exit $rc)"
   else fail "the consumer did not link with every argument"; fi
-  for m in 'no-archive|!/\.a$/ && !/^-Wl,-u,/' 'no-root|!/^-Wl,-u,/' \
-           'no-carbon|{a[NR]=$0} END {for (i = 1; i <= NR; i++) { if (a[i] == "-framework" && a[i+1] == "Carbon") { i++; continue }; print a[i] }}'; do
+  # Carbon is declared but bound to by nothing (the provider reaches its functions through CoreServices and
+  # ApplicationServices), so leaving it out, as lld does for codex, keeps openURLs provided. What the provider
+  # does need loaded -- its imports' libraries and NSWorkspace's AppKit -- shipyard's provider test mutates.
+  if link no-carbon '{a[NR]=$0} END {for (i = 1; i <= NR; i++) { if (a[i] == "-framework" && a[i+1] == "Carbon") { i++; continue }; print a[i] }}'; then
+    [ "$(verdicts "$report" "$SEL_OPEN")" = provided ] && [ "$rc" = 0 ] && pass "no-carbon: openURLs still provided, as in codex's lld link" ||
+      fail "no-carbon: openURLs $(verdicts "$report" "$SEL_OPEN") (exit $rc)"
+  else fail "the consumer did not link without Carbon"; fi
+  for m in 'no-archive|!/\.a$/ && !/^-Wl,-u,/' 'no-root|!/^-Wl,-u,/'; do
     if link "${m%%|*}" "${m#*|}"; then
       case "$(verdicts "$report" "$SEL_OPEN")" in provided) fail "${m%%|*}: openURLs still provided" ;; *) pass "${m%%|*}: openURLs is $(verdicts "$report" "$SEL_OPEN") (exit $rc)" ;; esac
     else pass "${m%%|*}: the link itself fails"; fi
