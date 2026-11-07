@@ -42,6 +42,48 @@ upstream's own lints (trailing semicolons in `bail!`, unused imports and `mut`).
 | TUI starts in Terminal with a prompt, not an Objective-C exception | passed on 2026-10-15 (maintainer): the trust prompt, then the TUI; a full turn ran a command and answered. No FSEvents lines on the screen at startup or quit |
 | `FSEventsPurgeEventsForDeviceUpToEventId: f2d_purge_events_for_device_up_to_event_id_rpc() failed: 5` on stderr | seen in `codex exec` output, a few lines per run; harmless. notify 8.2.0, Codex's file watcher, calls it whenever it restarts an FSEvents stream, and Apple's header says only root may call it. 10.9 prints the failure. notify removed the call in 9.0.0-rc.2 (#795); Codex 0.161.0 pins 8.2.0, so it goes away when Codex moves to notify 9 |
 
+### Browser sign-in regression (2026-10-28)
+
+On magical-mattress (10.9.5), the installed Codex **0.165.0** aborts when selecting ChatGPT
+sign-in in the TUI. Reproduced with `codex login` and a fresh temporary CODEX_HOME:
+`-[NSWorkspace openURLs:withApplicationAtURL:options:configuration:error:]: unrecognized selector`,
+then `Rust cannot catch foreign exceptions, aborting` (SIGABRT). This is not a TLS or token-exchange
+failure: browser launch itself throws. The original crash is
+`codex_2026-10-28-223406_magical-mattress.crash`.
+
+`webbrowser` 1.2.2 introduced the NSWorkspace launch path, retained through 1.2.4. A minimal probe
+on this machine fails with 1.2.4 and successfully returns from opening the browser with 1.2.1,
+which uses Launch Services. The maintainer rejected a dependency downgrade as the shipping fix:
+the missing API belongs in Recaulk, with shared Objective-C compatibility analysis in shipyard.
+The experimental pin patch has been removed. **Full interactive sign-in with the rebuilt Codex is not
+yet verified (see "Where it stands" below).**
+`sh tests/browser-login-test.sh /absolute/path/to/bin/codex` reproduces the released artifact's
+abort and is the post-rebuild smoke check; it does not test authentication or token exchange.
+
+The initial shared investigation on the same host confirms that the existing compat guard reports
+this crashing artifact clean. A semantic Foundation/AppKit catalog (libclang, pinned 10.9 and 11.3
+SDKs), loaded 10.9.5 runtime inventory and retained Rust binding symbols identify three absent
+NSWorkspace methods: this launch method (10.10), reduce-motion (10.12) and VoiceOver detection
+(10.13). The latter two already have source guards in patch 0005. No further unguarded missing
+method is confirmed by this initial scan, but unresolved generic/protocol receivers remain: this
+is not a complete clean verdict. An apparent NSString initializer failure is a class-cluster false
+positive; the actual NSPlaceholderString receiver implements it and initializes successfully.
+The installed build-manifest and actual pin both name 0.165.0 at
+`360319d8dee62d87e2d59fc0c21805d79519cfed`; the earlier 0.164.0 mismatch claim was incorrect.
+Shared evidence and next plan live under shipyard's `.superpowers/` for Objective-C compatibility.
+
+**Where it stands (2026-11-07, ultimate-hat, native).** Three kinds of evidence, kept apart:
+
+| evidence | status |
+| --- | --- |
+| Static gate, original binary | the strict analyzer refuses the original 0.165.0 `codex` (SHA-256 `1d056b0d...6c40`) for its unguarded `openURLs:...` send (`tests/objc-gate-test.sh`) |
+| Static gate, rebuilt binaries | `codex` 0.165.0-mavericks.0, linked with Recaulk's `openURLs` provider (a development build, never published): strict clean, every send closed: floor-supported 219, guarded 2 (the reviewed reduce-motion and VoiceOver records), provided 1. `codex-code-mode-host`: floor-supported 22. Each mutation of the proof (provider, receipt, reviewed rows, guards) is refused |
+| Publication | the CTest guards run on the build's own proof, and `build/objc-publication-check.sh` refuses packaging or signing without a current, clean proof of a released-provider build |
+| Callback smoke, rebuilt binary | not yet run: `tests/browser-login-test.sh` opens a real browser, which waits for the maintainer |
+| Sign-in, token exchange and one turn | not yet run: the maintainer, with a private CODEX_HOME |
+
+The original crash is not called fixed until the last two rows have passed.
+
 ## Cross build
 
 Measured on 2026-10-14 on an arm64 Mac running macOS 27.0.1, at the same source as the native build.
