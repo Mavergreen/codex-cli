@@ -264,6 +264,12 @@
          "disambiguator" : "kdYC6Hx8KML",
          "name" : "objc2_app_kit",
          "version" : "0.3.2"
+      },
+      {
+         "checksum" : "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf",
+         "disambiguator" : "IwpAeRmYHq",
+         "name" : "arboard",
+         "version" : "3.6.1"
       }
    ],
    "guards" : [
@@ -308,7 +314,39 @@
          }
       }
    ],
-   "notes" : "Carried from shipyard tests/fixtures/objc-api/codex-0.165.0-build-evidence.json to this rebuilt codex by derive-reviewed.pl; both guard records reviewed by Amitai Schleier on 2026-11-07 against this rebuilt codex",
+   "notes" : "Carried from shipyard tests/fixtures/objc-api/codex-0.165.0-build-evidence.json to this rebuilt codex by derive-reviewed.pl; both guard records reviewed by Amitai Schleier on 2026-11-07 against this rebuilt codex; R3 rows for the arboard iterator and ProtocolObject Debug receivers added 2026-11-07 (shipyard R3 design)",
+   "position_evidence" : [
+      {
+         "class" : "NSArray",
+         "id" : "arboard-file-list-iter",
+         "kind" : "-",
+         "position" : {
+            "field" : "0",
+            "form" : "field",
+            "rust_type" : "objc2_foundation::array::Iter"
+         },
+         "selectors" : [
+            "countByEnumeratingWithState:objects:count:"
+         ],
+         "source" : "objc2-foundation-0.3.2 src/array.rs:351 (sha256:b27c3e1bcb83f79b094aa2f1214e70e91800062032b8561214046fd713b4f7d5): Iter(iter::Iter<a, NSArray<T>>) fast-enumerates the NSArray it holds; arboard-3.6.1 src/platform/osx.rs:244-260 (sha256:34ee374c87aa79fa2b7b3ac7cf94cadb4a6f2300341b650865d32742c7245e57): file_list iterates the NSArray readObjectsForClasses:options: returns",
+         "symbol" : "__RNvXs0_NtNtNtCs5hICDV8pRVn_4core4iter8adapters10filter_mapINtB5_9FilterMapINtNtCsdIImX2SWmg2_16objc2_foundation5array4IterNtNtCs2WYrep5oUp8_5objc27runtime9AnyObjectENCNCNCNvMs3_NtNtCsIwpAeRmYHq_7arboard8platform3osxNtB2P_3Get9file_list000ENtNtNtB9_6traits8iterator8Iterator4nextB2T_"
+      },
+      {
+         "class" : "NSString",
+         "id" : "protocol-object-debug-description",
+         "kind" : "-",
+         "position" : {
+            "form" : "result",
+            "selector" : "description"
+         },
+         "selectors" : [
+            "UTF8String",
+            "lengthOfBytesUsingEncoding:"
+         ],
+         "source" : "objc2-0.6.3 src/runtime/protocol_object.rs:142-172 (sha256:fdd6760cca194e14ea251646b5c2179a3085179913930de5d52d025c1542d5c6): fmt sends UTF8String and lengthOfBytesUsingEncoding: (nsstring_to_str) to self.description(), which objc2 types Retained<NSObject> and treats as an NSString by Cocoa guarantee; the floor SDK declares - (NSString *)description (usr/include/objc/NSObject.h:40, sha256:ad5285e0cee12eddb503670e6d2e95f0e5a83b9b489e84d42b4b4064eae5e270)",
+         "symbol" : "__RNvXs6_NtNtCs2WYrep5oUp8_5objc27runtime15protocol_objectINtB5_14ProtocolObjectDNtNtB7_8nsobject16NSObjectProtocolEL_ENtNtCs5hICDV8pRVn_4core3fmt5Debug3fmtCsdIImX2SWmg2_16objc2_foundation"
+      }
+   ],
    "type_evidence" : [
       {
          "id" : "nsstring-debug",
@@ -352,6 +390,11 @@
          "class" : "NSString",
          "rust_type" : "objc2_foundation::generated::__NSString::NSString",
          "source" : "objc2-foundation-0.3.2 src/generated/NSString.rs:122-126 extern_class! NSString sha256:69566889177a40450501f5a3b12768e0e34be30c0e99f260b31c848e9e216338"
+      },
+      {
+         "class" : "NSArray",
+         "rust_type" : "objc2_foundation::generated::__NSArray::NSArray",
+         "source" : "objc2-foundation-0.3.2 src/generated/NSArray.rs:17 extern_class! NSArray sha256:61cf29c062b9e01f61feb77a5d6fa3395fe9b0f27b4fa6772fbee68d9b544c33"
       }
    ]
 }
