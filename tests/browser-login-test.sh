@@ -45,8 +45,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-command -v nc >/dev/null 2>&1 || fail "the smoke needs nc to check that the login port is free"
-! nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1 || fail "the login port $PORT is already in use by another process; it is left alone"
+command -v curl >/dev/null 2>&1 || fail "the smoke needs curl to check the login port and the callback server"
+# free: nothing accepts a connection there (curl exit 7). Anything else, even a listener that never
+# answers, is someone else's.
+free=0; curl -s -o /dev/null --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || free=$?
+[ "$free" = 7 ] || fail "the login port $PORT is already in use by another process; it is left alone"
 before=$(fingerprint)
 # Disable crash dumps; the failing release aborts before printing the browser URL.
 ulimit -c 0
