@@ -55,8 +55,7 @@ failure: browser launch itself throws. The original crash is
 on this machine fails with 1.2.4 and successfully returns from opening the browser with 1.2.1,
 which uses Launch Services. The maintainer rejected a dependency downgrade as the shipping fix:
 the missing API belongs in Recaulk, with shared Objective-C compatibility analysis in shipyard.
-The experimental pin patch has been removed. **Full interactive sign-in with the rebuilt Codex is not
-yet verified (see "Where it stands" below).**
+The experimental pin patch has been removed. **Full interactive sign-in with the rebuilt Codex passed on 2026-11-07 (see "Where it stands" below).**
 `sh tests/browser-login-test.sh /absolute/path/to/bin/codex` reproduces the released artifact's
 abort and is the post-rebuild smoke check; it does not test authentication or token exchange.
 
@@ -79,10 +78,10 @@ Shared evidence and next plan live under shipyard's `.superpowers/` for Objectiv
 | Static gate, original binary | the strict analyzer refuses the original 0.165.0 `codex` (SHA-256 `1d056b0d...6c40`) for its unguarded `openURLs:...` send (`tests/objc-gate-test.sh`) |
 | Static gate, rebuilt binaries | `codex` 0.165.0-mavericks.0, linked with Recaulk's `openURLs` provider (a development build, never published): strict clean, every send closed: floor-supported 219, guarded 2 (the reviewed reduce-motion and VoiceOver records), provided 1. `codex-code-mode-host`: floor-supported 22. Each mutation of the proof (provider, receipt, reviewed rows, guards) is refused |
 | Publication | the CTest guards run on the build's own proof, and `build/objc-publication-check.sh` refuses packaging or signing without a current, clean proof of a released-provider build |
-| Callback smoke, rebuilt binary | not yet run: `tests/browser-login-test.sh` opens a real browser, which waits for the maintainer |
-| Sign-in, token exchange and one turn | not yet run: the maintainer, with a private CODEX_HOME |
+| Callback smoke, rebuilt binary | passed on 2026-11-07, ultimate-hat: `tests/browser-login-test.sh` on the native `codex` (SHA-256 `7d893b2d...8ad3`): the browser opened OpenAI's sign-in page (maintainer) and the callback server waited. The same day the installed 0.165.0 still aborted at `openURLs:...` on the same host |
+| Sign-in, token exchange and one turn | passed on 2026-11-07 (maintainer, private mode-700 CODEX_HOME): `codex login` completed the ChatGPT browser sign-in ("Successfully logged in"), and `codex exec` ran a turn that answered. Background model-list refreshes timed out without effect, and the known FSEvents purge lines appeared |
 
-The original crash is not called fixed until the last two rows have passed.
+**The original crash is fixed in the rebuilt binary**: the static gate refuses the original and passes the rebuild, and the real sign-in and turn work on 10.9. It reaches users only with a released Recaulk provider (this build linked a development one and is never published) and the cross build's proof, whose guard records the maintainer signed the same day.
 
 ## Cross build
 
