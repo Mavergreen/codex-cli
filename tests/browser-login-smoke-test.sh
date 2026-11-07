@@ -12,7 +12,7 @@ SMOKE="$H_REPO/tests/browser-login-test.sh"
 # a free port for this run, the fake's login server and the smoke's port check alike
 PORT=$(perl -MIO::Socket::INET -e 'my $s = IO::Socket::INET->new(Listen => 1, LocalAddr => "127.0.0.1", LocalPort => 0) or die; print $s->sockport')
 CODEX_BROWSER_LOGIN_PORT=$PORT
-CODEX_BROWSER_LOGIN_WAIT=3
+CODEX_BROWSER_LOGIN_WAIT=60   # a loaded host can take seconds to start perl; only the timeout case waits less
 export CODEX_BROWSER_LOGIN_PORT CODEX_BROWSER_LOGIN_WAIT
 unset CODEX_BROWSER_LOGIN_BINARY
 
@@ -63,7 +63,7 @@ fake crash abort; smoke crash
 h_assert_eq 1 "$rc" "a codex that aborts fails"
 h_assert_contains "$out" "exited (status 134" "the abort is reported as the exit, not a timeout"
 
-fake slow silent; smoke slow
+fake slow silent; CODEX_BROWSER_LOGIN_WAIT=3; smoke slow; CODEX_BROWSER_LOGIN_WAIT=60
 h_assert_eq 1 "$rc" "a codex that never starts its login server fails"
 h_assert_contains "$out" "no login server within 3s" "says it timed out waiting"
 h_assert_ok gone slow
@@ -84,7 +84,7 @@ h_assert_contains "$out" "real CODEX_HOME" "says the real CODEX_HOME changed"
 # someone else's listener on the login port: refused, and left running
 perl -MIO::Socket::INET -e 'my $s = IO::Socket::INET->new(Listen => 1, LocalAddr => "127.0.0.1", LocalPort => $ARGV[0], ReuseAddr => 1) or die; alarm 30; while (my $c = $s->accept) { close $c }' "$PORT" &
 other=$!
-i=0; while [ $i -lt 50 ] && ! nc -z 127.0.0.1 "$PORT" 2>/dev/null; do sleep 0.1; i=$((i+1)); done
+i=0; while [ $i -lt 300 ] && ! nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; do sleep 0.1; i=$((i+1)); done
 fake busy serve; smoke busy
 h_assert_eq 1 "$rc" "an occupied login port fails"
 h_assert_contains "$out" "already in use" "says the port is taken"
