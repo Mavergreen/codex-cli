@@ -19,6 +19,9 @@
 #            reports/codex.objc-compat.json, reports/codex-code-mode-host.objc-compat.json
 #                                           scripts/objc-compat.sh --mode strict for each binary on its own
 #                                           evidence; codex with the provider it linked and its receipt
+#            reports/codex.status, reports/codex-code-mode-host.status
+#                                           each strict run's exit, which build/objc-publication-check.sh
+#                                           requires to be 0 before anything is packaged or signed
 #            identity                       SHA-256 of every input and output above, the manifest and the
 #                                           provider's archive and declaration
 #          Nothing here classifies an API: every verdict is shipyard's. Every run starts from an empty
@@ -145,10 +148,13 @@ for name in codex codex-code-mode-host; do
     1) echo "objc-build-evidence: $name: strict blocking findings (reports/$name.objc-compat.json)" >&2; [ "$status" = 4 ] || status=1 ;;
     *) echo "objc-build-evidence: $name: cannot measure (exit $rc): $(tail -2 "$OBJC/reports/$name.stderr")" >&2; status=4 ;;
   esac
+  # spec: build/objc-publication-check.sh -- the run's exit, which publication requires to be 0
+  printf '%s\n' "$rc" > "$OBJC/reports/$name.status"
 done
 
 for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "$ARCHIVE" "$DECL" "$GEN" "$EV" "$GENH" "$EVH" \
          "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json" \
+         "$OBJC/reports/codex.status" "$OBJC/reports/codex-code-mode-host.status" \
          ${REVIEWED:+"$REVIEWED"} ${REVIEWED_HOST:+"$REVIEWED_HOST"} ${RECEIPT:+"$RECEIPT"}; do
   [ ! -f "$f" ] || printf '%s %s\n' "$(sha "$f")" "$f"
 done > "$OBJC/identity"

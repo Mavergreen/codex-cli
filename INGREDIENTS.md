@@ -77,7 +77,7 @@ ingredient pin.
 ## Compatibility gate implementation
 
 Both imported Rust executables, `codex` and `codex-code-mode-host`, are checked by shipyard's
-`assert_binary_compatible.sh` as CTest tests (`compat_guard_codex`, `compat_guard_codex-code-mode-host`), run by
+`assert_binary_compatible.sh`, through `build/compat-guard.sh`, as CTest tests (`compat_guard_codex`, `compat_guard_codex-code-mode-host`), run by
 `shipyard-ctest --preset native|cross`, as mavergreen-gh does. They are not a build-time step.
 Shipyard's `mavericks_assert_binary_compatible()` attaches a `POST_BUILD` command to a compiled
 target, while CMake does not permit that command on an imported executable. The tests therefore
@@ -91,6 +91,17 @@ CMake registers these four tests only when it finds a build in the build root's 
 `codex-cross`, since configuring for the pkg needs no Codex. `builds.yml` fails if any of the four
 is missing, so a build that is not where CMake looks cannot pass unguarded. Only the updater is
 compiled for the pkg, and it is guarded as it is built.
+
+The guard's Objective-C half is shipyard's strict analyzer, which needs each build's proof:
+`build/objc-build-evidence.sh MODE` binds the build evidence, the reviewed rows in `objc/`, the
+provider codex linked and its source receipt to the exact bytes, and records each strict run's
+exit. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
+writes it right after the build and before CTest, and uploads it as the `codex-build-objc-proof`
+diagnostic (never part of the payload). Then `build/objc-publication-check.sh cross` runs before
+packaging, and again with the tarball before signing: it refuses a stale or missing proof, a strict
+run that did not exit 0, a development Recaulk provider, and a tarball whose `codex`,
+`codex-code-mode-host` or `build-manifest` is not the proven one. No cached report authorizes a
+build on its own: the CTest guards rerun the analysis first.
 
 ## Packaging
 

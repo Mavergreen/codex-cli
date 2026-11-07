@@ -58,12 +58,14 @@ if(EXISTS "${_build_root}/codex-${_codex_mode}/codex" AND EXISTS "${_build_root}
   #           which CMake forbids on an imported executable. Run the same shipyard guard as a CTest
   #           test against each exact imported Codex artifact, as mavergreen-gh does (compat_guard_gh).
   #           It runs once, under `shipyard-ctest`, not also at build time.
+  # spec: build/compat-guard.sh -- that guard, given the build's own Objective-C proof (it fails while
+  #       build/objc-build-evidence.sh MODE has not described these exact bytes) and the provider codex linked.
   foreach(_codex_name codex codex-code-mode-host)
     add_test(NAME compat_guard_${_codex_name}
       COMMAND "${CMAKE_COMMAND}" -E env
-        "MAVERICKS_DEVIATIONS_ROOT=${CMAKE_SOURCE_DIR}"
-        "MAVERICKS_ALLOW_ARCHS=x86_64"
-        sh "${MavericksShipyard_SCRIPTS}/assert_binary_compatible.sh" "$<TARGET_FILE:${_codex_name}>")
+        "SHIPYARD_SCRIPTS=${MavericksShipyard_SCRIPTS}"
+        "MAVERICKS_BUILD_ROOT=${_build_root}"
+        sh "${CMAKE_SOURCE_DIR}/build/compat-guard.sh" "$<TARGET_FILE:${_codex_name}>")
     # Interim, until shipyard's guard checks load paths: it passed a codex that loaded /opt/pkg dylibs.
     add_test(NAME load_paths_${_codex_name}
       COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-load-paths.sh" "$<TARGET_FILE:${_codex_name}>")

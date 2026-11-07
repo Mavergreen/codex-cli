@@ -113,6 +113,14 @@ jobs:
       - name: Cross-build Codex
         run: sh build/build-codex.sh cross
 
+      # spec: build/objc-build-evidence.sh -- binds shipyard's Objective-C proof to the exact bytes just
+      #       built. A blocking or unmeasurable send does not stop here: the CTest guards below rerun the
+      #       strict analysis on that proof and fail, and the proof is uploaded either way.
+      - name: Write the Objective-C proof
+        run: |
+          echo "CODEX_OBJC=$(sh build/resolve-build-root.sh)/objc-cross" >> "$GITHUB_ENV"
+          sh build/objc-build-evidence.sh cross || echo "::warning::objc-build-evidence.sh cross exited $?; the compat guards decide"
+
       # CODEX_CROSS_ONLY_MANIFEST: CI has no native build to compare with, so the cross manifest is checked
       # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
       # CMake registers the guard tests only when it finds the built binaries, so a build that is not
@@ -142,6 +150,11 @@ jobs:
 
       - name: Run the repo's tests
         run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
+
+      # spec: build/objc-publication-check.sh -- nothing is packaged unless the proof the guards just used
+      #       still describes these bytes, both strict runs passed, and the provider is a released one.
+      - name: The Objective-C proof allows packaging
+        run: sh build/objc-publication-check.sh cross
 
       - name: Package the build, and a second one for the update check
         env:
@@ -191,6 +204,8 @@ jobs:
           ID: ${{ steps.id.outputs.id }}
         run: |
           set -eu
+          # the tarball about to be signed holds exactly the proven binaries and manifest
+          sh build/objc-publication-check.sh cross "$BUILD/channel/codex-package-x86_64-apple-darwin-$ID.tar.gz"
           printenv SPARKLE_PRIVATE_KEY | grep -q . || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
           sh build/channel-publish.sh sign --repo Mavergreen/codex-cli --tag codex-builds --dir "$BUILD/channel" \
             --id "$ID" --key-env SPARKLE_PRIVATE_KEY --signer "$ED25519/ed25519-sign"
@@ -217,6 +232,17 @@ jobs:
 
       - name: The build must not have written into the source tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh"
+
+      # diagnostics, never part of the payload: the proof the guards used, whatever they decided
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: codex-build-objc-proof
+          path: |
+            ${{ env.CODEX_OBJC }}/identity
+            ${{ env.CODEX_OBJC }}/evidence/
+            ${{ env.CODEX_OBJC }}/reports/
+          if-no-files-found: warn
 
       - uses: actions/upload-artifact@v7
         with:
