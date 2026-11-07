@@ -34,12 +34,14 @@ proof() {
   printf 'map\n' > "$OBJC/linkmaps/codex.map"
   for n in codex codex-code-mode-host; do
     printf '{}\n' > "$OBJC/evidence/$n.json"
+    printf '{}\n' > "$OBJC/evidence/$n.generated.json"
     printf '{"mode":"strict"}\n' > "$OBJC/reports/$n.objc-compat.json"
   done
   printf '%s\n' "$2" > "$OBJC/reports/codex.status"
   printf '%s\n' "$3" > "$OBJC/reports/codex-code-mode-host.status"
   for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$OBJC/linkmaps/codex.map" \
            "$OBJC/evidence/codex.json" "$OBJC/evidence/codex-code-mode-host.json" \
+           "$OBJC/evidence/codex.generated.json" "$OBJC/evidence/codex-code-mode-host.generated.json" \
            "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json" \
            "$OBJC/reports/codex.status" "$OBJC/reports/codex-code-mode-host.status" \
            "$H_REPO/objc/codex-reviewed-evidence.json" "$H_REPO/objc/codex-code-mode-host-reviewed-evidence.json"; do
@@ -72,6 +74,11 @@ rm "$OBJC/reports/codex-code-mode-host.objc-compat.json"
 refused "a report is gone" "is gone" cross
 rm -rf "$OBJC"
 refused "no proof at all" "no current Objective-C proof" cross
+
+# a proof whose identity was cut short (a killed run, an edit): every input and output must be listed
+proof released 0 0
+grep -v "/evidence/codex.json\$" "$OBJC/identity" > "$H/id"; mv "$H/id" "$OBJC/identity"
+refused "an identity without the codex evidence" "does not list" cross
 
 # the analyzer did not pass
 proof released 1 0

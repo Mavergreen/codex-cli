@@ -7,8 +7,9 @@
 #   - CODEX_HOME is a new temporary directory: no credential is read, and any credential file
 #     written there fails the smoke (nothing in it is read or printed). The real CODEX_HOME
 #     (CODEX_HOME, else ~/.codex) must have the same auth.json and config.toml afterwards.
-#   - The login port (CODEX_BROWSER_LOGIN_PORT, 1455 as Codex uses) must be free before codex
-#     starts: a listener there is someone else's, and is never touched.
+#   - The login port, 1455 (Codex always binds it), must be free before codex starts: a listener
+#     there is someone else's, and is never touched. CODEX_BROWSER_LOGIN_PORT moves the check
+#     only for tests/browser-login-smoke-test.sh's fakes: never set it for a real binary.
 #   - codex must announce its login server within CODEX_BROWSER_LOGIN_WAIT seconds (20), and the
 #     server must answer an unknown path 404 within 5 seconds. A crash is reported as its exit.
 #   - The codex it started, and only that, is stopped on every exit.
@@ -44,6 +45,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
+command -v nc >/dev/null 2>&1 || fail "the smoke needs nc to check that the login port is free"
 ! nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1 || fail "the login port $PORT is already in use by another process; it is left alone"
 before=$(fingerprint)
 # Disable crash dumps; the failing release aborts before printing the browser URL.

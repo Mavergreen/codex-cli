@@ -32,6 +32,14 @@ sha() { shasum -a 256 "$1" | cut -c1-64; }
 
 sh "$HERE/objc-build-evidence.sh" --check "$MODE" ||
   refuse "no current Objective-C proof for $ART: run build/objc-build-evidence.sh $MODE, then the CTest guards"
+# spec: build/objc-build-evidence.sh -- a proof lists every input and output; one cut short proves less
+for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$OBJC/linkmaps/codex.map" \
+         "$OBJC/evidence/codex.generated.json" "$OBJC/evidence/codex.json" \
+         "$OBJC/evidence/codex-code-mode-host.generated.json" "$OBJC/evidence/codex-code-mode-host.json" \
+         "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json"; do
+  awk -v p=" $f" 'substr($0, 65) == p { found = 1 } END { exit !found }' "$OBJC/identity" ||
+    refuse "the $MODE proof does not list $f: run build/objc-build-evidence.sh $MODE again"
+done
 for name in codex codex-code-mode-host; do
   st="$OBJC/reports/$name.status"
   # spec: build/objc-build-evidence.sh -- the status file is in identity, so --check vouched for its bytes

@@ -91,4 +91,10 @@ h_assert_contains "$out" "already in use" "says the port is taken"
 h_assert_ok kill -0 "$other"
 h_assert_eq "" "$(cat "$H/busy/pid" 2>/dev/null || true)" "codex is not started while the port is taken"
 kill "$other" 2>/dev/null || :; wait "$other" 2>/dev/null || :
+# without nc the port cannot be checked, so the smoke refuses rather than skip the check
+mkdir -p "$H/nonc"; for t in sh uname mktemp env grep awk sleep cat rm mkdir stat curl perl kill; do p=$(command -v $t) && ln -s "$p" "$H/nonc/$t"; done
+fake nonc-codex serve
+rc=0; out="$(PATH="$H/nonc" sh "$SMOKE" "$H/nonc-codex/codex" 2>&1)" || rc=$?
+h_assert_eq 1 "$rc" "no nc: the smoke fails"
+h_assert_contains "$out" "needs nc" "says it needs nc"
 h_done

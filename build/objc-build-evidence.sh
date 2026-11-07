@@ -157,5 +157,7 @@ for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "
          "$OBJC/reports/codex.status" "$OBJC/reports/codex-code-mode-host.status" \
          ${REVIEWED:+"$REVIEWED"} ${REVIEWED_HOST:+"$REVIEWED_HOST"} ${RECEIPT:+"$RECEIPT"}; do
   [ ! -f "$f" ] || printf '%s %s\n' "$(sha "$f")" "$f"
-done > "$OBJC/identity"
+done > "$OBJC/identity.tmp"
+# written whole or not at all: build/objc-publication-check.sh requires every line
+mv "$OBJC/identity.tmp" "$OBJC/identity"
 exit "$status"
