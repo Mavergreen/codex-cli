@@ -141,10 +141,13 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   cp "$ART/codex" "$T/m/codex/codex"
   mut() { perl -MJSON::PP -e 'my ($in, $out, $code) = @ARGV; local $/; open my $h, "<", $in or die; my $e = JSON::PP->new->decode(<$h>); eval $code; die $@ if $@; open my $o, ">", $out or die; print $o JSON::PP->new->canonical->encode($e)' "$EV" "$1" "$2"; }
 
-  # R3 rows bind to what they say: a result row naming another selector, or a changed arboard revision, is refused.
-  mut "$T/r3-hash.json" 'for (@{$e->{position_evidence}}) { $_->{position}{selector} = "hash" if ($_->{position}{form} // "") eq "result" }'
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-hash.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
-  [ "$rc" = 4 ] && pass "an R3 row naming the result of another send is refused (exit 4: $(codes "$report"))" || fail "R3 row with selector hash: exit $rc"
+  # R3 rows bind to what they say: a row for another function closes nothing (codex's receivers are not modelled,
+  # so a row's stated position stands on its citation; shipyard's fixtures test the check where they are), and a
+  # changed arboard revision is refused.
+  mut "$T/r3-other.json" 'for (@{$e->{position_evidence}}) { $_->{symbol} =~ s/protocol_object/protocol_objekt/ }'
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-other.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+  [ "$rc" != 0 ] && [ "$(verdicts "$report" UTF8String ProtocolObject)" != floor-supported ] &&
+    pass "an R3 row for another function leaves ProtocolObject's sends open (exit $rc)" || fail "R3 row for another symbol: exit $rc"
   mut "$T/r3-arboard.json" 'for (@{$e->{crates}}) { $_->{disambiguator} = "aaaaaaaaaa" if $_->{name} eq "arboard" }'
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-arboard.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
   [ "$rc" = 4 ] && pass "R3 evidence pinning another arboard revision is refused (exit 4: $(codes "$report"))" || fail "another arboard revision: exit $rc"
