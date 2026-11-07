@@ -12,12 +12,13 @@
 #            evidence/codex.json            that evidence plus the source identity (pinned revision, the
 #                                           patch series' SHA-256, the cargo command) and the reviewed
 #                                           sections of objc/codex-reviewed-evidence.json (crates, type map,
-#                                           R2 type evidence, binding receipt, guards), when that file exists
+#                                           R2 and R3 evidence, binding receipt, guards), when that file exists
+#            evidence/codex-code-mode-host{.generated,}.json
+#                                           the same for the code-mode host, which links no provider (no link
+#                                           map, no mapping), with objc/codex-code-mode-host-reviewed-evidence.json
 #            reports/codex.objc-compat.json, reports/codex-code-mode-host.objc-compat.json
-#                                           scripts/objc-compat.sh --mode strict for each binary: codex with
-#                                           its evidence and provider, the code-mode host on its bytes alone
-#                                           (it links no provider; a host without Objective-C is a measured
-#                                           result, not an exemption)
+#                                           scripts/objc-compat.sh --mode strict for each binary on its own
+#                                           evidence; codex with the provider it linked and its receipt
 #            identity                       SHA-256 of every input and output above, the manifest and the
 #                                           provider's archive and declaration
 #          Nothing here classifies an API: every verdict is shipyard's. Every run starts from an empty
@@ -51,6 +52,7 @@ SOURCE="$BUILD_ROOT/codex-src"
 MAP="$OBJC/linkmaps/codex.map"
 REFS=$(CDPATH= cd -- "$SHIPYARD_SCRIPTS/../reference/objc" 2>/dev/null && pwd) || fail "shipyard at $SHIPYARD_SCRIPTS has no reference/objc"
 REVIEWED="$MAVERICKS_ROOT/objc/codex-reviewed-evidence.json"
+REVIEWED_HOST="$MAVERICKS_ROOT/objc/codex-code-mode-host-reviewed-evidence.json"
 
 if [ "$CHECK" = yes ]; then
   [ -f "$OBJC/identity" ] || { echo "objc-build-evidence: no $OBJC/identity: run objc-build-evidence.sh $MODE" >&2; exit 1; }
@@ -61,7 +63,9 @@ if [ "$CHECK" = yes ]; then
     fi
   done < "$OBJC/identity"
   # a reviewed-evidence file added since the proof was written is a change too
-  [ ! -f "$REVIEWED" ] || grep -q " $REVIEWED\$" "$OBJC/identity" || { echo "objc-build-evidence: $REVIEWED is newer than the proof" >&2; moved=1; }
+  for r in "$REVIEWED" "$REVIEWED_HOST"; do
+    [ ! -f "$r" ] || grep -q " $r\$" "$OBJC/identity" || { echo "objc-build-evidence: $r is newer than the proof" >&2; moved=1; }
+  done
   [ "$moved" = 0 ] || exit 1
   echo "objc-build-evidence: the $MODE proof still describes these bytes" >&2
   exit 0
@@ -90,14 +94,22 @@ rm -rf "$OBJC/evidence" "$OBJC/reports" "$OBJC/identity"
 mkdir -p "$OBJC/evidence" "$OBJC/reports"
 GEN="$OBJC/evidence/codex.generated.json"
 EV="$OBJC/evidence/codex.json"
+GENH="$OBJC/evidence/codex-code-mode-host.generated.json"
+EVH="$OBJC/evidence/codex-code-mode-host.json"
 sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --artifact "$ART/codex" --prestrip "$ART/codex" --source-root "$SOURCE" \
   --link-map "$MAP" --provider-prefix "$PREFIX" --references "$REFS" --output "$GEN" || fail "shipyard wrote no build evidence"
+# the code-mode host links no provider: no link map and nothing to map
+sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --artifact "$ART/codex-code-mode-host" --prestrip "$ART/codex-code-mode-host" \
+  --source-root "$SOURCE" --references "$REFS" --output "$GENH" || fail "shipyard wrote no build evidence for codex-code-mode-host"
 
 REVISION=$(sh "$HERE/codex-pin.sh" revision)
 PATCHES=$(cat "$MAVERICKS_ROOT/patches"/*.patch | shasum -a 256 | cut -c1-64)
 # spec: build/build-codex.sh -- the cargo command both binaries come from.
 FEATURES='cargo build --locked --release --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host'
 [ -f "$REVIEWED" ] || REVIEWED=
+[ -f "$REVIEWED_HOST" ] || REVIEWED_HOST=
+# merge GENERATED REVIEWED OUT: the generated evidence, the source identity and the reviewed sections
+merge() {
 perl -MJSON::PP -e '
   my ($gen, $reviewed, $rev, $patches, $features, $out) = @ARGV;
   sub slurp { local $/; open my $f, "<", $_[0] or die "$_[0]: $!\n"; my $s = <$f>; JSON::PP->new->decode($s) }
@@ -106,7 +118,7 @@ perl -MJSON::PP -e '
   if ($reviewed ne "") {
     my $r = slurp($reviewed);
     for my $k (keys %$r) {
-      die "$reviewed: unknown section $k\n" unless $k =~ /^(crates|type_map|type_evidence|binding_receipt|guards|notes)$/;
+      die "$reviewed: unknown section $k\n" unless $k =~ /^(crates|type_map|type_evidence|position_evidence|binding_receipt|guards|notes)$/;
       next if $k eq "notes";
       $e->{$k} = $r->{$k};
     }
@@ -114,13 +126,17 @@ perl -MJSON::PP -e '
   open my $o, ">", $out or die "$out: $!\n";
   print $o JSON::PP->new->canonical->pretty->encode($e);
   close $o or die "$out: $!\n";
-' "$GEN" "$REVIEWED" "$REVISION" "$PATCHES" "$FEATURES" "$EV" || fail "could not merge the build evidence"
+' "$1" "$2" "$REVISION" "$PATCHES" "$FEATURES" "$3"
+}
+merge "$GEN" "$REVIEWED" "$EV" || fail "could not merge the build evidence"
+merge "$GENH" "$REVIEWED_HOST" "$EVH" || fail "could not merge the code-mode host's build evidence"
 
 # spec: shipyard scripts/objc-compat.sh -- each report names its binary relative to a shipped root.
 status=0
 for name in codex codex-code-mode-host; do
   set -- --artifact "$ART/$name" --root "$ART" --references "$REFS" --report "$OBJC/reports/$name.objc-compat.json" --mode strict
-  [ "$name" != codex ] || set -- "$@" --build-evidence "$EV" --provider-prefix "$PREFIX"
+  if [ "$name" = codex ]; then set -- "$@" --build-evidence "$EV" --provider-prefix "$PREFIX"
+  else set -- "$@" --build-evidence "$EVH"; fi
   [ "$name" != codex ] || [ -z "$RECEIPT" ] || set -- "$@" --source-receipt "$RECEIPT"
   rc=0
   sh "$SHIPYARD_SCRIPTS/objc-compat.sh" "$@" 2> "$OBJC/reports/$name.stderr" || rc=$?
@@ -131,9 +147,9 @@ for name in codex codex-code-mode-host; do
   esac
 done
 
-for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "$ARCHIVE" "$DECL" "$GEN" "$EV" \
+for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "$ARCHIVE" "$DECL" "$GEN" "$EV" "$GENH" "$EVH" \
          "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json" \
-         ${REVIEWED:+"$REVIEWED"} ${RECEIPT:+"$RECEIPT"}; do
+         ${REVIEWED:+"$REVIEWED"} ${REVIEWED_HOST:+"$REVIEWED_HOST"} ${RECEIPT:+"$RECEIPT"}; do
   [ ! -f "$f" ] || printf '%s %s\n' "$(sha "$f")" "$f"
 done > "$OBJC/identity"
 exit "$status"

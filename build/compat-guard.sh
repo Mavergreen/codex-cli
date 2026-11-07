@@ -5,7 +5,7 @@
 #          whose Objective-C half is the strict analyzer (scripts/objc-compat.sh). For BINARY in
 #          BUILD_ROOT/codex-MODE, build/objc-build-evidence.sh --check MODE must first show that the
 #          build's proof still describes these bytes; codex then gets that build evidence and the
-#          provider it linked, and the code-mode host is measured on its bytes alone. Elsewhere,
+#          provider it linked, and the code-mode host its own build evidence. Elsewhere,
 #          CODEX_OBJC_BUILD_EVIDENCE and CODEX_OBJC_PROVIDER_PREFIX name them (tests/objc-gate-test.sh
 #          gives the original 0.165.0 binary shipyard's recorded evidence). CODEX_OBJC_REPORT_DIR keeps
 #          the report. Exit as assert_binary_compatible.sh: 0 clean, 1 a check failed (here also: the
@@ -29,6 +29,8 @@ case "$BIN" in
     if [ "$(basename "$BIN")" = codex ]; then
       EVIDENCE="$BUILD_ROOT/objc-$MODE/evidence/codex.json"
       PREFIX=$(sh "$HERE/fetch-recaulk-objc.sh" | sed -n 1p)
+    else
+      EVIDENCE="$BUILD_ROOT/objc-$MODE/evidence/$(basename "$BIN").json"
     fi ;;
 esac
 set -- env "MAVERICKS_DEVIATIONS_ROOT=$MAVERICKS_ROOT" MAVERICKS_ALLOW_ARCHS=x86_64 "MAVERICKS_OBJC_ROOT=$(dirname "$BIN")"
