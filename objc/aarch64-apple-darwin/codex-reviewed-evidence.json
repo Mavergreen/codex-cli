@@ -279,9 +279,9 @@
          "guard" : "respondsToSelector:",
          "id" : "codex-tui-system-motion",
          "review" : {
-            "reason" : null,
-            "reviewer" : null,
-            "status" : "required"
+            "reason" : "respondsToSelector: on sharedWorkspace dominates the send on the same receiver and selector name (0x101bd99fb before 0x101bd9a17 in this build); on 10.9 the guard fails and system_motion::detect reports no preference, with no other effect",
+            "reviewer" : "Amitai Schleier",
+            "status" : "reviewed"
          },
          "selector" : "accessibilityDisplayShouldReduceMotion",
          "source" : {
@@ -299,9 +299,9 @@
          "guard" : "respondsToSelector:",
          "id" : "codex-tui-screen-reader",
          "review" : {
-            "reason" : null,
-            "reviewer" : null,
-            "status" : "required"
+            "reason" : "respondsToSelector: on sharedWorkspace dominates the send on the same receiver and selector name (0x10b965229 before 0x10b965245 in this build); on 10.9 the guard fails and the && reports no screen reader, with no other effect",
+            "reviewer" : "Amitai Schleier",
+            "status" : "reviewed"
          },
          "selector" : "isVoiceOverEnabled",
          "source" : {
