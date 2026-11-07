@@ -11,11 +11,11 @@
 #                                           provider's archive members landed
 #            evidence/codex.json            that evidence plus the source identity (pinned revision, the
 #                                           patch series' SHA-256, the cargo command) and the reviewed
-#                                           sections of objc/codex-reviewed-evidence.json (crates, type map,
+#                                           sections of objc/HOST/codex-reviewed-evidence.json (crates, type map,
 #                                           R2 and R3 evidence, binding receipt, guards), when that file exists
 #            evidence/codex-code-mode-host{.generated,}.json
 #                                           the same for the code-mode host, which links no provider (no link
-#                                           map, no mapping), with objc/codex-code-mode-host-reviewed-evidence.json
+#                                           map, no mapping), with objc/HOST/codex-code-mode-host-reviewed-evidence.json
 #            reports/codex.objc-compat.json, reports/codex-code-mode-host.objc-compat.json
 #                                           scripts/objc-compat.sh --mode strict for each binary on its own
 #                                           evidence; codex with the provider it linked and its receipt
@@ -24,6 +24,7 @@
 #                                           requires to be 0 before anything is packaged or signed
 #            identity                       SHA-256 of every input and output above, the manifest and the
 #                                           provider's archive and declaration
+#          HOST is build/objc-reviewed-dir.sh's answer for this build host: rows bind its symbols.
 #          Nothing here classifies an API: every verdict is shipyard's. Every run starts from an empty
 #          evidence/ and reports/ (shipyard never replaces a report), so nothing stale survives it.
 #          --check rehashes everything identity names and fails if any byte moved since: run it
@@ -54,8 +55,10 @@ OBJC="$BUILD_ROOT/objc-$MODE"
 SOURCE="$BUILD_ROOT/codex-src"
 MAP="$OBJC/linkmaps/codex.map"
 REFS=$(CDPATH= cd -- "$SHIPYARD_SCRIPTS/../reference/objc" 2>/dev/null && pwd) || fail "shipyard at $SHIPYARD_SCRIPTS has no reference/objc"
-REVIEWED="$MAVERICKS_ROOT/objc/codex-reviewed-evidence.json"
-REVIEWED_HOST="$MAVERICKS_ROOT/objc/codex-code-mode-host-reviewed-evidence.json"
+# spec: build/objc-reviewed-dir.sh -- the rows for binaries built on this host
+RDIR=$(sh "$HERE/objc-reviewed-dir.sh") || fail "no reviewed rows for a build on this host"
+REVIEWED="$RDIR/codex-reviewed-evidence.json"
+REVIEWED_HOST="$RDIR/codex-code-mode-host-reviewed-evidence.json"
 
 if [ "$CHECK" = yes ]; then
   [ -f "$OBJC/identity" ] || { echo "objc-build-evidence: no $OBJC/identity: run objc-build-evidence.sh $MODE" >&2; exit 1; }

@@ -19,6 +19,7 @@ sha() { shasum -a 256 "$1" | cut -c1-64; }
 
 MAVERICKS_BUILD_ROOT="$H/build root"
 export MAVERICKS_BUILD_ROOT
+RD="$(sh "$H_REPO/build/objc-reviewed-dir.sh")"
 ART="$MAVERICKS_BUILD_ROOT/codex-cross"
 OBJC="$MAVERICKS_BUILD_ROOT/objc-cross"
 # proof ORIGIN CODEX-STATUS HOST-STATUS: a fresh build and the proof objc-build-evidence.sh would write
@@ -44,7 +45,8 @@ proof() {
            "$OBJC/evidence/codex.generated.json" "$OBJC/evidence/codex-code-mode-host.generated.json" \
            "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json" \
            "$OBJC/reports/codex.status" "$OBJC/reports/codex-code-mode-host.status" \
-           "$H_REPO/objc/codex-reviewed-evidence.json" "$H_REPO/objc/codex-code-mode-host-reviewed-evidence.json"; do
+           "$RD/codex-reviewed-evidence.json" "$RD/codex-code-mode-host-reviewed-evidence.json"; do
+    [ -f "$f" ] || continue   # an arm64 host has no reviewed rows until they are derived for it
     printf '%s %s\n' "$(sha "$f")" "$f"
   done > "$OBJC/identity"
 }

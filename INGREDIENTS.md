@@ -93,9 +93,13 @@ is missing, so a build that is not where CMake looks cannot pass unguarded. Only
 compiled for the pkg, and it is guarded as it is built.
 
 The guard's Objective-C half is shipyard's strict analyzer, which needs each build's proof:
-`build/objc-build-evidence.sh MODE` binds the build evidence, the reviewed rows in `objc/`, the
+`build/objc-build-evidence.sh MODE` binds the build evidence, the reviewed rows in `objc/HOST/`, the
 provider codex linked and its source receipt to the exact bytes, and records each strict run's
-exit. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
+exit. The rows name exact symbols and crate disambiguators, which cargo derives from the rustc
+that builds them, its host triple included: `objc/x86_64-apple-darwin/` serves builds on an x86_64
+host (10.9 native), `objc/aarch64-apple-darwin/` builds on Apple Silicon (CI's cross build), and
+`build/objc-reviewed-dir.sh` picks the build host's. A Codex update re-derives both sets, and the
+guard records in each need the maintainer's review. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
 writes it right after the build and before CTest, and uploads it as the `codex-build-objc-proof`
 diagnostic (never part of the payload). Then `build/objc-publication-check.sh cross` runs before
 packaging, and again with the tarball before signing: it refuses a stale or missing proof, a strict

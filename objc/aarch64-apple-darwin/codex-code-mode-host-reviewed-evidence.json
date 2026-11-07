@@ -1,0 +1,108 @@
+{
+   "crates" : [
+      {
+         "checksum" : "b7c2599ce0ec54857b29ce62166b0ed9b4f6f1a70ccc9a71165b6154caca8c05",
+         "disambiguator" : "2ucXwfqiSr7",
+         "name" : "objc2",
+         "version" : "0.6.3"
+      },
+      {
+         "checksum" : "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+         "disambiguator" : "ltbaDnwDLUa",
+         "name" : "objc2_foundation",
+         "version" : "0.3.2"
+      },
+      {
+         "checksum" : "e4022a17595a00d6a369236fdae483f0de7f0a339960a53118b818238e132224",
+         "disambiguator" : "i2TLqaMj8Ru",
+         "name" : "os_info",
+         "version" : "3.14.0"
+      }
+   ],
+   "notes" : "Carried by derive-reviewed.pl from reviewed evidence for another build to this binary; every guard record awaits the maintainer's review",
+   "position_evidence" : [
+      {
+         "class" : "NSDictionary",
+         "id" : "os-info-system-version",
+         "kind" : "-",
+         "position" : {
+            "form" : "downcast",
+            "rust_type" : "objc2_foundation::generated::__NSDictionary::NSDictionary"
+         },
+         "selectors" : [
+            "objectForKey:"
+         ],
+         "source" : "os_info-3.14.0 src/macos/mod.rs:70-76 (sha256:ce47bef2f42933c02af5f53ba8799ff8fc42b20991e950d4fbb742f6ee4228ee): current_platform sends objectForKey: to obj.downcast_ref::<NSDictionary>() of the parsed SystemVersion.plist",
+         "symbol" : "__RNvNtCsi2TLqaMj8Ru_7os_info3imp16current_platform"
+      }
+   ],
+   "type_evidence" : [
+      {
+         "id" : "nsstring-debug",
+         "kind" : "-",
+         "position" : "self",
+         "rust_type" : "objc2_foundation::generated::__NSString::NSString",
+         "selectors" : [
+            "UTF8String",
+            "lengthOfBytesUsingEncoding:"
+         ],
+         "source" : "core's impl Debug for &T forwards to objc2-foundation-0.3.2 src/string.rs:222-228 (sha256:a296817db800fa77c8bacd9775f61f2e87dc957089225a98c366491643dd4dbb), nsstring_to_str(self) -> objc2-0.6.3 src/runtime/__nsstring.rs:27,82 (sha256:9e4c567499e53a4e00c1ca93973ed13df1d35745828f535a2980d17b33f708b6) sends both to self",
+         "symbol" : "__RNvXs1g_NtCs5hICDV8pRVn_4core3fmtRNtNtNtCsltbaDnwDLUa_16objc2_foundation9generated10___NSString8NSStringNtB6_5Debug3fmtBC_"
+      },
+      {
+         "id" : "retained-nsstring-debug",
+         "kind" : "-",
+         "position" : "generic",
+         "rust_type" : "objc2_foundation::generated::__NSString::NSString",
+         "selectors" : [
+            "UTF8String",
+            "lengthOfBytesUsingEncoding:"
+         ],
+         "source" : "objc2-0.6.3 src/rc/retained_forwarding_impls.rs:170-182 (sha256:70c6c9e0e3089c5b5ffbb0535dfb63f355dab2932a20f87b8442cf4ff5f62518) forwards Debug to the NSString, objc2-foundation-0.3.2 src/string.rs:222-228 (sha256:a296817db800fa77c8bacd9775f61f2e87dc957089225a98c366491643dd4dbb), objc2-0.6.3 src/runtime/__nsstring.rs:27,82 (sha256:9e4c567499e53a4e00c1ca93973ed13df1d35745828f535a2980d17b33f708b6)",
+         "symbol" : "__RNvXsj_NtNtCs2ucXwfqiSr7_5objc22rc25retained_forwarding_implsINtNtB7_8retained8RetainedNtNtNtCsltbaDnwDLUa_16objc2_foundation9generated10___NSString8NSStringENtNtCs5hICDV8pRVn_4core3fmt5Debug3fmtB1t_.llvm.2942929645484454897"
+      },
+      {
+         "id" : "nserror-debug",
+         "kind" : "-",
+         "position" : "self",
+         "rust_type" : "objc2_foundation::generated::__NSError::NSError",
+         "selectors" : [
+            "code",
+            "localizedDescription",
+            "domain",
+            "userInfo"
+         ],
+         "source" : "objc2-foundation-0.3.2 src/error.rs:40-55 (sha256:bd1202395420f1ec812c3cf51b3c693087255f95332d0f0aa6a1ae4598c09cb7): impl Debug for NSError sends code, localizedDescription, domain and userInfo to self",
+         "symbol" : "__RNvXs3_NtCsltbaDnwDLUa_16objc2_foundation5errorNtNtNtB7_9generated9___NSError7NSErrorNtNtCs5hICDV8pRVn_4core3fmt5Debug3fmt"
+      },
+      {
+         "id" : "nsdictionary-to-vecs",
+         "kind" : "-",
+         "position" : "self",
+         "rust_type" : "objc2_foundation::generated::__NSDictionary::NSDictionary",
+         "selectors" : [
+            "count",
+            "getObjects:andKeys:"
+         ],
+         "source" : "objc2-foundation-0.3.2 src/dictionary.rs:220-232 (sha256:d638658d3bf9653f502b462283ce1f32a4bb66c17c1b9edc45748760537398ab): NSDictionary::to_vecs_unchecked sends count and getObjects:andKeys: to self",
+         "symbol" : "__RNvMs0_NtCsltbaDnwDLUa_16objc2_foundation10dictionaryINtNtNtB7_9generated14___NSDictionary12NSDictionaryNtNtBU_10___NSString8NSStringE17to_vecs_uncheckedB7_"
+      }
+   ],
+   "type_map" : [
+      {
+         "class" : "NSString",
+         "rust_type" : "objc2_foundation::generated::__NSString::NSString",
+         "source" : "objc2-foundation-0.3.2 src/generated/NSString.rs:122-126 extern_class! NSString sha256:69566889177a40450501f5a3b12768e0e34be30c0e99f260b31c848e9e216338"
+      },
+      {
+         "class" : "NSError",
+         "rust_type" : "objc2_foundation::generated::__NSError::NSError",
+         "source" : "objc2-foundation-0.3.2 src/generated/NSError.rs:125 extern_class! NSError sha256:106e8c96b47b5a3be92bfa9041660f0b5a8929659b38e694789270a8015763c2"
+      },
+      {
+         "class" : "NSDictionary",
+         "rust_type" : "objc2_foundation::generated::__NSDictionary::NSDictionary",
+         "source" : "objc2-foundation-0.3.2 src/generated/NSDictionary.rs:17 extern_class! NSDictionary sha256:a9479bd05edcfb15d9fb97d63972ee4a39c7a6a6ce0e05e3f0bdaa3eccaa3869"
+      }
+   ]
+}

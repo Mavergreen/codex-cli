@@ -120,7 +120,7 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
       fail "the provider at $PFX carries no share/recaulk/objc-source.receipt"
     fi
     blocking=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); print scalar grep { $_->{verdict} =~ /^(unresolved|unsupported)$/ && !$_->{exception} } @{$r->{findings}}' "$rebuilt")
-    # R3 rows (objc/codex-reviewed-evidence.json position_evidence) close the last three: the gate passes.
+    # R3 rows (objc/HOST/codex-reviewed-evidence.json position_evidence) close the last three: the gate passes.
     [ "$rebuilt_rc" = 0 ] && [ -z "$open" ] && [ "$blocking" = 0 ] && pass "the gate passes the rebuilt codex with all six closed" ||
       fail "the gate gave the rebuilt codex exit $rebuilt_rc, open:$open ($blocking blocking findings)"
   fi
