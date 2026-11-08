@@ -59,8 +59,9 @@ if [ -n "${MAVERGREEN_OBJC_CODEX_ARTIFACT:-}" ]; then
     mkdir -p "$T/orig/codex"
     ln "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex" 2>/dev/null || cp "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex"
     # The build evidence shipyard recorded for this very binary: binding receipt, R2 rows, and the two
-    # guard records, unreviewed.
-    FXEV="$SHIPYARD_SCRIPTS/../tests/fixtures/objc-api/codex-0.165.0-build-evidence.json"
+    # guard records, unreviewed. Copied from shipyard tests/fixtures/objc-api/codex-0.165.0-build-evidence.json,
+    # so this test does not read shipyard's fixtures.
+    FXEV="$HERE/fixtures/codex-0.165.0-build-evidence.json"
     guard "$T/orig/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$FXEV"
     [ "$rc" = 1 ] && pass "the gate refuses the original Codex 0.165.0 (exit 1)" || fail "the gate gave the original exit $rc, not 1: $(tail -3 "$T/r$n.log")"
     [ "$(verdicts "$report" "$SEL_OPEN")" = unsupported ] && pass "its -[NSWorkspace openURLs:...] send is unsupported" ||
@@ -238,7 +239,7 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
       { echo "link $lname failed: $(tail -2 "$T/link.log")"; return 1; }
     rm -f "$T/c-$lname.ev"
     sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --artifact "$T/c-$lname/bin/c" --prestrip "$T/c-$lname/bin/c" --source-root "$T/c-$lname" \
-      --link-map "$T/consumer.map" --provider-prefix "$PFX" --references "$SHIPYARD_SCRIPTS/../reference/objc" --output "$T/c-$lname.ev" > /dev/null 2>&1 || true
+      --link-map "$T/consumer.map" --provider-prefix "$PFX" --references "$(sh "$ROOT/build/objc-references.sh")" --output "$T/c-$lname.ev" > /dev/null 2>&1 || true
     if [ -f "$T/c-$lname.ev" ]; then guard "$T/c-$lname/bin/c" CODEX_OBJC_BUILD_EVIDENCE="$T/c-$lname.ev" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
     else guard "$T/c-$lname/bin/c" CODEX_OBJC_PROVIDER_PREFIX="$PFX"; fi
   }

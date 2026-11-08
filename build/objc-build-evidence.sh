@@ -54,7 +54,7 @@ ART="$BUILD_ROOT/codex-$MODE"
 OBJC="$BUILD_ROOT/objc-$MODE"
 SOURCE="$BUILD_ROOT/codex-src"
 MAP="$OBJC/linkmaps/codex.map"
-REFS=$(CDPATH= cd -- "$SHIPYARD_SCRIPTS/../reference/objc" 2>/dev/null && pwd) || fail "shipyard at $SHIPYARD_SCRIPTS has no reference/objc"
+REFS=$(sh "$HERE/objc-references.sh") || fail "shipyard at $SHIPYARD_SCRIPTS has no Objective-C reference set"
 # spec: build/objc-reviewed-dir.sh -- the rows for binaries built on this host
 RDIR=$(sh "$HERE/objc-reviewed-dir.sh") || fail "no reviewed rows for a build on this host"
 REVIEWED="$RDIR/codex-reviewed-evidence.json"
