@@ -33,11 +33,12 @@ case "$BIN" in
       EVIDENCE="$BUILD_ROOT/objc-$MODE/evidence/$(basename "$BIN").json"
     fi ;;
 esac
-set -- env "MAVERICKS_DEVIATIONS_ROOT=$MAVERICKS_ROOT" MAVERICKS_ALLOW_ARCHS=x86_64 "MAVERICKS_OBJC_ROOT=$(dirname "$BIN")"
-[ -z "$EVIDENCE" ] || set -- "$@" "MAVERICKS_OBJC_BUILD_EVIDENCE=$EVIDENCE"
-[ -z "$PREFIX" ] || set -- "$@" "MAVERICKS_OBJC_PROVIDER_PREFIX=$PREFIX"
+# spec: shipyard scripts/assert_binary_compatible.sh header -- the strict analyzer is opt-in there; Codex opts in.
+set -- env MAVERGREEN_OBJC_STRICT=1 "MAVERICKS_DEVIATIONS_ROOT=$MAVERICKS_ROOT" MAVERICKS_ALLOW_ARCHS=x86_64 "MAVERGREEN_OBJC_ROOT=$(dirname "$BIN")"
+[ -z "$EVIDENCE" ] || set -- "$@" "MAVERGREEN_OBJC_BUILD_EVIDENCE=$EVIDENCE"
+[ -z "$PREFIX" ] || set -- "$@" "MAVERGREEN_OBJC_PROVIDER_PREFIX=$PREFIX"
 # the provider body's source receipt, which Recaulk ships beside its declaration
 [ -z "$PREFIX" ] || [ ! -f "$PREFIX/share/recaulk/objc-source.receipt" ] ||
-  set -- "$@" "MAVERICKS_OBJC_SOURCE_RECEIPT=$PREFIX/share/recaulk/objc-source.receipt"
-[ -z "${CODEX_OBJC_REPORT_DIR:-}" ] || set -- "$@" "MAVERICKS_OBJC_REPORT_DIR=$CODEX_OBJC_REPORT_DIR"
+  set -- "$@" "MAVERGREEN_OBJC_SOURCE_RECEIPT=$PREFIX/share/recaulk/objc-source.receipt"
+[ -z "${CODEX_OBJC_REPORT_DIR:-}" ] || set -- "$@" "MAVERGREEN_OBJC_REPORT_DIR=$CODEX_OBJC_REPORT_DIR"
 exec "$@" sh "$SHIPYARD_SCRIPTS/assert_binary_compatible.sh" "$BIN"

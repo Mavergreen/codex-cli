@@ -3,7 +3,7 @@
 # spec: build/compat-guard.sh and build/objc-build-evidence.sh headers -- the gate a Codex binary must
 #       pass. Nothing here runs a Codex binary; each is read as bytes.
 #   Inputs, each optional; with neither the test is skipped (exit 77):
-#     MAVERICKS_OBJC_CODEX_ARTIFACT  the original Codex 0.165.0 binary (SHA-256 1d056b0d...6c40), whose
+#     MAVERGREEN_OBJC_CODEX_ARTIFACT  the original Codex 0.165.0 binary (SHA-256 1d056b0d...6c40), whose
 #                                    `codex login` crashed on 10.9. It must fail the gate for its
 #                                    unguarded -[NSWorkspace openURLs:...] send; its two accessibility
 #                                    sends must stay unresolved until their guard records are reviewed,
@@ -22,8 +22,8 @@ ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 : "${SHIPYARD_SCRIPTS:?set SHIPYARD_SCRIPTS}"
 ORIGINAL_SHA=1d056b0d4ada3d74b4c0f4c5450bc06856bfdbc504320fa430a4249f640f6c40
 SEL_OPEN='openURLs:withApplicationAtURL:options:configuration:error:'
-if [ -z "${MAVERICKS_OBJC_CODEX_ARTIFACT:-}" ] && [ -z "${CODEX_GATE_MODE:-}" ]; then
-  echo "SKIP: objc-gate-test: neither MAVERICKS_OBJC_CODEX_ARTIFACT nor CODEX_GATE_MODE names a binary"; exit 77
+if [ -z "${MAVERGREEN_OBJC_CODEX_ARTIFACT:-}" ] && [ -z "${CODEX_GATE_MODE:-}" ]; then
+  echo "SKIP: objc-gate-test: neither MAVERGREEN_OBJC_CODEX_ARTIFACT nor CODEX_GATE_MODE names a binary"; exit 77
 fi
 T=$(mktemp -d "${TMPDIR:-/tmp}/objc-gate-test.XXXXXX")
 trap 'rm -rf "$T"' EXIT
@@ -52,12 +52,12 @@ codes() { if [ -n "$1" ] && [ -f "$1" ]; then perl -MJSON::PP -e 'local $/; open
 counts() { perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); my %c; $c{$_->{verdict}}++ for @{$r->{findings}}; print join(" ", map { "$_=$c{$_}" } sort keys %c)' "$1"; }
 
 # ---- the original binary ----
-if [ -n "${MAVERICKS_OBJC_CODEX_ARTIFACT:-}" ]; then
-  if [ "$(sha "$MAVERICKS_OBJC_CODEX_ARTIFACT")" != "$ORIGINAL_SHA" ]; then
-    fail "MAVERICKS_OBJC_CODEX_ARTIFACT is not the original Codex 0.165.0 ($ORIGINAL_SHA)"
+if [ -n "${MAVERGREEN_OBJC_CODEX_ARTIFACT:-}" ]; then
+  if [ "$(sha "$MAVERGREEN_OBJC_CODEX_ARTIFACT")" != "$ORIGINAL_SHA" ]; then
+    fail "MAVERGREEN_OBJC_CODEX_ARTIFACT is not the original Codex 0.165.0 ($ORIGINAL_SHA)"
   else
     mkdir -p "$T/orig/codex"
-    ln "$MAVERICKS_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex" 2>/dev/null || cp "$MAVERICKS_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex"
+    ln "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex" 2>/dev/null || cp "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/orig/codex/codex"
     # The build evidence shipyard recorded for this very binary: binding receipt, R2 rows, and the two
     # guard records, unreviewed.
     FXEV="$SHIPYARD_SCRIPTS/../tests/fixtures/objc-api/codex-0.165.0-build-evidence.json"
@@ -172,8 +172,8 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   [ "$rc" = 4 ] && pass "a changed byte in codex makes its evidence stale (exit 4: $(codes "$report"))" || fail "a changed codex byte: exit $rc"
   cp "$ART/codex" "$T/m/codex/codex"
 
-  if [ -n "${MAVERICKS_OBJC_CODEX_ARTIFACT:-}" ]; then
-    mkdir -p "$T/o/codex"; cp "$MAVERICKS_OBJC_CODEX_ARTIFACT" "$T/o/codex/codex"
+  if [ -n "${MAVERGREEN_OBJC_CODEX_ARTIFACT:-}" ]; then
+    mkdir -p "$T/o/codex"; cp "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/o/codex/codex"
     guard "$T/o/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
     [ "$rc" = 4 ] && pass "the rebuilt binary's evidence does not transfer to the original (exit 4: $(codes "$report"))" || fail "rebuilt evidence on the original: exit $rc"
     rm -rf "$T/o"
