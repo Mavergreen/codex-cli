@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- shipyard's guard reads Mach-O with lipo/otool/nm and builds its analyzer against the host SDK
+# platform: macOS-only -- shipyard's guard reads Mach-O with lipo/otool/nm and runs Drydock's drydock-objc analyzer from the pinned release
 #   usage: compat-guard.sh BINARY
 #          The 10.9 compatibility gate for one Codex binary: shipyard's assert_binary_compatible.sh,
 #          whose Objective-C half is the strict analyzer (scripts/objc-compat.sh). For BINARY in
@@ -7,7 +7,7 @@
 #          build's proof still describes these bytes; codex then gets that build evidence and the
 #          provider it linked, and the code-mode host its own build evidence. Elsewhere,
 #          CODEX_OBJC_BUILD_EVIDENCE and CODEX_OBJC_PROVIDER_PREFIX name them (tests/objc-gate-test.sh
-#          gives the original 0.165.0 binary shipyard's recorded evidence). CODEX_OBJC_REPORT_DIR keeps
+#          gives the original 0.165.0 binary Codex's own copy, tests/fixtures/codex-0.165.0-build-evidence.json). CODEX_OBJC_REPORT_DIR keeps
 #          the report. Exit as assert_binary_compatible.sh: 0 clean, 1 a check failed (here also: the
 #          proof is stale), 2 misuse, 4 cannot measure.
 set -eu

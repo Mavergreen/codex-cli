@@ -40,6 +40,15 @@
     },
     {
       "customType": "regex",
+      "description": "The Recaulk pin: a Mavergreen/recaulk release tag, bare, whose upstream version is a date, YYYYMMDD.N. It provides the openURLs provider and its source receipt.",
+      "managerFilePatterns": ["/^components/recaulk/version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "Mavergreen/recaulk",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "regex:^(?<major>\\d{8})\\.(?<minor>\\d+)$"
+    },
+    {
+      "customType": "regex",
       "description": "The ed25519 package: the signer builds.yml uses and the smokes install. A Mavergreen/ed25519 release tag, bare; its upstream version is a date, YYYYMMDD.",
       "managerFilePatterns": ["/^components/ed25519/version$/"],
       "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],

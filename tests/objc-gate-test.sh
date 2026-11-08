@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- shipyard's strict Objective-C analyzer builds against the host SDK and reads real Codex binaries as bytes
+# platform: macOS-only -- Drydock's drydock-objc analyzer runs from the pinned release and the test reads real Codex binaries as bytes
 # spec: build/compat-guard.sh and build/objc-build-evidence.sh headers -- the gate a Codex binary must
 #       pass. Nothing here runs a Codex binary; each is read as bytes.
 #   Inputs, each optional; with neither the test is skipped (exit 77):

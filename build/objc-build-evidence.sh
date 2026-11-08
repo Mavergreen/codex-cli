@@ -54,7 +54,6 @@ ART="$BUILD_ROOT/codex-$MODE"
 OBJC="$BUILD_ROOT/objc-$MODE"
 SOURCE="$BUILD_ROOT/codex-src"
 MAP="$OBJC/linkmaps/codex.map"
-REFS=$(sh "$HERE/objc-references.sh") || fail "shipyard at $SHIPYARD_SCRIPTS has no Objective-C reference set"
 # spec: build/objc-reviewed-dir.sh -- the rows for binaries built on this host
 RDIR=$(sh "$HERE/objc-reviewed-dir.sh") || fail "no reviewed rows for a build on this host"
 REVIEWED="$RDIR/codex-reviewed-evidence.json"
@@ -77,6 +76,8 @@ if [ "$CHECK" = yes ]; then
   exit 0
 fi
 
+# --check above needs no reference set: only the real run does
+REFS=$(sh "$HERE/objc-references.sh") || fail "shipyard at $SHIPYARD_SCRIPTS has no Objective-C reference set"
 for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP"; do
   [ -f "$f" ] || fail "no $f: run build/build-codex.sh $MODE"
 done
