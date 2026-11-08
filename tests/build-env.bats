@@ -199,7 +199,7 @@ provider_reaches_cargo() {
   grep -qx -- "$root/objc-$1/linkmaps/codex.map" "$file"
   [ "$(cargo_value MAVERICKS_OBJC_PROVIDER_ARCHIVE_SHA256)" = "$(objc_fixture_sha "$provider/lib/librecaulk-objc.a")" ]
   case "$file" in "$source_dir"/*|"$root/codex-$1-target"/*) echo "args file inside the source or target tree"; false ;; esac
-  ! grep -E '^(RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_TARGET_[A-Z0-9_]*_RUSTFLAGS|CARGO_BUILD_RUSTFLAGS)=.*(recaulk|AppKit|-map)' "$cargo_env"
+  if grep -E '^(RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_TARGET_[A-Z0-9_]*_RUSTFLAGS|CARGO_BUILD_RUSTFLAGS)=.*(recaulk|AppKit|-map)' "$cargo_env"; then false; fi
 }
 
 @test "a native build hands cargo the provider's linker arguments in a file, and no rustflags carry them" {
