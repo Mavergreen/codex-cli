@@ -1,0 +1,13 @@
+#!/bin/sh
+# platform: macOS-only -- shipyard's uninstall hook runs on Mac OS X 10.9
+cat <<'MSG'
+Each user's home keeps what Codex CLI for Mavericks put there:
+  ~/.codex/packages/standalone (the Codex builds, about 450 MB each)
+  ~/.codex/packages/app-server-daemon (the app-server daemon's builds, if it was set up)
+  ~/Library/Application Support/dev.mavergreen.codex-cli (the launcher's records)
+  ~/.local/bin/codex, when it is the link to the launcher (it now points at nothing)
+To remove them, each user runs:
+  rm -rf ~/.codex/packages/standalone ~/.codex/packages/app-server-daemon ~/Library/Application\ Support/dev.mavergreen.codex-cli
+  [ "$(readlink ~/.local/bin/codex)" = /usr/local/mavergreen/bin/codex ] && rm -f ~/.local/bin/codex
+The rest of ~/.codex (sign-in, settings and sessions) is Codex's own and stays.
+MSG
