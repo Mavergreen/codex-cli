@@ -57,8 +57,8 @@ fi
 [ -n "$VERSION" ] || { echo "build-codex: no version: BUILD_ID or VERSION is empty" >&2; exit 1; }
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
-  printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\n' \
-    "$(sh "$HERE/codex-pin.sh" revision)" "$RUST_PIN" "$RUSTY_V8_VERSION"
+  printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\nrusty_v8_removed=%s\n' \
+    "$(sh "$HERE/codex-pin.sh" revision)" "$RUST_PIN" "$RUSTY_V8_VERSION" "$RUSTY_V8_REMOVED"
   printf 'clang_version=%s\nprotoc_runtime=%s\nsdk=%s\n' "$CLANG_VERSION" "$PROTOC_RUNTIME" "${SDK##*/}"
   printf 'recaulk_origin=%s\nrecaulk_version=%s\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
     "$RECAULK_ORIGIN" "$RECAULK_VERSION" "$RECAULK_ARCHIVE_SHA256" "$RECAULK_DECLARATION_SHA256"

@@ -33,6 +33,7 @@ EXPECTED_RUST=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/rust/version")
 EXPECTED_CLANG=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/clang-22/version")
 
 RUSTY_V8_NATIVE=$(field rusty_v8_version "$NATIVE")
+EXPECTED_V8_REMOVED=$(sh "$HERE/strip-v8-cxxabi.sh" --list | paste -s -d , -)
 SDK_NATIVE=$(field sdk "$NATIVE")
 
 check_manifest() {
@@ -61,6 +62,9 @@ check_manifest() {
   esac
   [ "$(field rusty_v8_version "$manifest")" = "$RUSTY_V8_NATIVE" ] || {
     echo "check-build-manifests: V8 version differs from native in $manifest" >&2; exit 1;
+  }
+  [ "$(field rusty_v8_removed "$manifest")" = "$EXPECTED_V8_REMOVED" ] || {
+    echo "check-build-manifests: rusty_v8_removed in $manifest is not what build/strip-v8-cxxabi.sh removes" >&2; exit 1;
   }
   # platform: the SDK is named, not pathed: each host caches shipyard's pinned SDK in its own
   #           place. How it reaches the target (SDKROOT natively, target rustflags in cross, for

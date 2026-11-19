@@ -14,7 +14,9 @@ setup() {
   printf 'mode=cross\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\nsource_revision=%s\nrust_version=%s\nrusty_v8_version=150.4.0\nclang_version=%s\nprotoc_runtime=host\nsdk=MacOSX10.9.sdk\n' \
     "$source_revision" "$rust_version" "$clang_version" > "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
   # spec: build/build-codex.sh -- both builds link the same released Recaulk provider
+  removed=$(sh "$PRODUCT_ROOT/build/strip-v8-cxxabi.sh" --list | paste -s -d , -)
   for mode in native cross; do
+    printf 'rusty_v8_removed=%s\n' "$removed" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
     printf 'recaulk_origin=released\nrecaulk_version=20261201.1\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
       "$(printf a%.0s $(seq 64))" "$(printf b%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
   done
@@ -51,6 +53,21 @@ setup() {
     "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -ne 0 ]
+}
+
+@test "a manifest must record the V8 libc++abi members its build removed" {
+  sed -i.bak '/^rusty_v8_removed=/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *rusty_v8_removed* ]] || false
+}
+
+@test "the removed V8 members must be the ones strip-v8-cxxabi.sh removes" {
+  sed -i.bak 's/^rusty_v8_removed=.*/rusty_v8_removed=abort_message.pic.o/' \
+    "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *rusty_v8_removed* ]] || false
 }
 
 @test "native and cross manifests must agree on the clang-22 version" {

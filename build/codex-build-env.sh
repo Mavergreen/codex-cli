@@ -19,7 +19,7 @@ codex_check_host() {
 }
 
 # codex_build_env MODE SOURCE TARGET_DIR OBJC_DIR: export the build environment and set RUST_PREFIX,
-#   RUST_PIN, SDK, CLANG_VERSION, PROTOC_RUNTIME, RUSTY_V8_VERSION and the RECAULK_* provider identity.
+#   RUST_PIN, SDK, CLANG_VERSION, PROTOC_RUNTIME, RUSTY_V8_VERSION, RUSTY_V8_REMOVED and the RECAULK_* provider identity.
 #   codex_cargo then runs cargo in it. OBJC_DIR (outside SOURCE and TARGET_DIR) receives the provider's
 #   linker arguments and, at link time, linkmaps/codex.map.
 codex_build_env() {
@@ -117,7 +117,15 @@ codex_build_env() {
   [ -n "$RUSTY_V8_VERSION" ] || {
     echo "build-codex: no V8 version in $RUSTY_V8_ARCHIVE" >&2; exit 1;
   }
-  export RUSTY_V8_ARCHIVE RUSTY_V8_SRC_BINDING_PATH
+  # spec: build/strip-v8-cxxabi.sh header -- the host links V8 without V8's own libc++abi, so it has
+  #       one C++ runtime: the system's libc++abi and Recaulk.
+  RUSTY_V8_ONE_RUNTIME="${RUSTY_V8_ARCHIVE%.a.gz}.one-runtime.a"
+  removed=$(AR="$CLANG_PREFIX/bin/llvm-ar" NM="$CLANG_PREFIX/bin/llvm-nm" \
+    sh "$BUILD_DIR/strip-v8-cxxabi.sh" "$RUSTY_V8_ARCHIVE" "$RUSTY_V8_ONE_RUNTIME") || exit 1
+  RUSTY_V8_REMOVED=$(printf '%s\n' "$removed" | paste -s -d , -)
+  [ -n "$RUSTY_V8_REMOVED" ] || { echo "build-codex: strip-v8-cxxabi.sh removed nothing" >&2; exit 1; }
+  RUSTY_V8_ARCHIVE=$RUSTY_V8_ONE_RUNTIME
+  export RUSTY_V8_ARCHIVE RUSTY_V8_SRC_BINDING_PATH RUSTY_V8_REMOVED
   export CARGO_TARGET_DIR="$TARGET_DIR"
   export CARGO_HOME="$BUILD_ROOT/cargo-home"
   export CARGO_NET_GIT_FETCH_WITH_CLI=true

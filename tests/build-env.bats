@@ -92,6 +92,9 @@ EOF
   : > "$v8/src_binding.rs"
   printf '#!/bin/sh\nprintf "%%s\\n%%s\\n" "%s" "%s"\n' "$v8/librusty_v8.a.gz" "$v8/src_binding.rs" \
     > "$product/build/fetch-rusty-v8.sh"
+  # The stand-in strip copies the archive and names two members, as the real one names sixteen.
+  printf '#!/bin/sh\ncp "$1" "$2"\nprintf "cxa_guard.pic.o\\ncxa_throw.pic.o\\n"\n' \
+    > "$product/build/strip-v8-cxxabi.sh"
 
   # uname -m answers arm64, as a cross host would; everything else is the host's own uname.
   mkdir -p "$stand_ins/bin"
@@ -164,6 +167,13 @@ build() {
   run build cross
   succeeded
   grep -qx "version=0.161.0-mavericks.7" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+}
+
+@test "the host links the V8 archive without V8's libc++abi, and the manifest says what went" {
+  run build native
+  succeeded
+  grep -qx "RUSTY_V8_ARCHIVE=$BATS_TEST_TMPDIR/v8/rusty-v8-150.4.0/librusty_v8.one-runtime.a" "$cargo_env"
+  grep -qx "rusty_v8_removed=cxa_guard.pic.o,cxa_throw.pic.o" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native/build-manifest"
 }
 
 @test "BUILD_ID wins over the older VERSION file" {
