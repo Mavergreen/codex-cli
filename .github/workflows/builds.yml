@@ -131,7 +131,7 @@ jobs:
           shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
           shipyard-cmake --build --preset cross
           listed="$(shipyard-ctest --preset cross -N)"
-          for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host; do
+          for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host cxxabi_codex cxxabi_codex-code-mode-host; do
             printf '%s\n' "$listed" | grep -Eq "Test +#[0-9]+: $t\$" \
               || { printf '%s\n' "$listed"; echo "::error::CTest has no $t test: CMake did not find the cross build"; exit 1; }
           done

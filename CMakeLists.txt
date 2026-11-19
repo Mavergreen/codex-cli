@@ -69,6 +69,12 @@ if(EXISTS "${_build_root}/codex-${_codex_mode}/codex" AND EXISTS "${_build_root}
     # Interim, until shipyard's guard checks load paths: it passed a codex that loaded /opt/pkg dylibs.
     add_test(NAME load_paths_${_codex_name}
       COMMAND sh "${CMAKE_SOURCE_DIR}/build/check-load-paths.sh" "$<TARGET_FILE:${_codex_name}>")
+    # spec: build/check-cxxabi.sh header -- one C++ runtime per binary; conformance never reads these
+    add_test(NAME cxxabi_${_codex_name}
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "SHIPYARD_SCRIPTS=${MavericksShipyard_SCRIPTS}"
+        "MAVERICKS_BUILD_ROOT=${_build_root}"
+        sh "${CMAKE_SOURCE_DIR}/build/check-cxxabi.sh" "$<TARGET_FILE:${_codex_name}>")
   endforeach()
 else()
   message(STATUS "No Codex build under ${_build_root}/codex-${_codex_mode}: its compat-guard and load-path tests are not registered")
