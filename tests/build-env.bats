@@ -172,8 +172,20 @@ build() {
 @test "the host links the V8 archive without V8's libc++abi, and the manifest says what went" {
   run build native
   succeeded
-  grep -qx "RUSTY_V8_ARCHIVE=$BATS_TEST_TMPDIR/v8/rusty-v8-150.4.0/librusty_v8.one-runtime.a" "$cargo_env"
+  digest=$(shasum -a 256 < "$product/build/strip-v8-cxxabi.sh" | cut -c1-12)
+  grep -qx "RUSTY_V8_ARCHIVE=$BATS_TEST_TMPDIR/v8/rusty-v8-150.4.0/librusty_v8.one-runtime-$digest.a" "$cargo_env"
   grep -qx "rusty_v8_removed=cxa_guard.pic.o,cxa_throw.pic.o" "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native/build-manifest"
+}
+
+@test "a change to the strip script changes the archive path, so cargo relinks V8" {
+  run build native
+  succeeded
+  first=$(sed -n 's/^RUSTY_V8_ARCHIVE=//p' "$cargo_env")
+  printf '# changed\n' >> "$product/build/strip-v8-cxxabi.sh"
+  run build native
+  succeeded
+  [ "$(sed -n 's/^RUSTY_V8_ARCHIVE=//p' "$cargo_env")" != "$first" ]
+  [ ! -e "$first" ]
 }
 
 @test "BUILD_ID wins over the older VERSION file" {

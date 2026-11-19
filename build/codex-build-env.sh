@@ -119,7 +119,13 @@ codex_build_env() {
   }
   # spec: build/strip-v8-cxxabi.sh header -- the host links V8 without V8's own libc++abi, so it has
   #       one C++ runtime: the system's libc++abi and Recaulk.
-  RUSTY_V8_ONE_RUNTIME="${RUSTY_V8_ARCHIVE%.a.gz}.one-runtime.a"
+  # spec: v8's build.rs reruns only when RUSTY_V8_ARCHIVE's value changes, so the path names the
+  #       strip script's digest: a changed strip relinks V8 in an incremental build.
+  strip_digest=$(shasum -a 256 < "$BUILD_DIR/strip-v8-cxxabi.sh" | cut -c1-12)
+  RUSTY_V8_ONE_RUNTIME="${RUSTY_V8_ARCHIVE%.a.gz}.one-runtime-$strip_digest.a"
+  for stale in "${RUSTY_V8_ARCHIVE%.a.gz}".one-runtime*.a; do
+    [ "$stale" = "$RUSTY_V8_ONE_RUNTIME" ] || rm -f "$stale"
+  done
   removed=$(AR="$CLANG_PREFIX/bin/llvm-ar" NM="$CLANG_PREFIX/bin/llvm-nm" \
     sh "$BUILD_DIR/strip-v8-cxxabi.sh" "$RUSTY_V8_ARCHIVE" "$RUSTY_V8_ONE_RUNTIME") || exit 1
   RUSTY_V8_REMOVED=$(printf '%s\n' "$removed" | paste -s -d , -)
