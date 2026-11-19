@@ -92,7 +92,7 @@ index ef09b6d..25b60ae 100644
          format!("local-{digest}-{target}")
      };
 diff --git a/codex-rs/app-server-daemon/src/prepare_install_tests.rs b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
-index ee33ca8..e7c2324 100644
+index 9180bf6..fcf3ac9 100644
 --- a/codex-rs/app-server-daemon/src/prepare_install_tests.rs
 +++ b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
 @@ -242,6 +242,47 @@ async fn legacy_selection_is_not_migrated_or_refreshed() {
@@ -295,7 +295,7 @@ index 344aba5..b6c9fe8 100644
      }
  }
 diff --git a/codex-rs/app-server-daemon/src/update_loop_tests.rs b/codex-rs/app-server-daemon/src/update_loop_tests.rs
-index 02aca06..4991f5e 100644
+index 97c8248..0037061 100644
 --- a/codex-rs/app-server-daemon/src/update_loop_tests.rs
 +++ b/codex-rs/app-server-daemon/src/update_loop_tests.rs
 @@ -6,9 +6,10 @@ use pretty_assertions::assert_eq;

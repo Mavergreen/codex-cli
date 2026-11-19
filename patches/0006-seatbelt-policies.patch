@@ -1,5 +1,5 @@
 diff --git a/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl b/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl
-index 2fca6a8..9543b56 100644
+index 2fca6a8..20e56e4 100644
 --- a/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl
 +++ b/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl
 @@ -1,5 +1,9 @@
@@ -65,7 +65,7 @@ index 2fca6a8..9543b56 100644
  
  ; IOKit
  (allow iokit-open
-@@ -95,10 +110,11 @@
+@@ -95,10 +113,11 @@
  (allow ipc-posix-sem)
  
  ; Needed for PyTorch/libomp on macOS to register OpenMP runtimes.
@@ -95,10 +95,10 @@ index 45599d1..85c21cb 100644
    (global-name "com.apple.cfprefsd.daemon")
    (global-name "com.apple.cfprefsd.agent")
 diff --git a/codex-rs/sandboxing/src/seatbelt_tests.rs b/codex-rs/sandboxing/src/seatbelt_tests.rs
-index de53e2d..3625e9d 100644
+index b821987..df9daa9 100644
 --- a/codex-rs/sandboxing/src/seatbelt_tests.rs
 +++ b/codex-rs/sandboxing/src/seatbelt_tests.rs
-@@ -136,6 +136,32 @@ fn base_policy_allows_node_cpu_sysctls() {
+@@ -139,6 +139,32 @@ fn base_policy_allows_node_cpu_sysctls() {
      );
  }
  
@@ -131,7 +131,7 @@ index de53e2d..3625e9d 100644
  #[test]
  fn seatbelt_allows_semaphore_limit_sysconf() {
      let workspace = TempDir::new().expect("temp workspace");
-@@ -178,10 +204,11 @@ fn seatbelt_allows_semaphore_limit_sysconf() {
+@@ -184,10 +210,11 @@ fn seatbelt_allows_semaphore_limit_sysconf() {
  
  #[test]
  fn base_policy_allows_kmp_registration_shm_read_create_and_unlink() {

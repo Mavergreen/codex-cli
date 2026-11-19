@@ -131,7 +131,9 @@ at the end says what each did and why it went.
   or the package's latest release), and to run it again then, rather than that the command failed.
   It does not assume the updater opened, since a run with nobody at a terminal opens nothing; the
   installer's own lines come first, as before.
-  The two standalone history-cell snapshots show the new commands. `codex doctor`'s update section
+  The two standalone history-cell snapshots show the new commands. Upstream's test that the Unix
+  update fails when its installer download fails becomes a test that it fails when the installed
+  installer is missing. `codex doctor`'s update section
   names the running build (`running build: <ID>`) and, for a standalone install, the `latest.json`
   it checks (`update channel: <URL>`). When the newest build is a rebuild of the running Codex
   version, the startup notice and its history cell (`tui/src/update_prompt.rs`,

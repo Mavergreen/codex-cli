@@ -250,10 +250,10 @@ index fbad7d9..21d6a83 100644
  
      #[test]
 diff --git a/codex-rs/cli/src/main.rs b/codex-rs/cli/src/main.rs
-index ac06a66..1fa5283 100644
+index 5108253..9835a57 100644
 --- a/codex-rs/cli/src/main.rs
 +++ b/codex-rs/cli/src/main.rs
-@@ -833,12 +833,29 @@ fn run_update_action(
+@@ -865,12 +865,29 @@ fn run_update_action(
          }
      };
      if !status.success() {
@@ -283,7 +283,7 @@ index ac06a66..1fa5283 100644
  #[cfg(windows)]
  fn resolve_windows_update_command_from_path(
      command: &str,
-@@ -2710,6 +2727,29 @@ mod tests {
+@@ -2863,6 +2880,29 @@ mod tests {
      use codex_tui::TokenUsage;
      use pretty_assertions::assert_eq;
  
@@ -314,7 +314,7 @@ index ac06a66..1fa5283 100644
      fn interactive_tui_future_stays_bounded() {
          let future = run_interactive_tui(
 diff --git a/codex-rs/tui/src/history_cell/notices.rs b/codex-rs/tui/src/history_cell/notices.rs
-index 06d7b2f..e4b18ac 100644
+index 8c2dce8..9a167e5 100644
 --- a/codex-rs/tui/src/history_cell/notices.rs
 +++ b/codex-rs/tui/src/history_cell/notices.rs
 @@ -12,6 +12,8 @@ const RECAP_HEADING: &str = "Conversation recap";
@@ -378,28 +378,20 @@ index 06d7b2f..e4b18ac 100644
              Line::from(""),
              Line::from("See full release notes:"),
 diff --git a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
-index c8f352d..8a24bc7 100644
+index 8f1548c..8a24bc7 100644
 --- a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
 +++ b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
-@@ -2,10 +2,11 @@
- source: tui/src/history_cell/tests.rs
- expression: rendered
+@@ -4,8 +4,8 @@ expression: rendered
  ---
--╭─────────────────────────────────────────────────────────────────────────────────────────────────────╮
--│ ✨ Update available! 0.0.0 -> 9.9.9                                                                 │
--│ Run sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh' to update. │
--│                                                                                                     │
--│ See full release notes:                                                                             │
--│ https://github.com/openai/codex/releases/latest                                                     │
--╰─────────────────────────────────────────────────────────────────────────────────────────────────────╯
-+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-+│ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
+-│ Run sh -c 's=$(curl -fsSL https://chatgpt.com/codex/install.sh) && CODEX_NON_INTERACTIVE=1 eval "$s"' to   │
+-│ update.                                                                                                    │
 +│ Run sh -c 'CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/         │
 +│ install.sh' to update.                                                                                     │
-+│                                                                                                            │
-+│ See full release notes:                                                                                    │
-+│ https://github.com/openai/codex/releases/latest                                                            │
-+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ │                                                                                                            │
+ │ See full release notes:                                                                                    │
+ │ https://github.com/openai/codex/releases/latest                                                            │
 diff --git a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap
 index fb15a05..5cfb255 100644
 --- a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap
@@ -416,10 +408,10 @@ index fb15a05..5cfb255 100644
  │ See full release notes:                                                                                    │
  │ https://github.com/openai/codex/releases/latest                                                            │
 diff --git a/codex-rs/tui/src/history_cell/tests.rs b/codex-rs/tui/src/history_cell/tests.rs
-index c45fefd..ca78513 100644
+index 14ac4d9..09ddc34 100644
 --- a/codex-rs/tui/src/history_cell/tests.rs
 +++ b/codex-rs/tui/src/history_cell/tests.rs
-@@ -1388,6 +1388,34 @@ fn standalone_windows_update_available_history_cell_snapshot() {
+@@ -1416,6 +1416,34 @@ fn standalone_windows_update_available_history_cell_snapshot() {
      insta::assert_snapshot!(rendered);
  }
  
@@ -455,10 +447,10 @@ index c45fefd..ca78513 100644
  fn pnpm_update_available_history_cell_snapshot() {
      let cell =
 diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
-index 14d1c97..19272eb 100644
+index c3abb00..b04ee06 100644
 --- a/codex-rs/tui/src/lib.rs
 +++ b/codex-rs/tui/src/lib.rs
-@@ -179,7 +179,8 @@ mod motion;
+@@ -195,7 +195,8 @@ mod motion;
  mod multi_agents;
  mod named_session_lookup;
  mod notifications;
@@ -469,14 +461,14 @@ index 14d1c97..19272eb 100644
  pub(crate) mod onboarding;
  mod oss_selection;
 diff --git a/codex-rs/tui/src/update_action.rs b/codex-rs/tui/src/update_action.rs
-index 860d0bd..c99eb14 100644
+index 7b3433e..2eaf919 100644
 --- a/codex-rs/tui/src/update_action.rs
 +++ b/codex-rs/tui/src/update_action.rs
 @@ -20,9 +20,11 @@ pub enum UpdateAction {
      PnpmGlobalLatest,
      /// Update via `brew upgrade codex`.
      BrewUpgrade,
--    /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
+-    /// Update via the standalone Unix installer.
 +    // Mavergreen: the package's installer fetches the newest build from the Mavergreen channel.
 +    /// Update by running the installed package's installer non-interactively.
      StandaloneUnix,
@@ -490,7 +482,7 @@ index 860d0bd..c99eb14 100644
                  "sh",
                  &[
                      "-c",
--                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh",
+-                    r#"s=$(curl -fsSL https://chatgpt.com/codex/install.sh) && CODEX_NON_INTERACTIVE=1 eval "$s""#,
 +                    // Mavergreen: must equal `mavergreen::INSTALLER_PATH`; a test checks it.
 +                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh",
                  ],
@@ -505,23 +497,22 @@ index 860d0bd..c99eb14 100644
                  ],
              ),
          }
-@@ -156,17 +159,24 @@ mod tests {
+@@ -156,7 +159,28 @@ mod tests {
      }
  
      #[test]
--    fn standalone_update_commands_rerun_latest_installer() {
-+    fn standalone_update_commands_rerun_the_installed_installer() {
-         assert_eq!(
-             UpdateAction::StandaloneUnix.command_args(),
-             (
-                 "sh",
-                 &[
-                     "-c",
--                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh"
+-    fn standalone_windows_update_command_reruns_latest_installer() {
++    fn standalone_unix_update_reruns_the_installed_installer() {
++        assert_eq!(
++            UpdateAction::StandaloneUnix.command_args(),
++            (
++                "sh",
++                &[
++                    "-c",
 +                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh"
-                 ][..],
-             )
-         );
++                ][..],
++            )
++        );
 +        assert!(
 +            UpdateAction::StandaloneUnix
 +                .command_args()
@@ -529,10 +520,14 @@ index 860d0bd..c99eb14 100644
 +                .iter()
 +                .any(|arg| arg.ends_with(codex_install_context::mavergreen::INSTALLER_PATH))
 +        );
++    }
++
++    #[test]
++    fn standalone_windows_update_reports_unsupported() {
          assert_eq!(
              UpdateAction::StandaloneWindows.command_args(),
              (
-@@ -175,7 +185,7 @@ mod tests {
+@@ -165,7 +189,7 @@ mod tests {
                      "-ExecutionPolicy",
                      "Bypass",
                      "-c",
@@ -541,6 +536,23 @@ index 860d0bd..c99eb14 100644
                  ][..],
              )
          );
+@@ -173,10 +197,13 @@ mod tests {
+ 
+     #[cfg(unix)]
+     #[test]
+-    fn standalone_unix_update_fails_when_installer_download_fails() {
++    fn standalone_unix_update_fails_when_the_installer_is_missing() {
+         let (command, args) = UpdateAction::StandaloneUnix.command_args();
+-        let offline_command = args[1].replace("https://chatgpt.com", "file:///dev/null");
+-        assert_ne!(offline_command, args[1], "installer URL must be replaced");
++        let offline_command = args[1].replace(
++            codex_install_context::mavergreen::INSTALLER_PATH,
++            "/nonexistent/install.sh",
++        );
++        assert_ne!(offline_command, args[1], "installer path must be replaced");
+         let output = std::process::Command::new(command)
+             .args([args[0], &offline_command])
+             .env_clear()
 diff --git a/codex-rs/tui/src/update_prompt.rs b/codex-rs/tui/src/update_prompt.rs
 index 30e948d..e03a532 100644
 --- a/codex-rs/tui/src/update_prompt.rs
