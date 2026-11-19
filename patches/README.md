@@ -72,9 +72,10 @@ at the end says what each did and why it went.
   with `dlsym` on macOS, as it already does on glibc, instead of declaring it as a hard `extern`.
   When the lookup fails, `NativeChild::spawn` returns `Ok(None)`, and the caller falls back to
   `tokio::process::Command`. Only Rust's bundled musl keeps the hard `extern`.
-- **Why:** the function is new in macOS 10.15. As a hard `extern` it makes `codex` and
+- **Why:** the function is new in macOS 10.15. As a hard `extern` it once made `codex` and
   `logs_client` fail to link against 10.9's libSystem (`undefined symbol:
-  posix_spawn_file_actions_addchdir_np`), and Recaulk does not back-fill it.
+  posix_spawn_file_actions_addchdir_np`). Recaulk back-fills it since 20261104.1, so the link no
+  longer needs this patch. The patch stays for `POSIX_SPAWN_SETSID`, below.
 - **Invariant kept:** on 10.15 and later, the lookup finds the function and native spawning
   behaves exactly as upstream's. On 10.9 every native spawn takes the compatibility fallback that
   upstream already uses for glibc without the function.
