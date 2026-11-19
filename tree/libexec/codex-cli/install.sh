@@ -41,6 +41,10 @@
 #   8. The current link is swapped atomically on 10.9 too: 10.9's mv has neither -T nor -h, so where
 #      both of upstream's attempts fail, perl's rename(2) replaces the link in one step before
 #      upstream's last resort (remove, then move) is tried.
+#   9. Pruning: upstream prunes only the daemon's own package root. Here, after current moves, a
+#      standalone install keeps the release current names and the one it left, and removes every other
+#      <ID>-x86_64-apple-darwin directory under releases/ (each is about 450 MB), except one the
+#      app-server daemon's current resolves into. A daemon-only install prunes nothing.
 
 set -eu
 
@@ -689,6 +693,20 @@ release_dir_is_complete() {
   [ "$installed_version" = "${expected_version%%-mavericks.*}" ]
 }
 
+prune_old_releases() {
+  previous_release="$1"
+  keep_current="$(cd -P "$CURRENT_LINK" 2>/dev/null && pwd)" || return 0
+  releases_real="$(cd -P "$RELEASES_DIR" 2>/dev/null && pwd)" || return 0
+  keep_daemon="$(cd -P "$CODEX_HOME_DIR/packages/app-server-daemon/current" 2>/dev/null && pwd)" || keep_daemon=""
+  for candidate in "$releases_real"/*-"$vendor_target"; do
+    [ -d "$candidate" ] && [ ! -L "$candidate" ] || continue
+    case "$candidate" in
+      "$keep_current"|"$previous_release"|"$keep_daemon") continue ;;
+    esac
+    rm -rf "$candidate" 2>/dev/null || warn "Could not remove the old release $candidate."
+  done
+}
+
 update_current_link() {
   release_dir="$1"
   tmp_link="$STANDALONE_ROOT/.current.$$"
@@ -835,6 +853,7 @@ if [ "$DAEMON_ONLY" = "1" ] && [ "${CODEX_INSTALL_DEFER_SELECTION:-0}" != "1" ];
     exit 1
   fi
 fi
+previous_release_dir="$(cd -P "$CURRENT_LINK" 2>/dev/null && pwd)" || previous_release_dir=""
 update_current_link "$release_dir"
 if [ "$RELEASE" = "latest" ]; then
   printf '%s' "$release_name" > "$AUTO_UPDATE_VERSION.tmp.$$"
@@ -846,6 +865,7 @@ if [ "$DAEMON_ONLY" = "1" ]; then
   release_install_lock
   exit 0
 fi
+prune_old_releases "$previous_release_dir"
 release_install_lock
 
 printf 'Codex CLI %s installed successfully.\n' "$resolved_version"
