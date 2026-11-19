@@ -13,6 +13,9 @@ APP=$1
 V=$2
 OUTDIR=$3
 REPO=$(cd "$(dirname "$0")/.." && pwd)
+# spec: shipyard scripts/source-date-epoch.sh -- the pkg's mtime is this repo's commit time, wherever
+#       build-pkg.sh is run from, unless the caller names SOURCE_DATE_EPOCH or MAVERICKS_ROOT
+export MAVERICKS_ROOT="${MAVERICKS_ROOT:-$REPO}"
 die() { echo "build-pkg: $*" >&2; exit 1; }
 . "$REPO/build/msc.sh"
 printf '%s\n' "$V" | grep -Eq '^[0-9]{8}\.[1-9][0-9]*$' || die "version '$V' is not YYYYMMDD.N"
