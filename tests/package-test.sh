@@ -3,7 +3,7 @@
 #   PlistBuddy reads the manifest and the updater; the install steps run against a temporary target root
 #   usage: package-test.sh PKG
 #          PKG must be named codex-cli-<YYYYMMDD.N>.pkg. Its codex-cli component must carry exactly the
-#          launcher (bin/codex, a script), the installer's modules, share/codex-cli/
+#          launcher (bin/codex, a script), the installer's modules, the pre-uninstall hook, share/codex-cli/
 #          {requires,aquatransport-min-version,ed25519_key.pub}, upstream's LICENSE and NOTICE, the
 #          repo's README, the mavergreen.plist manifest and the updater app (Sparkle framework aside)
 #          with its LaunchAgent, and no Codex binary. Its preinstall must require each product in
@@ -46,7 +46,7 @@ a_eq "" "$(awk -F'\t' '{ m = $2; o = substr(m, length(m)) + 0 }
 M=usr/local/mavergreen/codex-cli
 a_eq "" "$(grep -E '/(codex|codex-code-mode-host)$' "$T/bom" | grep -v "^$M/bin/codex\$" || true)" "no Codex binary is in the payload"
 a_eq "" "$(grep -E 'codex-code-mode-host|codex-resources|codex-voice-host|build-manifest|codex-path|/packages/' "$T/bom" || true)" "the payload has no Codex host, resources, voice runtime or build manifest"
-for f in bin/codex libexec/codex-cli/lib.sh libexec/codex-cli/link.sh libexec/codex-cli/install.sh; do
+for f in bin/codex libexec/codex-cli/lib.sh libexec/codex-cli/link.sh libexec/codex-cli/install.sh libexec/mavergreen/pre-uninstall; do
   a_eq "100755" "$(awk -F'\t' -v p="$M/$f" '$1 == p { print $2 }' "$T/modes")" "$f is executable"
 done
 for f in share/codex-cli/requires share/codex-cli/aquatransport-min-version share/codex-cli/ed25519_key.pub share/doc/codex-cli/LICENSE share/doc/codex-cli/NOTICE share/doc/codex-cli/README.md; do
@@ -60,13 +60,14 @@ usr/local/mavergreen/codex-cli/bin/codex
 usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh
 usr/local/mavergreen/codex-cli/libexec/codex-cli/lib.sh
 usr/local/mavergreen/codex-cli/libexec/codex-cli/link.sh
+usr/local/mavergreen/codex-cli/libexec/mavergreen/pre-uninstall
 usr/local/mavergreen/codex-cli/mavergreen.plist
 usr/local/mavergreen/codex-cli/share/codex-cli/aquatransport-min-version
 usr/local/mavergreen/codex-cli/share/codex-cli/ed25519_key.pub
 usr/local/mavergreen/codex-cli/share/codex-cli/requires
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/LICENSE
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/NOTICE
-usr/local/mavergreen/codex-cli/share/doc/codex-cli/README.md" "$(cat "$T/payload")" "the payload is the launcher, the installer, the requires, AquaTransport pin and key, the docs, the manifest, the updater and its LaunchAgent"
+usr/local/mavergreen/codex-cli/share/doc/codex-cli/README.md" "$(cat "$T/payload")" "the payload is the launcher, the installer, the uninstall hook, the requires, AquaTransport pin and key, the docs, the manifest, the updater and its LaunchAgent"
 
 # The preinstall requires each product the tree's requires file names, and says where to get it.
 pre="$C/Scripts/preinstall"
