@@ -100,10 +100,12 @@ it rests on, with their hashes, in the prepared tree (`tree:`), the crate source
 10.9 SDK (`sdk:`). Every build fills in their exact symbols and crate disambiguators from the binary
 (shipyard's `objc-resolve.sh`), and the analyzer hashes each cited file itself, in the tree
 `build-manifest` says the build compiled (`source_tree_sha256`) and the crate sources it names
-(`crate_sources`). So a review holds while the files it rests on are unchanged: a Codex or Rust
-update that touches none of them proves and automerges, and one that does fails closed naming the
-file to re-review (`guard-source-changed`, `position-source-changed`), as does a guarded call site
-added to a reviewed function (`guard-coverage-changed`). The revision and patch series a record was
+(`crate_sources`). Each crate a row pins must be the version this build's Cargo.lock locked
+(`build/check-crate-pins.sh`), since the crate sources hold every version cargo has unpacked. So a
+review holds while the files it rests on are unchanged: a Codex or Rust update that touches none of
+them, and moves no cited crate to another version, proves and automerges. One that does fails closed
+naming the file to re-review (`guard-source-changed`, `position-source-changed`) or the crate pin to
+update, as does a guarded call site added to a reviewed function (`guard-coverage-changed`). The revision and patch series a record was
 reviewed at are provenance, shown and never compared. `objc/x86_64-apple-darwin/` and
 `objc/aarch64-apple-darwin/` hold the same rows; `build/objc-reviewed-dir.sh` picks the build host's. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
 writes it right after the build and before CTest, and uploads it as the `codex-build-objc-proof`

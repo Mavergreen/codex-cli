@@ -135,6 +135,11 @@ PATCHES=$(cat "$MAVERICKS_ROOT/patches"/*.patch | shasum -a 256 | cut -c1-64)
 FEATURES='cargo build --locked --release --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host'
 [ -f "$REVIEWED" ] || REVIEWED=
 [ -f "$REVIEWED_HOST" ] || REVIEWED_HOST=
+# spec: build/check-crate-pins.sh -- a crate: citation is hashed at the version its row pins, which must
+#       be the version this build's Cargo.lock locked
+for r in ${REVIEWED:+"$REVIEWED"} ${REVIEWED_HOST:+"$REVIEWED_HOST"}; do
+  sh "$HERE/check-crate-pins.sh" "$r" "$SOURCE/codex-rs/Cargo.lock" || fail "$r pins crates this build did not lock"
+done
 RES="$OBJC/evidence/codex.resolved.json"
 RESH="$OBJC/evidence/codex-code-mode-host.resolved.json"
 # spec: shipyard scripts/objc-resolve.sh (drydock-objc resolve) -- symbols and crate disambiguators come
