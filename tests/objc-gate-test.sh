@@ -95,10 +95,10 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   EV="$OBJC/evidence/codex.json"
   PFX=${CODEX_TEST_RECAULK_PREFIX:-$(sh "$ROOT/build/fetch-recaulk-objc.sh" 2>/dev/null | sed -n 1p)}
   # spec: build/compat-guard.sh header -- schema-2 evidence is checked against the tree, crate sources and SDK
-  SRC="$BR/codex-src"
+  TREE="$BR/codex-src"
   CRATES=$(sed -n 's/^crate_sources=//p' "$ART/build-manifest")
   SDKR=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64)
-  ROOTS="CODEX_OBJC_SOURCE_ROOT=$SRC CODEX_OBJC_CRATE_SOURCES=$CRATES CODEX_OBJC_SDK_ROOT=$SDKR"
+  ROOTS="CODEX_OBJC_SOURCE_ROOT=$TREE CODEX_OBJC_CRATE_SOURCES=$CRATES CODEX_OBJC_SDK_ROOT=$SDKR"
   guard "$ART/codex"
   rebuilt=$report rebuilt_rc=$rc
   if [ -z "$rebuilt" ]; then
@@ -180,8 +180,8 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
     *) fail "coverage_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
   # tree COPY FILE TEXT: a copy of the prepared tree (hard links) whose FILE is replaced by its bytes plus TEXT
   tree() {
-    rm -rf "$1"; mkdir -p "$1"; ( cd "$SRC" && pax -rwl . "$1" )
-    cp "$SRC/$2" "$1/$2.new"; printf '%s\n' "$3" >> "$1/$2.new"; rm -f "$1/$2"; mv "$1/$2.new" "$1/$2"
+    rm -rf "$1"; mkdir -p "$1"; ( cd "$TREE" && pax -rwl . "$1" )
+    cp "$TREE/$2" "$1/$2.new"; printf '%s\n' "$3" >> "$1/$2.new"; rm -f "$1/$2"; mv "$1/$2.new" "$1/$2"
   }
   digest() { sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only --source-root "$1"; }
   tree "$T/t-uncited" codex-rs/tui/src/lib.rs '// a bump that touches no cited file'
