@@ -94,6 +94,11 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   ART="$BR/codex-$MODE"; OBJC="$BR/objc-$MODE"
   EV="$OBJC/evidence/codex.json"
   PFX=${CODEX_TEST_RECAULK_PREFIX:-$(sh "$ROOT/build/fetch-recaulk-objc.sh" 2>/dev/null | sed -n 1p)}
+  # spec: build/compat-guard.sh header -- schema-2 evidence is checked against the tree, crate sources and SDK
+  SRC="$BR/codex-src"
+  CRATES=$(sed -n 's/^crate_sources=//p' "$ART/build-manifest")
+  SDKR=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64)
+  ROOTS="CODEX_OBJC_SOURCE_ROOT=$SRC CODEX_OBJC_CRATE_SOURCES=$CRATES CODEX_OBJC_SDK_ROOT=$SDKR"
   guard "$ART/codex"
   rebuilt=$report rebuilt_rc=$rc
   if [ -z "$rebuilt" ]; then
@@ -146,36 +151,65 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   # so a row's stated position stands on its citation; shipyard's fixtures test the check where they are), and a
   # changed arboard revision is refused.
   mut "$T/r3-other.json" 'for (@{$e->{position_evidence}}) { $_->{symbol} =~ s/protocol_object/protocol_objekt/ }'
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-other.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-other.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
   [ "$rc" != 0 ] && [ "$(verdicts "$report" UTF8String ProtocolObject)" != floor-supported ] &&
     pass "an R3 row for another function leaves ProtocolObject's sends open (exit $rc)" || fail "R3 row for another symbol: exit $rc"
   mut "$T/r3-arboard.json" 'for (@{$e->{crates}}) { $_->{disambiguator} = "aaaaaaaaaa" if $_->{name} eq "arboard" }'
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-arboard.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/r3-arboard.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
   [ "$rc" = 4 ] && pass "R3 evidence pinning another arboard revision is refused (exit 4: $(codes "$report"))" || fail "another arboard revision: exit $rc"
   mut "$T/no-providers.json" 'delete $e->{providers}'
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/no-providers.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/no-providers.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
   case "$(verdicts "$report" "$SEL_OPEN")" in provided) fail "evidence without the provider mapping still provides openURLs" ;; *) pass "evidence stripped of the provider mapping: openURLs is $(verdicts "$report" "$SEL_OPEN") (exit $rc)" ;; esac
 
   guard "$T/m/codex/codex" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
   case "$(verdicts "$report" "$SEL_OPEN")" in provided) fail "no build evidence still provides openURLs" ;; *) pass "no build evidence: openURLs is $(verdicts "$report" "$SEL_OPEN") (exit $rc)" ;; esac
 
-  if grep -q '"guards"' "$EV"; then
-    mut "$T/other-patches.json" '$e->{source}{patches_sha256} = "0" x 64'
-    guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/other-patches.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
-    [ "$rc" = 4 ] && pass "guard records reviewed under another patch series are refused (exit 4: $(codes "$report"))" ||
-      fail "evidence claiming another patch series: exit $rc"
-  else
-    echo "note: the evidence carries no guard records yet, so a changed patch series has none to invalidate"
-  fi
+  # -- content-keyed reviews (Drydock schema 2): a review holds while the files it cites are unchanged --
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
+  base_rc=$rc base_motion=$(verdicts "$report" accessibilityDisplayShouldReduceMotion) base_vo=$(verdicts "$report" isVoiceOverEnabled)
+  # same KEY: the run's exit and both guarded sends' verdicts are the unmutated evidence's
+  same() { [ "$rc" = "$base_rc" ] && [ "$(verdicts "$report" accessibilityDisplayShouldReduceMotion)" = "$base_motion" ] &&
+           [ "$(verdicts "$report" isVoiceOverEnabled)" = "$base_vo" ]; }
+  mut "$T/other-patches.json" '$e->{source}{patches_sha256} = "0" x 64; $e->{source}{revision} = "0" x 40; $_->{provenance}{patches_sha256} = "1" x 64 for @{$e->{guards} || []}'
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/other-patches.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
+  same && pass "another revision and patch series are provenance only: the verdicts carry (exit $rc)" ||
+    fail "provenance changed the verdicts: exit $rc (unmutated $base_rc), motion $(verdicts "$report" accessibilityDisplayShouldReduceMotion), VoiceOver $(verdicts "$report" isVoiceOverEnabled)"
+  mut "$T/covers.json" '$_->{covers}[0]{count}++ for @{$e->{guards}}'
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/covers.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
+  case "$rc:$(codes "$report")" in 4:*guard-coverage-changed*) pass "coverage_change_refuses: a guard covering another count of sends is refused (exit 4)" ;;
+    *) fail "coverage_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
+  # tree COPY FILE TEXT: a copy of the prepared tree (hard links) whose FILE is replaced by its bytes plus TEXT
+  tree() {
+    rm -rf "$1"; mkdir -p "$1"; ( cd "$SRC" && pax -rwl . "$1" )
+    cp "$SRC/$2" "$1/$2.new"; printf '%s\n' "$3" >> "$1/$2.new"; rm -f "$1/$2"; mv "$1/$2.new" "$1/$2"
+  }
+  digest() { sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only --source-root "$1"; }
+  tree "$T/t-uncited" codex-rs/tui/src/lib.rs '// a bump that touches no cited file'
+  mut "$T/uncited.json" "\$e->{source}{tree_sha256} = '$(digest "$T/t-uncited")'"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/uncited.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
+    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
+  same && pass "uncited_change_carries: a changed file no review cites carries every review (exit $rc)" ||
+    fail "uncited_change_carries: exit $rc (unmutated $base_rc), codes $(codes "$report")"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
+    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
+  case "$rc:$(codes "$report")" in 4:*source-tree-mismatch*) pass "a tree other than the one the evidence names is refused (exit 4)" ;;
+    *) fail "tree swapped under the evidence: exit $rc, codes $(codes "$report")" ;; esac
+  tree "$T/t-cited" codex-rs/tui/src/system_motion.rs '// a bump that touches the reduce-motion guard'
+  mut "$T/cited.json" "\$e->{source}{tree_sha256} = '$(digest "$T/t-cited")'"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/cited.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
+    CODEX_OBJC_SOURCE_ROOT="$T/t-cited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
+  case "$rc:$(codes "$report")" in 4:*guard-source-changed*) pass "cited_change_refuses: a changed file a guard cites refuses it (exit 4)" ;;
+    *) fail "cited_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
+  rm -rf "$T/t-uncited" "$T/t-cited"
 
   printf '\001' | dd of="$T/m/codex/codex" bs=1 seek=4096 conv=notrunc 2>/dev/null
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
   [ "$rc" = 4 ] && pass "a changed byte in codex makes its evidence stale (exit 4: $(codes "$report"))" || fail "a changed codex byte: exit $rc"
   cp "$ART/codex" "$T/m/codex/codex"
 
   if [ -n "${MAVERGREEN_OBJC_CODEX_ARTIFACT:-}" ]; then
     mkdir -p "$T/o/codex"; cp "$MAVERGREEN_OBJC_CODEX_ARTIFACT" "$T/o/codex/codex"
-    guard "$T/o/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX"
+    guard "$T/o/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
     [ "$rc" = 4 ] && pass "the rebuilt binary's evidence does not transfer to the original (exit 4: $(codes "$report"))" || fail "rebuilt evidence on the original: exit $rc"
     rm -rf "$T/o"
   fi
@@ -183,16 +217,16 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   # the provider's declaration (wrong ABI) or archive bytes differ from what the build linked
   cp -R "$PFX" "$T/pfx-abi"
   sed 's/"@56@0:8@16@24Q32@40^@48"/"@56@0:8@16@24I32@40^@48"/' "$PFX/share/recaulk/objc-providers.json" > "$T/pfx-abi/share/recaulk/objc-providers.json"
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-abi"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-abi" $ROOTS
   [ "$(verdicts "$report" "$SEL_OPEN")" != provided ] && [ "$rc" != 0 ] && pass "a provider declaring another ABI does not provide openURLs (exit $rc)" || fail "wrong ABI: exit $rc, openURLs $(verdicts "$report" "$SEL_OPEN")"
   cp -R "$PFX" "$T/pfx-noreceipt"; rm -f "$T/pfx-noreceipt/share/recaulk/objc-source.receipt"
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-noreceipt"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-noreceipt" $ROOTS
   case "$(verdicts "$report" countByEnumeratingWithState:objects:count: ___recaulk_)" in
     *unresolved*) pass "without its source receipt the provider body's sends stay open" ;;
     *) fail "without its source receipt the provider body's sends are $(verdicts "$report" countByEnumeratingWithState:objects:count: ___recaulk_)" ;;
   esac
   cp -R "$PFX" "$T/pfx-bytes"; printf 'x' >> "$T/pfx-bytes/lib/librecaulk-objc.a"
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-bytes"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$T/pfx-bytes" $ROOTS
   [ "$(verdicts "$report" "$SEL_OPEN")" != provided ] && [ "$rc" != 0 ] && pass "a provider archive with other bytes does not provide openURLs (exit $rc)" || fail "changed archive: exit $rc"
   rm -rf "$T/m"
 

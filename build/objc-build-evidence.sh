@@ -9,16 +9,23 @@
 #                                           and prestrip bytes (strip = false: they are one file), the link
 #                                           map, the reference set, the prepared source tree and where the
 #                                           provider's archive members landed
-#            evidence/codex.json            that evidence plus the source identity (pinned revision, the
-#                                           patch series' SHA-256, the cargo command) and the reviewed
-#                                           sections of objc/HOST/codex-reviewed-evidence.json (crates, type map,
-#                                           R2 and R3 evidence, binding receipt, guards), when that file exists
-#            evidence/codex-code-mode-host{.generated,}.json
+#            evidence/codex.resolved.json   objc/HOST/codex-reviewed-evidence.json (Drydock's schema 2: rows
+#                                           name functions by path and the files they rest on by hash) with
+#                                           every row's symbols and every crate's disambiguator filled in from
+#                                           this codex by shipyard's objc-resolve.sh, when that file exists
+#            evidence/codex.json            that evidence, made schema 2, plus the source provenance (pinned
+#                                           revision, the patch series' SHA-256, the cargo command, recorded
+#                                           and never compared) and the resolved sections (crates, type map,
+#                                           R2 and R3 evidence, binding receipt, guards)
+#            evidence/codex-code-mode-host{.generated,.resolved,}.json
 #                                           the same for the code-mode host, which links no provider (no link
 #                                           map, no mapping), with objc/HOST/codex-code-mode-host-reviewed-evidence.json
 #            reports/codex.objc-compat.json, reports/codex-code-mode-host.objc-compat.json
 #                                           scripts/objc-compat.sh --mode strict for each binary on its own
-#                                           evidence; codex with the provider it linked and its receipt
+#                                           evidence; codex with the provider it linked and its receipt. Each
+#                                           run is given the prepared tree, the crate sources build-manifest
+#                                           names and shipyard's pinned SDK, so the analyzer hashes every cited
+#                                           file itself: a review holds while the files it rests on are unchanged
 #            reports/codex.status, reports/codex-code-mode-host.status
 #                                           each strict run's exit, which build/objc-publication-check.sh
 #                                           requires to be 0 before anything is packaged or signed
@@ -29,6 +36,8 @@
 #          evidence/ and reports/ (shipyard never replaces a report), so nothing stale survives it.
 #          --check rehashes everything identity names and fails if any byte moved since: run it
 #          immediately before the proof is used (build/compat-guard.sh does).
+#          The prepared tree must be the one build-manifest says the build compiled (source_tree_sha256,
+#          by drydock-objc's digest), else exit 4: a citation is checked against the bytes the compiler read.
 #          The provider is re-resolved by build/fetch-recaulk-objc.sh and must be the one the manifest
 #          recorded. A guard record is effective only once reviewed (review status, reviewer, reason):
 #          nothing here reviews one.
@@ -85,6 +94,11 @@ done
 # platform: a link map from another link is shipyard's to refuse: it checks the map lists exactly the
 #           prestrip image's sections and that every provider atom sits where the map says.
 field() { sed -n "s/^$1=//p" "$ART/build-manifest"; }
+TREE=$(field source_tree_sha256)
+CRATES=$(field crate_sources)
+[ -n "$TREE" ] && [ -n "$CRATES" ] || fail "$ART/build-manifest records no source_tree_sha256 or crate_sources: rebuild with build/build-codex.sh $MODE"
+[ -d "$CRATES" ] || fail "no crate sources at $CRATES, which $ART/build-manifest names"
+SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64) || fail "no pinned 10.9 SDK from shipyard"
 
 provider=$(sh "$HERE/fetch-recaulk-objc.sh") || fail "no verified Recaulk provider"
 PREFIX=$(printf '%s\n' "$provider" | sed -n 1p)
@@ -109,13 +123,31 @@ sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --artifact "$ART/codex" --prestrip
 sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --artifact "$ART/codex-code-mode-host" --prestrip "$ART/codex-code-mode-host" \
   --source-root "$SOURCE" --references "$REFS" --output "$GENH" || fail "shipyard wrote no build evidence for codex-code-mode-host"
 
+# spec: Drydock content-keyed reviews -- the tree the analyzer will hash is the tree the compiler read
+gentree=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0] or die; print JSON::PP->new->decode(<$h>)->{source}{tree_sha256} // ""' "$GEN") ||
+  fail "unreadable $GEN"
+[ "$gentree" = "$TREE" ] ||
+  fail "source-tree-mismatch: the prepared tree at $SOURCE (digest $gentree) is not the one $ART/build-manifest says the build compiled ($TREE)"
+
 REVISION=$(sh "$HERE/codex-pin.sh" revision)
 PATCHES=$(cat "$MAVERICKS_ROOT/patches"/*.patch | shasum -a 256 | cut -c1-64)
 # spec: build/build-codex.sh -- the cargo command both binaries come from.
 FEATURES='cargo build --locked --release --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host'
 [ -f "$REVIEWED" ] || REVIEWED=
 [ -f "$REVIEWED_HOST" ] || REVIEWED_HOST=
-# merge GENERATED REVIEWED OUT: the generated evidence, the source identity and the reviewed sections
+RES="$OBJC/evidence/codex.resolved.json"
+RESH="$OBJC/evidence/codex-code-mode-host.resolved.json"
+# spec: shipyard scripts/objc-resolve.sh (drydock-objc resolve) -- symbols and crate disambiguators come
+#       from the artifact on every build; a reviewed path naming no function, or several, is refused.
+if [ -n "$REVIEWED" ]; then
+  sh "$SHIPYARD_SCRIPTS/objc-resolve.sh" --artifact "$ART/codex" --reviewed "$REVIEWED" --output "$RES" ||
+    fail "could not resolve $REVIEWED against $ART/codex"
+else RES=; fi
+if [ -n "$REVIEWED_HOST" ]; then
+  sh "$SHIPYARD_SCRIPTS/objc-resolve.sh" --artifact "$ART/codex-code-mode-host" --reviewed "$REVIEWED_HOST" --output "$RESH" ||
+    fail "could not resolve $REVIEWED_HOST against $ART/codex-code-mode-host"
+else RESH=; fi
+# merge GENERATED RESOLVED OUT: the generated evidence, the source provenance and the resolved sections
 merge() {
 perl -MJSON::PP -e '
   my ($gen, $reviewed, $rev, $patches, $features, $out) = @ARGV;
@@ -124,9 +156,11 @@ perl -MJSON::PP -e '
   $e->{source}{revision} = $rev; $e->{source}{patches_sha256} = $patches; $e->{source}{features} = $features;
   if ($reviewed ne "") {
     my $r = slurp($reviewed);
+    die "$reviewed: not schema-2 objc build evidence\n" unless ($r->{schema} // 0) == 2;
+    $e->{schema} = 2;
     for my $k (keys %$r) {
-      die "$reviewed: unknown section $k\n" unless $k =~ /^(crates|type_map|type_evidence|position_evidence|binding_receipt|guards|notes)$/;
-      next if $k eq "notes";
+      die "$reviewed: unknown section $k\n" unless $k =~ /^(schema|kind|artifact|source|crates|type_map|type_evidence|position_evidence|binding_receipt|guards|notes)$/;
+      next if $k =~ /^(schema|kind|artifact|source|notes)$/;
       $e->{$k} = $r->{$k};
     }
   }
@@ -135,8 +169,8 @@ perl -MJSON::PP -e '
   close $o or die "$out: $!\n";
 ' "$1" "$2" "$REVISION" "$PATCHES" "$FEATURES" "$3"
 }
-merge "$GEN" "$REVIEWED" "$EV" || fail "could not merge the build evidence"
-merge "$GENH" "$REVIEWED_HOST" "$EVH" || fail "could not merge the code-mode host's build evidence"
+merge "$GEN" "$RES" "$EV" || fail "could not merge the build evidence"
+merge "$GENH" "$RESH" "$EVH" || fail "could not merge the code-mode host's build evidence"
 
 # spec: shipyard scripts/objc-compat.sh -- each report names its binary relative to a shipped root.
 status=0
@@ -145,6 +179,7 @@ for name in codex codex-code-mode-host; do
   if [ "$name" = codex ]; then set -- "$@" --build-evidence "$EV" --provider-prefix "$PREFIX"
   else set -- "$@" --build-evidence "$EVH"; fi
   [ "$name" != codex ] || [ -z "$RECEIPT" ] || set -- "$@" --source-receipt "$RECEIPT"
+  set -- "$@" --source-root "$SOURCE" --crate-sources "$CRATES" --sdk-root "$SDK"
   rc=0
   sh "$SHIPYARD_SCRIPTS/objc-compat.sh" "$@" 2> "$OBJC/reports/$name.stderr" || rc=$?
   case "$rc" in
@@ -156,7 +191,7 @@ for name in codex codex-code-mode-host; do
   printf '%s\n' "$rc" > "$OBJC/reports/$name.status"
 done
 
-for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "$ARCHIVE" "$DECL" "$GEN" "$EV" "$GENH" "$EVH" \
+for f in "$ART/codex" "$ART/codex-code-mode-host" "$ART/build-manifest" "$MAP" "$ARCHIVE" "$DECL" "$GEN" "$EV" "$GENH" "$EVH" ${RES:+"$RES"} ${RESH:+"$RESH"} \
          "$OBJC/reports/codex.objc-compat.json" "$OBJC/reports/codex-code-mode-host.objc-compat.json" \
          "$OBJC/reports/codex.status" "$OBJC/reports/codex-code-mode-host.status" \
          ${REVIEWED:+"$REVIEWED"} ${REVIEWED_HOST:+"$REVIEWED_HOST"} ${RECEIPT:+"$RECEIPT"}; do

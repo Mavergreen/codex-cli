@@ -35,6 +35,7 @@ EXPECTED_CLANG=$(tr -d '[:space:]' < "$PRODUCT_ROOT/components/clang-22/version"
 RUSTY_V8_NATIVE=$(field rusty_v8_version "$NATIVE")
 EXPECTED_V8_REMOVED=$(sh "$HERE/strip-v8-cxxabi.sh" --list | paste -s -d , -)
 SDK_NATIVE=$(field sdk "$NATIVE")
+TREE_NATIVE=$(field source_tree_sha256 "$NATIVE")
 
 check_manifest() {
   manifest=$1
@@ -66,6 +67,23 @@ check_manifest() {
   [ "$(field rusty_v8_removed "$manifest")" = "$EXPECTED_V8_REMOVED" ] || {
     echo "check-build-manifests: rusty_v8_removed in $manifest is not what build/strip-v8-cxxabi.sh removes" >&2; exit 1;
   }
+  # spec: Drydock content-keyed reviews -- the analyzer hashes reviewed citations in the prepared tree
+  #       and the crate sources this build compiled, and refuses a tree other than the one recorded here.
+  #       Both modes prepare the same tree; the crate sources' path is each host's own.
+  case "$(field source_tree_sha256 "$manifest")" in
+    *[!0-9a-f]*|'') echo "check-build-manifests: missing or malformed source_tree_sha256 in $manifest" >&2; exit 1 ;;
+  esac
+  [ "$(field source_tree_sha256 "$manifest" | wc -c | tr -d ' ')" = 65 ] || {
+    echo "check-build-manifests: malformed source_tree_sha256 in $manifest" >&2; exit 1; }
+  [ "$(field source_tree_sha256 "$manifest")" = "$TREE_NATIVE" ] || {
+    echo "check-build-manifests: source_tree_sha256 differs from native in $manifest" >&2; exit 1; }
+  case "$(field crate_sources "$manifest")" in
+    /*) ;;
+    *) echo "check-build-manifests: missing or relative crate_sources in $manifest" >&2; exit 1 ;;
+  esac
+  case "$(field cargo_lock_sha256 "$manifest")" in
+    *[!0-9a-f]*|'') echo "check-build-manifests: missing or malformed cargo_lock_sha256 in $manifest" >&2; exit 1 ;;
+  esac
   # platform: the SDK is named, not pathed: each host caches shipyard's pinned SDK in its own
   #           place. How it reaches the target (SDKROOT natively, target rustflags in cross, for
   #           the reason build-codex.sh gives) follows from mode, so it needs no field of its own.

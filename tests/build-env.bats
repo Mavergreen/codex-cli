@@ -34,6 +34,14 @@ setup() {
     printf '#!/bin/sh\nPATH="%s" MAVERICKS_BUILD_ROOT="%s" exec sh "%s" "$@"\n' "$outer_path" "$outer_root" "$real_shipyard/$helper" \
       > "$shipyard/$helper"
   done
+  # The tree digest is drydock-objc's (shipyard's 3-argument objc-build-evidence.sh form): the stand-in
+  # answers it with the digest of the tree's file list, and passes every other call to the real helper.
+  rm "$shipyard/objc-build-evidence.sh"
+  cat > "$shipyard/objc-build-evidence.sh" <<EOF
+#!/bin/sh
+if [ "\$1" = --tree-digest-only ]; then (cd "\$3" && find . -type f | LC_ALL=C sort | shasum -a 256 | cut -c1-64); exit; fi
+PATH="$outer_path" MAVERICKS_BUILD_ROOT="$outer_root" exec sh "$real_shipyard/objc-build-evidence.sh" "\$@"
+EOF
   rm "$shipyard/fetch_product_pkg.sh"
   provider="$BATS_TEST_TMPDIR/recaulk-release"
   objc_fixture_prefix "$provider" "$(sh "$real_shipyard/fetch_sdk.sh" --arch x86_64)"
@@ -48,6 +56,8 @@ setup() {
   printf '[toolchain]\nchannel = "1.95.0"\n' > "$source_dir/codex-rs/rust-toolchain.toml"
   echo "Apache License" > "$source_dir/LICENSE"
   echo "Copyright OpenAI" > "$source_dir/NOTICE"
+  echo "# lock" > "$source_dir/codex-rs/Cargo.lock"
+  mkdir -p "$MAVERICKS_BUILD_ROOT/cargo-home/registry/src/index.crates.io-test/objc2-0.6.3"
   printf '#!/bin/sh\necho "%s"\n' "$source_dir" > "$product/build/fetch-codex.sh"
 
   rust="$BATS_TEST_TMPDIR/rust"
@@ -302,4 +312,22 @@ provider_reaches_cargo() {
   root=$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)
   [ "$(cargo_value MAVERICKS_OBJC_LINK_ARGS_FILE)" = "$root/objc-dev/link-args" ]
   grep -qx -- "$root/objc-dev/linkmaps/codex.map" "$root/objc-dev/link-args"
+}
+
+@test "the manifest records the prepared tree's digest, the crate sources and the Cargo.lock that chose them" {
+  run build native
+  succeeded
+  root="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)"
+  m="$root/codex-native/build-manifest"
+  want=$(sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only --source-root "$source_dir")
+  grep -qx "source_tree_sha256=$want" "$m"
+  grep -qx "crate_sources=$root/cargo-home/registry/src/index.crates.io-test" "$m"
+  grep -qx "cargo_lock_sha256=$(shasum -a 256 < "$source_dir/codex-rs/Cargo.lock" | cut -c1-64)" "$m"
+}
+
+@test "a build with no single crate index to name fails" {
+  mkdir -p "$MAVERICKS_BUILD_ROOT/cargo-home/registry/src/index.other-test"
+  run build native
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not exactly one crate index"* ]] || false
 }

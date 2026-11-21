@@ -19,6 +19,9 @@ setup() {
     printf 'rusty_v8_removed=%s\n' "$removed" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
     printf 'recaulk_origin=released\nrecaulk_version=20261201.1\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
       "$(printf a%.0s $(seq 64))" "$(printf b%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
+    # spec: Drydock content-keyed reviews -- the prepared tree the compiler read, and the crate sources
+    printf 'source_tree_sha256=%s\ncrate_sources=/cargo-home-%s/registry/src/index.crates.io-x\ncargo_lock_sha256=%s\n' \
+      "$(printf c%.0s $(seq 64))" "$mode" "$(printf d%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
   done
 }
 
@@ -170,4 +173,30 @@ setup() {
   sed -i.bak '/^recaulk_/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh" --cross-only
   [ "$status" -ne 0 ]
+}
+
+@test "a manifest must record the prepared source tree's digest" {
+  sed -i.bak '/^source_tree_sha256=/d' "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *source_tree_sha256* ]] || false
+}
+
+@test "native and cross manifests must agree on the prepared source tree" {
+  sed -i.bak "s/^source_tree_sha256=.*/source_tree_sha256=$(printf e%.0s $(seq 64))/" \
+    "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *source_tree_sha256* ]] || false
+}
+
+@test "a manifest must record where its crate sources are and which Cargo.lock chose them" {
+  for f in crate_sources cargo_lock_sha256; do
+    cp "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest" "$BATS_TEST_TMPDIR/m"
+    sed -i.bak "/^$f=/d" "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+    run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"$f"* ]] || false
+    cp "$BATS_TEST_TMPDIR/m" "$MAVERICKS_BUILD_ROOT/codex-native/build-manifest"
+  done
 }

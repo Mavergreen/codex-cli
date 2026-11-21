@@ -95,11 +95,17 @@ compiled for the pkg, and it is guarded as it is built.
 The guard's Objective-C half is shipyard's strict analyzer, which needs each build's proof:
 `build/objc-build-evidence.sh MODE` binds the build evidence, the reviewed rows in `objc/HOST/`, the
 provider codex linked and its source receipt to the exact bytes, and records each strict run's
-exit. The rows name exact symbols and crate disambiguators, which cargo derives from the rustc
-that builds them, its host triple included: `objc/x86_64-apple-darwin/` serves builds on an x86_64
-host (10.9 native), `objc/aarch64-apple-darwin/` builds on Apple Silicon (CI's cross build), and
-`build/objc-reviewed-dir.sh` picks the build host's. A Codex update re-derives both sets, and the
-guard records in each need the maintainer's review. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
+exit. The rows are Drydock's schema 2: each names its function by demangled path and lists the files
+it rests on, with their hashes, in the prepared tree (`tree:`), the crate sources (`crate:`) or the
+10.9 SDK (`sdk:`). Every build fills in their exact symbols and crate disambiguators from the binary
+(shipyard's `objc-resolve.sh`), and the analyzer hashes each cited file itself, in the tree
+`build-manifest` says the build compiled (`source_tree_sha256`) and the crate sources it names
+(`crate_sources`). So a review holds while the files it rests on are unchanged: a Codex or Rust
+update that touches none of them proves and automerges, and one that does fails closed naming the
+file to re-review (`guard-source-changed`, `position-source-changed`), as does a guarded call site
+added to a reviewed function (`guard-coverage-changed`). The revision and patch series a record was
+reviewed at are provenance, shown and never compared. `objc/x86_64-apple-darwin/` and
+`objc/aarch64-apple-darwin/` hold the same rows; `build/objc-reviewed-dir.sh` picks the build host's. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
 writes it right after the build and before CTest, and uploads it as the `codex-build-objc-proof`
 diagnostic (never part of the payload). Then `build/objc-publication-check.sh cross` runs before
 packaging, and again with the tarball before signing: it refuses a stale or missing proof, a strict

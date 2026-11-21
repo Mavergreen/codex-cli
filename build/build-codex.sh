@@ -55,6 +55,14 @@ if [ "$RECAULK_ORIGIN" = development ]; then
   echo "build-codex: linked with a development Recaulk provider: a dev build, $VERSION, never publishable" >&2
 fi
 [ -n "$VERSION" ] || { echo "build-codex: no version: BUILD_ID or VERSION is empty" >&2; exit 1; }
+# spec: Drydock content-keyed reviews -- the prepared tree the compiler read, by drydock-objc's own digest,
+#       and the crate sources cargo compiled (the registry's one unpacked index, as NAME-VERSION/), which
+#       build/objc-build-evidence.sh gives the analyzer to hash reviewed citations against.
+TREE_SHA256=$(sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only --source-root "$SOURCE") || {
+  echo "build-codex: no digest of the prepared tree $SOURCE" >&2; exit 1; }
+set -- "$CARGO_HOME"/registry/src/*/
+[ "$#" -eq 1 ] && [ -d "$1" ] || { echo "build-codex: not exactly one crate index under $CARGO_HOME/registry/src" >&2; exit 1; }
+CRATE_SOURCES=${1%/}
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\nrusty_v8_removed=%s\n' \
@@ -62,5 +70,7 @@ fi
   printf 'clang_version=%s\nprotoc_runtime=%s\nsdk=%s\n' "$CLANG_VERSION" "$PROTOC_RUNTIME" "${SDK##*/}"
   printf 'recaulk_origin=%s\nrecaulk_version=%s\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
     "$RECAULK_ORIGIN" "$RECAULK_VERSION" "$RECAULK_ARCHIVE_SHA256" "$RECAULK_DECLARATION_SHA256"
+  printf 'source_tree_sha256=%s\ncrate_sources=%s\ncargo_lock_sha256=%s\n' \
+    "$TREE_SHA256" "$CRATE_SOURCES" "$(shasum -a 256 < "$SOURCE/codex-rs/Cargo.lock" | cut -c1-64)"
 } > "$ARTIFACT/build-manifest"
 printf '%s\n' "$ARTIFACT"
