@@ -6,7 +6,8 @@
 #     MAVERGREEN_OBJC_CODEX_ARTIFACT  the original Codex 0.165.0 binary (SHA-256 1d056b0d...6c40), whose
 #                                    `codex login` crashed on 10.9. It must fail the gate for its
 #                                    unguarded -[NSWorkspace openURLs:...] send; its two accessibility
-#                                    sends must stay unresolved until their guard records are reviewed,
+#                                    sends must stay unresolved without reviewed guard records (the
+#                                    rebuilt binary has neither guards nor records: Recaulk provides both),
 #                                    and its three unknown-class sends unresolved.
 #     CODEX_GATE_MODE                native or cross: a build in the build root, with the proof
 #                                    build/objc-build-evidence.sh MODE wrote. Its openURLs send must be
@@ -108,7 +109,7 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
     [ "$(verdicts "$rebuilt" "$SEL_OPEN")" = provided ] && pass "the rebuilt codex's openURLs send is provided by Recaulk" ||
       fail "the rebuilt codex's openURLs send is $(verdicts "$rebuilt" "$SEL_OPEN")"
     # The six sends the original left open (the openURLs defect and five unresolved). A positive verdict
-    # needs every one closed: provided, guarded or floor-supported.
+    # needs every one closed: provided or floor-supported.
     open=
     for six in "$SEL_OPEN|" "accessibilityDisplayShouldReduceMotion|" "isVoiceOverEnabled|" \
                "countByEnumeratingWithState:objects:count:|FilterMap" "UTF8String|ProtocolObject" "lengthOfBytesUsingEncoding:|ProtocolObject"; do
@@ -116,6 +117,10 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
       v=$(verdicts "$rebuilt" "$s" "$fn")
       echo "  $s${fn:+ in *$fn*}: $v"
       case ",$v," in *,unresolved,*|*,unsupported,*|,none,) open="$open $s" ;; esac
+    done
+    for s in accessibilityDisplayShouldReduceMotion isVoiceOverEnabled; do
+      [ "$(verdicts "$rebuilt" "$s")" = provided ] && pass "the rebuilt codex's -[NSWorkspace $s] is provided by Recaulk, with no guard" ||
+        fail "the rebuilt codex's -[NSWorkspace $s] is $(verdicts "$rebuilt" "$s"), not provided"
     done
     # The provider body's own sends close through Recaulk's source receipt (share/recaulk/objc-source.receipt).
     body=$(perl -MJSON::PP -e 'local $/; open my $h, "<", $ARGV[0]; my $r = JSON::PP->new->decode(<$h>); print scalar grep { $_->{verdict} =~ /^(unresolved|unsupported)$/ && ($_->{function} // "") =~ /^_+recaulk_/ } @{$r->{findings}}' "$rebuilt")
@@ -165,19 +170,18 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   case "$(verdicts "$report" "$SEL_OPEN")" in provided) fail "no build evidence still provides openURLs" ;; *) pass "no build evidence: openURLs is $(verdicts "$report" "$SEL_OPEN") (exit $rc)" ;; esac
 
   # -- content-keyed reviews (Drydock schema 2): a review holds while the files it cites are unchanged --
+  # Every reviewed row cites crate files (objc/HOST/codex-reviewed-evidence.json); ProtocolObject's UTF8String
+  # send is closed by the R3 row citing objc2's protocol_object.rs.
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
-  base_rc=$rc base_motion=$(verdicts "$report" accessibilityDisplayShouldReduceMotion) base_vo=$(verdicts "$report" isVoiceOverEnabled)
-  # same KEY: the run's exit and both guarded sends' verdicts are the unmutated evidence's
-  same() { [ "$rc" = "$base_rc" ] && [ "$(verdicts "$report" accessibilityDisplayShouldReduceMotion)" = "$base_motion" ] &&
-           [ "$(verdicts "$report" isVoiceOverEnabled)" = "$base_vo" ]; }
-  mut "$T/other-patches.json" '$e->{source}{patches_sha256} = "0" x 64; $e->{source}{revision} = "0" x 40; $_->{provenance}{patches_sha256} = "1" x 64 for @{$e->{guards} || []}'
+  base_rc=$rc base_po=$(verdicts "$report" UTF8String ProtocolObject)
+  [ "$base_rc" = 0 ] && [ "$base_po" = floor-supported ] && pass "the unmutated evidence passes, ProtocolObject's UTF8String floor-supported" ||
+    fail "the unmutated evidence: exit $base_rc, ProtocolObject's UTF8String $base_po"
+  # same: the run's exit and the R3-closed send's verdict are the unmutated evidence's
+  same() { [ "$rc" = "$base_rc" ] && [ "$(verdicts "$report" UTF8String ProtocolObject)" = "$base_po" ]; }
+  mut "$T/other-patches.json" '$e->{source}{patches_sha256} = "0" x 64; $e->{source}{revision} = "0" x 40'
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/other-patches.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
   same && pass "another revision and patch series are provenance only: the verdicts carry (exit $rc)" ||
-    fail "provenance changed the verdicts: exit $rc (unmutated $base_rc), motion $(verdicts "$report" accessibilityDisplayShouldReduceMotion), VoiceOver $(verdicts "$report" isVoiceOverEnabled)"
-  mut "$T/covers.json" '$_->{covers}[0]{count}++ for @{$e->{guards}}'
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/covers.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS
-  case "$rc:$(codes "$report")" in 4:*guard-coverage-changed*) pass "coverage_change_refuses: a guard covering another count of sends is refused (exit 4)" ;;
-    *) fail "coverage_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
+    fail "provenance changed the verdicts: exit $rc (unmutated $base_rc), ProtocolObject's UTF8String $(verdicts "$report" UTF8String ProtocolObject)"
   # tree COPY FILE TEXT: a copy of the prepared tree (hard links) whose FILE is replaced by its bytes plus TEXT
   tree() {
     rm -rf "$1"; mkdir -p "$1"; ( cd "$TREE" && pax -rwl . "$1" )
@@ -194,13 +198,16 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
     CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
   case "$rc:$(codes "$report")" in 4:*source-tree-mismatch*) pass "a tree other than the one the evidence names is refused (exit 4)" ;;
     *) fail "tree swapped under the evidence: exit $rc, codes $(codes "$report")" ;; esac
-  tree "$T/t-cited" codex-rs/tui/src/system_motion.rs '// a bump that touches the reduce-motion guard'
-  mut "$T/cited.json" "\$e->{source}{tree_sha256} = '$(digest "$T/t-cited")'"
-  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/cited.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
-    CODEX_OBJC_SOURCE_ROOT="$T/t-cited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
-  case "$rc:$(codes "$report")" in 4:*guard-source-changed*) pass "cited_change_refuses: a changed file a guard cites refuses it (exit 4)" ;;
+  # crate sources holding the cited crates (hard links), with one cited objc2 file changed
+  mkdir -p "$T/c-cited"
+  for c in objc2-0.6.3 objc2-foundation-0.3.2 arboard-3.6.1; do mkdir "$T/c-cited/$c"; ( cd "$CRATES/$c" && pax -rwl . "$T/c-cited/$c" ); done
+  f="$T/c-cited/objc2-0.6.3/src/runtime/protocol_object.rs"
+  cp "$f" "$f.new"; printf '%s\n' '// a crate bump that touches a cited file' >> "$f.new"; rm -f "$f"; mv "$f.new" "$f"
+  guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
+    CODEX_OBJC_SOURCE_ROOT="$TREE" CODEX_OBJC_CRATE_SOURCES="$T/c-cited" CODEX_OBJC_SDK_ROOT="$SDKR"
+  case "$rc:$(codes "$report")" in 4:*position-source-changed*) pass "cited_change_refuses: a changed crate file an R3 row cites refuses it (exit 4)" ;;
     *) fail "cited_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
-  rm -rf "$T/t-uncited" "$T/t-cited"
+  rm -rf "$T/t-uncited" "$T/c-cited"
 
   printf '\001' | dd of="$T/m/codex/codex" bs=1 seek=4096 conv=notrunc 2>/dev/null
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" $ROOTS

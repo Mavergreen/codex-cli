@@ -20,18 +20,6 @@ at the end says what each did and why it went.
 - **When to reconsider:** when the floor rises to a macOS release with LocalAuthentication and the
   Secure Enclave APIs.
 
-## 0005-accessibility-selector-guards.patch
-
-- **What:** `codex-rs/tui/src/system_motion.rs` and `codex-rs/tui/src/screen_reader.rs` check
-  `respondsToSelector:` before sending `accessibilityDisplayShouldReduceMotion` and
-  `isVoiceOverEnabled`. `codex-rs/tui/Cargo.toml` enables `objc2-foundation`'s `NSObjCRuntime`
-  feature for `NSSelectorFromString`.
-- **Why:** NSWorkspace gains those selectors in 10.12 and 10.13. On 10.9 the unrecognized selector
-  raises an Objective-C exception that aborts the TUI at launch.
-- **Invariant kept:** a host that has the selector is asked exactly as before. A host without it
-  reports no reduce-motion preference and no screen reader.
-- **When to reconsider:** when the floor rises past 10.13.
-
 ## 0006-seatbelt-policies.patch
 
 - **What:** `codex-rs/sandboxing/src/seatbelt_base_policy.sbpl` and

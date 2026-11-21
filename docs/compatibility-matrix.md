@@ -64,7 +64,8 @@ The initial shared investigation on the same host confirms that the existing com
 this crashing artifact clean. A semantic Foundation/AppKit catalog (libclang, pinned 10.9 and 11.3
 SDKs), loaded 10.9.5 runtime inventory and retained Rust binding symbols identify three absent
 NSWorkspace methods: this launch method (10.10), reduce-motion (10.12) and VoiceOver detection
-(10.13). The latter two already have source guards in patch 0005. No further unguarded missing
+(10.13). The latter two were later guarded in patch 0005, and since 2026-11-21 Recaulk provides
+both on 10.9 instead. No further unguarded missing
 method is confirmed by this initial scan, but unresolved generic/protocol receivers remain: this
 is not a complete clean verdict. An apparent NSString initializer failure is a class-cluster false
 positive; the actual NSPlaceholderString receiver implements it and initializes successfully.

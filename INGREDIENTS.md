@@ -106,7 +106,8 @@ review holds while the files it rests on are unchanged: a Codex or Rust update t
 them, and moves no cited crate to another version, proves and automerges. One that does fails closed
 naming the file to re-review (`guard-source-changed`, `position-source-changed`) or the crate pin to
 update, as does a guarded call site added to a reviewed function (`guard-coverage-changed`). The revision and patch series a record was
-reviewed at are provenance, shown and never compared. `objc/x86_64-apple-darwin/` and
+reviewed at are provenance, shown and never compared. Codex carries no guard records, and so nothing a
+maintainer signs: the two NSWorkspace sends 10.9 lacks are provided by Recaulk, not guarded. `objc/x86_64-apple-darwin/` and
 `objc/aarch64-apple-darwin/` hold the same rows; `build/objc-reviewed-dir.sh` picks the build host's. `build/compat-guard.sh` fails while that proof no longer describes the bytes, so `builds.yml`
 writes it right after the build and before CTest, and uploads it as the `codex-build-objc-proof`
 diagnostic (never part of the payload). Then `build/objc-publication-check.sh cross` runs before

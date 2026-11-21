@@ -266,82 +266,10 @@
       "checksum": "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf",
       "name": "arboard",
       "version": "3.6.1"
-    },
-    {
-      "name": "codex",
-      "version": "0.165.0"
-    },
-    {
-      "name": "codex_tui",
-      "version": "0.165.0"
-    }
-  ],
-  "guards": [
-    {
-      "covers": [
-        {
-          "count": 1,
-          "selector": "accessibilityDisplayShouldReduceMotion"
-        }
-      ],
-      "fallback": "system_motion::detect returns None (no reduce-motion preference); inlined into codex::run_interactive_tui::{closure#0}",
-      "guard": "respondsToSelector:",
-      "id": "codex-tui-system-motion",
-      "path": "codex::run_interactive_tui::{closure#0}",
-      "provenance": {
-        "features": "cargo build --locked --release --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host",
-        "patches_sha256": "65ca23ef11365fa9be0a55db19fb5446567d935db296aa4f976b769dcafb8335",
-        "revision": "360319d8dee62d87e2d59fc0c21805d79519cfed"
-      },
-      "review": {
-        "reason": "While system_motion.rs and cli/src/main.rs are unchanged: respondsToSelector:(accessibilityDisplayShouldReduceMotion) on sharedWorkspace dominates the one send of that selector to the same receiver; on 10.9 the guard fails and system_motion::detect reports no reduce-motion preference, with no other effect",
-        "reviewer": "Amitai Schleier",
-        "status": "reviewed"
-      },
-      "selector": "accessibilityDisplayShouldReduceMotion",
-      "sources": [
-        {
-          "cite": "tree:codex-rs/tui/src/system_motion.rs",
-          "sha256": "ee483a313cde6701f83f5b745466918750ef6aa13507d959c3315c918cfbd485"
-        },
-        {
-          "cite": "tree:codex-rs/cli/src/main.rs",
-          "sha256": "feadc21c1b5639a10710b9459d5b5addb532416d50a431477168dd3c58805957"
-        }
-      ]
-    },
-    {
-      "covers": [
-        {
-          "count": 1,
-          "selector": "isVoiceOverEnabled"
-        }
-      ],
-      "fallback": "the && short-circuits to false (no screen reader); inlined into the screen-reader thread's backtrace frame",
-      "guard": "respondsToSelector:",
-      "id": "codex-tui-screen-reader",
-      "path": "std::sys::backtrace::__rust_begin_short_backtrace::<codex_tui::screen_reader::detect::{closure#0}::{closure#0}, ()>",
-      "provenance": {
-        "features": "cargo build --locked --release --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host",
-        "patches_sha256": "65ca23ef11365fa9be0a55db19fb5446567d935db296aa4f976b769dcafb8335",
-        "revision": "360319d8dee62d87e2d59fc0c21805d79519cfed"
-      },
-      "review": {
-        "reason": "While screen_reader.rs is unchanged: respondsToSelector:(isVoiceOverEnabled) on sharedWorkspace dominates the one send of that selector to the same receiver; on 10.9 the guard fails and the && reports no screen reader, with no other effect",
-        "reviewer": "Amitai Schleier",
-        "status": "reviewed"
-      },
-      "selector": "isVoiceOverEnabled",
-      "sources": [
-        {
-          "cite": "tree:codex-rs/tui/src/screen_reader.rs",
-          "sha256": "0a77228736e62f056716e74459a15592fef3f8e95efe33b7415f6cfa37607d4a"
-        }
-      ]
     }
   ],
   "kind": "objc-build-evidence",
-  "notes": "Schema 2 (Drydock content-keyed reviews), migrated 2026-11-20 from the schema-1 rows derive-reviewed.pl carried to the 0.165.0 rebuild: each row names its function by path and the files it rests on by hash; drydock-objc resolve fills symbols and crate disambiguators on every build. Both guard records re-signed under schema 2 by Amitai Schleier on 2026-11-20 (first reviewed 2026-11-07 under schema 1).",
+  "notes": "Schema 2 (Drydock content-keyed reviews), migrated 2026-11-20 from the schema-1 rows derive-reviewed.pl carried to the 0.165.0 rebuild: each row names its function by path and the files it rests on by hash; drydock-objc resolve fills symbols and crate disambiguators on every build. No guard records: Recaulk (20261121.3 and later) provides -[NSWorkspace accessibilityDisplayShouldReduceMotion] and -[NSWorkspace isVoiceOverEnabled] on 10.9, so patch 0005's guards and their signed records were dropped on 2026-11-21.",
   "position_evidence": [
     {
       "class": "NSArray",
