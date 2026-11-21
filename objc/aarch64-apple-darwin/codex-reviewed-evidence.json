@@ -286,7 +286,9 @@
         "revision": "360319d8dee62d87e2d59fc0c21805d79519cfed"
       },
       "review": {
-        "status": "pending-resign"
+        "reason": "While system_motion.rs and cli/src/main.rs are unchanged: respondsToSelector:(accessibilityDisplayShouldReduceMotion) on sharedWorkspace dominates the one send of that selector to the same receiver; on 10.9 the guard fails and system_motion::detect reports no reduce-motion preference, with no other effect",
+        "reviewer": "Amitai Schleier",
+        "status": "reviewed"
       },
       "selector": "accessibilityDisplayShouldReduceMotion",
       "sources": [
@@ -317,7 +319,9 @@
         "revision": "360319d8dee62d87e2d59fc0c21805d79519cfed"
       },
       "review": {
-        "status": "pending-resign"
+        "reason": "While screen_reader.rs is unchanged: respondsToSelector:(isVoiceOverEnabled) on sharedWorkspace dominates the one send of that selector to the same receiver; on 10.9 the guard fails and the && reports no screen reader, with no other effect",
+        "reviewer": "Amitai Schleier",
+        "status": "reviewed"
       },
       "selector": "isVoiceOverEnabled",
       "sources": [
@@ -329,7 +333,7 @@
     }
   ],
   "kind": "objc-build-evidence",
-  "notes": "Schema 2 (Drydock content-keyed reviews), migrated 2026-11-20 from the schema-1 rows derive-reviewed.pl carried to the 0.165.0 rebuild: each row names its function by path and the files it rests on by hash; drydock-objc resolve fills symbols and crate disambiguators on every build. Both guard records await the maintainer's re-signing under schema 2 (they were reviewed by Amitai Schleier on 2026-11-07 under schema 1).",
+  "notes": "Schema 2 (Drydock content-keyed reviews), migrated 2026-11-20 from the schema-1 rows derive-reviewed.pl carried to the 0.165.0 rebuild: each row names its function by path and the files it rests on by hash; drydock-objc resolve fills symbols and crate disambiguators on every build. Both guard records re-signed under schema 2 by Amitai Schleier on 2026-11-20 (first reviewed 2026-11-07 under schema 1).",
   "position_evidence": [
     {
       "class": "NSArray",
