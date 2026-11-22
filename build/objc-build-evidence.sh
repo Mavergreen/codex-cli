@@ -63,6 +63,8 @@ ART="$BUILD_ROOT/codex-$MODE"
 OBJC="$BUILD_ROOT/objc-$MODE"
 SOURCE="$BUILD_ROOT/codex-src"
 MAP="$OBJC/linkmaps/codex.map"
+# spec: build/build-codex.sh -- the objects codex was linked from
+DEPS="$BUILD_ROOT/codex-$MODE-target/x86_64-apple-darwin/release/deps"
 # spec: build/objc-reviewed-dir.sh -- the rows for binaries built on this host
 RDIR=$(sh "$HERE/objc-reviewed-dir.sh") || fail "no reviewed rows for a build on this host"
 REVIEWED="$RDIR/codex-reviewed-evidence.json"
@@ -181,7 +183,7 @@ merge "$GENH" "$RESH" "$EVH" || fail "could not merge the code-mode host's build
 status=0
 for name in codex codex-code-mode-host; do
   set -- --artifact "$ART/$name" --root "$ART" --references "$REFS" --report "$OBJC/reports/$name.objc-compat.json" --mode strict
-  if [ "$name" = codex ]; then set -- "$@" --build-evidence "$EV" --provider-prefix "$PREFIX"
+  if [ "$name" = codex ]; then set -- "$@" --build-evidence "$EV" --provider-prefix "$PREFIX" --link-map "$MAP" --object-dir "$DEPS"
   else set -- "$@" --build-evidence "$EVH"; fi
   [ "$name" != codex ] || [ -z "$RECEIPT" ] || set -- "$@" --source-receipt "$RECEIPT"
   set -- "$@" --source-root "$SOURCE" --crate-sources "$CRATES" --sdk-root "$SDK"
