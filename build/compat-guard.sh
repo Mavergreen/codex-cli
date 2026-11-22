@@ -10,7 +10,9 @@
 #          gives the original 0.165.0 binary Codex's own copy, tests/fixtures/codex-0.165.0-build-evidence.json). A build's
 #          own proof is schema 2, so the analyzer also gets the prepared tree, the crate sources its
 #          build-manifest names and shipyard's pinned SDK, to hash the files reviewed rows cite; elsewhere
-#          CODEX_OBJC_SOURCE_ROOT, CODEX_OBJC_CRATE_SOURCES and CODEX_OBJC_SDK_ROOT name them, when set.
+#          CODEX_OBJC_SOURCE_ROOT, CODEX_OBJC_CRATE_SOURCES and CODEX_OBJC_SDK_ROOT name them, when set. codex also gets
+#          the link map its proof names and the objects it was linked from, so the analyzer can attest which
+#          bytes are relocations; elsewhere CODEX_OBJC_LINK_MAP and CODEX_OBJC_OBJECT_DIRS (DIR[:DIR...]) name them.
 #          CODEX_OBJC_REPORT_DIR keeps the report. Exit as assert_binary_compatible.sh: 0 clean, 1 a check failed (here also: the
 #          proof is stale), 2 misuse, 4 cannot measure.
 set -eu
@@ -26,15 +28,20 @@ PREFIX=${CODEX_OBJC_PROVIDER_PREFIX:-}
 SRCROOT=${CODEX_OBJC_SOURCE_ROOT:-}
 CRATES=${CODEX_OBJC_CRATE_SOURCES:-}
 OBJC_SDK=${CODEX_OBJC_SDK_ROOT:-}
+LINKMAP=${CODEX_OBJC_LINK_MAP:-}
+OBJDIRS=${CODEX_OBJC_OBJECT_DIRS:-}
 case "$BIN" in
   "$BUILD_ROOT"/codex-native/*|"$BUILD_ROOT"/codex-cross/*)
     MODE=${BIN#"$BUILD_ROOT"/codex-}; MODE=${MODE%%/*}
-    [ -z "$EVIDENCE$PREFIX$SRCROOT$CRATES$OBJC_SDK" ] || { echo "compat-guard: a build's own proof is used for $BIN, not an override" >&2; exit 2; }
+    [ -z "$EVIDENCE$PREFIX$SRCROOT$CRATES$OBJC_SDK$LINKMAP$OBJDIRS" ] || { echo "compat-guard: a build's own proof is used for $BIN, not an override" >&2; exit 2; }
     sh "$HERE/objc-build-evidence.sh" --check "$MODE" || {
       echo "compat-guard: no current Objective-C proof for $BIN: run build/objc-build-evidence.sh $MODE" >&2; exit 1; }
     if [ "$(basename "$BIN")" = codex ]; then
       EVIDENCE="$BUILD_ROOT/objc-$MODE/evidence/codex.json"
       PREFIX=$(sh "$HERE/fetch-recaulk-objc.sh" | sed -n 1p)
+      # spec: build/objc-build-evidence.sh -- the map its proof names, and the objects codex was linked from
+      LINKMAP="$BUILD_ROOT/objc-$MODE/linkmaps/codex.map"
+      OBJDIRS="$BUILD_ROOT/codex-$MODE-target/x86_64-apple-darwin/release/deps"
     else
       EVIDENCE="$BUILD_ROOT/objc-$MODE/evidence/$(basename "$BIN").json"
     fi
@@ -50,6 +57,8 @@ set -- env MAVERGREEN_OBJC_STRICT=1 "MAVERICKS_DEVIATIONS_ROOT=$MAVERICKS_ROOT" 
 [ -z "$SRCROOT" ] || set -- "$@" "MAVERGREEN_OBJC_SOURCE_ROOT=$SRCROOT"
 [ -z "$CRATES" ] || set -- "$@" "MAVERGREEN_OBJC_CRATE_SOURCES=$CRATES"
 [ -z "$OBJC_SDK" ] || set -- "$@" "MAVERGREEN_OBJC_SDK_ROOT=$OBJC_SDK"
+[ -z "$LINKMAP" ] || set -- "$@" "MAVERGREEN_OBJC_LINK_MAP=$LINKMAP"
+[ -z "$OBJDIRS" ] || set -- "$@" "MAVERGREEN_OBJC_OBJECT_DIRS=$OBJDIRS"
 # the provider body's source receipt, which Recaulk ships beside its declaration
 [ -z "$PREFIX" ] || [ ! -f "$PREFIX/share/recaulk/objc-source.receipt" ] ||
   set -- "$@" "MAVERGREEN_OBJC_SOURCE_RECEIPT=$PREFIX/share/recaulk/objc-source.receipt"

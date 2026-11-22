@@ -99,7 +99,9 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   TREE="$BR/codex-src"
   CRATES=$(sed -n 's/^crate_sources=//p' "$ART/build-manifest")
   SDKR=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64)
-  ROOTS="CODEX_OBJC_SOURCE_ROOT=$TREE CODEX_OBJC_CRATE_SOURCES=$CRATES CODEX_OBJC_SDK_ROOT=$SDKR"
+  # spec: build/compat-guard.sh header -- codex's link map and objects, so the analyzer can attest its relocations
+  LINKED="CODEX_OBJC_LINK_MAP=$OBJC/linkmaps/codex.map CODEX_OBJC_OBJECT_DIRS=$BR/codex-$MODE-target/x86_64-apple-darwin/release/deps"
+  ROOTS="CODEX_OBJC_SOURCE_ROOT=$TREE CODEX_OBJC_CRATE_SOURCES=$CRATES CODEX_OBJC_SDK_ROOT=$SDKR $LINKED"
   guard "$ART/codex"
   rebuilt=$report rebuilt_rc=$rc
   if [ -z "$rebuilt" ]; then
@@ -191,11 +193,11 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   tree "$T/t-uncited" codex-rs/tui/src/lib.rs '// a bump that touches no cited file'
   mut "$T/uncited.json" "\$e->{source}{tree_sha256} = '$(digest "$T/t-uncited")'"
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$T/uncited.json" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
-    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
+    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR" $LINKED
   same && pass "uncited_change_carries: a changed file no review cites carries every review (exit $rc)" ||
     fail "uncited_change_carries: exit $rc (unmutated $base_rc), codes $(codes "$report")"
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
-    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR"
+    CODEX_OBJC_SOURCE_ROOT="$T/t-uncited" CODEX_OBJC_CRATE_SOURCES="$CRATES" CODEX_OBJC_SDK_ROOT="$SDKR" $LINKED
   case "$rc:$(codes "$report")" in 4:*source-tree-mismatch*) pass "a tree other than the one the evidence names is refused (exit 4)" ;;
     *) fail "tree swapped under the evidence: exit $rc, codes $(codes "$report")" ;; esac
   # crate sources holding the cited crates (hard links), with one cited objc2 file changed
@@ -204,7 +206,7 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   f="$T/c-cited/objc2-0.6.3/src/runtime/protocol_object.rs"
   cp "$f" "$f.new"; printf '%s\n' '// a crate bump that touches a cited file' >> "$f.new"; rm -f "$f"; mv "$f.new" "$f"
   guard "$T/m/codex/codex" CODEX_OBJC_BUILD_EVIDENCE="$EV" CODEX_OBJC_PROVIDER_PREFIX="$PFX" \
-    CODEX_OBJC_SOURCE_ROOT="$TREE" CODEX_OBJC_CRATE_SOURCES="$T/c-cited" CODEX_OBJC_SDK_ROOT="$SDKR"
+    CODEX_OBJC_SOURCE_ROOT="$TREE" CODEX_OBJC_CRATE_SOURCES="$T/c-cited" CODEX_OBJC_SDK_ROOT="$SDKR" $LINKED
   case "$rc:$(codes "$report")" in 4:*position-source-changed*) pass "cited_change_refuses: a changed crate file an R3 row cites refuses it (exit 4)" ;;
     *) fail "cited_change_refuses: exit $rc, codes $(codes "$report")" ;; esac
   rm -rf "$T/t-uncited" "$T/c-cited"

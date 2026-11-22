@@ -10,7 +10,7 @@ mkdir -p "$H/shipyard" "$H/elsewhere"
 : "${SHIPYARD_SCRIPTS:?set SHIPYARD_SCRIPTS}"
 for f in "$SHIPYARD_SCRIPTS"/*; do ln -s "$f" "$H/shipyard/"; done
 rm -f "$H/shipyard/assert_binary_compatible.sh"
-printf '#!/bin/sh\necho "SDKROOT=${SDKROOT-unset} OBJC_SDK=${MAVERGREEN_OBJC_SDK_ROOT-unset}"\n' > "$H/shipyard/assert_binary_compatible.sh"
+printf '#!/bin/sh\necho "SDKROOT=${SDKROOT-unset} OBJC_SDK=${MAVERGREEN_OBJC_SDK_ROOT-unset}${MAVERGREEN_OBJC_LINK_MAP+ MAP=$MAVERGREEN_OBJC_LINK_MAP DIRS=$MAVERGREEN_OBJC_OBJECT_DIRS}"\n' > "$H/shipyard/assert_binary_compatible.sh"
 printf 'x' > "$H/elsewhere/codex"
 out=$(SHIPYARD_SCRIPTS="$H/shipyard" MAVERICKS_BUILD_ROOT="$H/broot" SDKROOT=/the/callers/sdk \
   sh "$H_REPO/build/compat-guard.sh" "$H/elsewhere/codex" 2>&1) || true
@@ -18,4 +18,7 @@ h_assert_eq "SDKROOT=/the/callers/sdk OBJC_SDK=unset" "$out" "an override run wi
 out=$(SHIPYARD_SCRIPTS="$H/shipyard" MAVERICKS_BUILD_ROOT="$H/broot" SDKROOT=/the/callers/sdk CODEX_OBJC_SDK_ROOT=/pinned/sdk \
   sh "$H_REPO/build/compat-guard.sh" "$H/elsewhere/codex" 2>&1) || true
 h_assert_eq "SDKROOT=/the/callers/sdk OBJC_SDK=/pinned/sdk" "$out" "CODEX_OBJC_SDK_ROOT reaches the guard as MAVERGREEN_OBJC_SDK_ROOT, and SDKROOT stays the caller's"
+out=$(SHIPYARD_SCRIPTS="$H/shipyard" MAVERICKS_BUILD_ROOT="$H/broot" SDKROOT=/the/callers/sdk CODEX_OBJC_LINK_MAP=/a/codex.map CODEX_OBJC_OBJECT_DIRS=/a/deps:/b/deps \
+  sh "$H_REPO/build/compat-guard.sh" "$H/elsewhere/codex" 2>&1) || true
+h_assert_eq "SDKROOT=/the/callers/sdk OBJC_SDK=unset MAP=/a/codex.map DIRS=/a/deps:/b/deps" "$out" "CODEX_OBJC_LINK_MAP and CODEX_OBJC_OBJECT_DIRS reach the guard as MAVERGREEN_OBJC_LINK_MAP and MAVERGREEN_OBJC_OBJECT_DIRS"
 h_done
