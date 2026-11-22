@@ -73,6 +73,8 @@ sleep_tool                   works
 system_proxy_fallback        works
 tool_call_mcp_elicitation    works
 tool_suggest                 works
+tui_extensions_statusline    works
+tui_workspace                works
 ultrafast_mode               works
 unbounded_connection_retries works
 unified_exec                 works  patch 0008 finds posix_spawn_file_actions_addchdir_np at run time
