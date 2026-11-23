@@ -4,7 +4,7 @@
 #          The standalone archive, the release's primary form: OUT-DIR/codex-cli-VERSION-macos-x86_64.tar.gz,
 #          whose path it prints. VERSION is the release's YYYYMMDD.N. It holds tree/ as committed at
 #          HEAD (the launcher, the installer, the key and the pins), less the pkg-only libexec/mavergreen,
-#          plus the README, share/codex-cli/version, and each requirement packaging/standalone-bundled
+#          plus the README, share/codex-cli/version, and each requirement packaging/codex-cli.standalone-bundled
 #          names, unpacked from that product's pinned release (components/SHORT/version) without its
 #          manifest. Unpacked anywhere, it runs Codex with nothing else from Mavergreen.
 #          build-pkg.sh derives the pkg from it. CODEX_STANDALONE_BUNDLES=DIR takes each SHORT's tree from
@@ -39,7 +39,7 @@ else
   echo "build-standalone: no git here; staging tree/ as it is on disk, tracked or not" >&2
   cp -Rp "$REPO/tree/." "$T/"
 fi
-# spec: packaging/derive-pkg-tree.sh -- the uninstall hook names the install location; only the pkg carries it
+# spec: shipyard scripts/derive_pkg_tree.sh -- the uninstall hook names the install location; only the pkg carries it
 rm -rf "$T/libexec/mavergreen"
 # spec: INGREDIENTS.md "Packaging" -- the installed README is the repo's own, as in mavergreen-gh, so the
 #       archive and the pkg derived from it carry whatever the maintainer's edit of it leaves
@@ -60,7 +60,7 @@ while read -r short path || [ -n "$short" ]; do
   mkdir -p "$T/$path"
   cp -Rp "$src/." "$T/$path/"
   rm -f "$T/$path/mavergreen.plist"
-done < "$REPO/packaging/standalone-bundled"
+done < "$REPO/packaging/codex-cli.standalone-bundled"
 find "$ROOT" -name '._*' -delete
 mkdir -p "$OUTDIR"
 OUT=$OUTDIR/codex-cli-$V-macos-x86_64.tar.gz

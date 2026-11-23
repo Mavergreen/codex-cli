@@ -430,13 +430,14 @@ The release's primary form is `codex-cli-VERSION-macos-x86_64.tar.gz`, and the p
 (the maintainer's archive-first ruling, 2026-11-23). `packaging/build-standalone.sh` stages:
 - `tree/` as committed, less the pkg-only `libexec/mavergreen`;
 - the README and `share/codex-cli/version`;
-- each requirement `packaging/standalone-bundled` names, unpacked from its pinned release without
+- each requirement `packaging/codex-cli.standalone-bundled` names, unpacked from its pinned release without
   its manifest, under `libexec/codex-cli/bundled/SHORT`.
 
 It is archived with shipyard's `stage_standalone.sh` and judged by `check-standalone-archive.sh`.
-`packaging/derive-pkg-tree.sh` makes the pkg's tree from it: it drops the bundled requirements and
-adds the uninstall hook. `tests/build-pkg-test.sh` checks that the result is the pkg as it was
-before the archive. Shipyard is lifting the derivation as `scripts/derive_pkg_tree.sh`.
+`packaging/build-pkg.sh` makes the pkg from it with shipyard's `stage_pkg_from_archive.sh`. That
+checks the archive, drops the bundled requirements (each must be one of `requires`) and adds the
+uninstall hook. `tests/build-pkg-test.sh` checks that the result is the pkg as it was before the
+archive.
 
 A tree with `libexec/codex-cli/bundled` is the archive's, and in it:
 - the launcher meets each requirement with the bundled copy;
