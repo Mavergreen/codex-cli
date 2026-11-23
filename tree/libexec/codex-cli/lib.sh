@@ -46,7 +46,7 @@ cx_has_required() {
 }
 
 # Codex runs the installer and rg it is handed (patches 0011 and 0012, build-codex-package.sh's
-# codex-path/rg); the archive hands it its own, and the pkg leaves Codex its /usr/local/mavergreen defaults
+# codex-path/rg); the archive hands it its own, and the pkg leaves Codex the installed products' defaults
 cx_export_standalone() {
   [ "$CX_STANDALONE" = 1 ] || return 0
   CODEX_MAVERGREEN_INSTALLER="$CX_TREE/libexec/codex-cli/install.sh"

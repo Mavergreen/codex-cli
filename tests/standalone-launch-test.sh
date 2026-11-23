@@ -65,6 +65,14 @@ run env CODEX_MAVERGREEN_INSTALLER="$D/libexec/codex-cli/install.sh" CODEX_NON_I
 h_assert_eq 0 "$rc" "the update installs from the archive's tree ($(cat "$H/err"))"
 h_assert_eq "$S/releases/$B-x86_64-apple-darwin" "$(readlink "$S/current")" "the update moved current"
 
+# as the daemon runs it: piped to sh -s, so only CODEX_MAVERGREEN_INSTALLER says where the archive is
+h_channel $CV-mavericks.4
+run env CODEX_MAVERGREEN_INSTALLER="$D/libexec/codex-cli/install.sh" /bin/sh -s < "$D/libexec/codex-cli/install.sh"
+h_assert_eq 0 "$rc" "the daemon's update installs from the archive's tree ($(cat "$H/err"))"
+run /bin/sh -s < "$D/libexec/codex-cli/install.sh"
+h_assert_eq 1 "$rc" "a piped installer with no CODEX_MAVERGREEN_INSTALLER refuses"
+h_assert_contains "$(cat "$H/err")" "Cannot tell which codex-cli this installer belongs to" "and says why"
+
 C=$CV-mavericks.3
 h_channel $C 20261124.1
 run env CODEX_MAVERGREEN_INSTALLER="$D/libexec/codex-cli/install.sh" CODEX_INSTALL_ASSUME_TTY=1 \
