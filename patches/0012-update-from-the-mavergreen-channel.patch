@@ -461,7 +461,7 @@ index c3abb00..b04ee06 100644
  pub(crate) mod onboarding;
  mod oss_selection;
 diff --git a/codex-rs/tui/src/update_action.rs b/codex-rs/tui/src/update_action.rs
-index 7b3433e..2eaf919 100644
+index 7b3433e..c693978 100644
 --- a/codex-rs/tui/src/update_action.rs
 +++ b/codex-rs/tui/src/update_action.rs
 @@ -20,9 +20,11 @@ pub enum UpdateAction {
@@ -497,7 +497,7 @@ index 7b3433e..2eaf919 100644
                  ],
              ),
          }
-@@ -156,7 +159,28 @@ mod tests {
+@@ -156,7 +159,27 @@ mod tests {
      }
  
      #[test]
@@ -509,17 +509,16 @@ index 7b3433e..2eaf919 100644
 +                "sh",
 +                &[
 +                    "-c",
-+                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh"
++                    r#"CODEX_NON_INTERACTIVE=1 exec /bin/sh "${CODEX_MAVERGREEN_INSTALLER:-/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh}""#
 +                ][..],
 +            )
 +        );
-+        assert!(
-+            UpdateAction::StandaloneUnix
-+                .command_args()
-+                .1
-+                .iter()
-+                .any(|arg| arg.ends_with(codex_install_context::mavergreen::INSTALLER_PATH))
-+        );
++        let script = UpdateAction::StandaloneUnix.command_args().1[1];
++        assert!(script.contains(&format!(
++            "${{{}:-{}}}",
++            codex_install_context::mavergreen::INSTALLER_ENV,
++            codex_install_context::mavergreen::INSTALLER_PATH
++        )));
 +    }
 +
 +    #[test]
@@ -527,7 +526,7 @@ index 7b3433e..2eaf919 100644
          assert_eq!(
              UpdateAction::StandaloneWindows.command_args(),
              (
-@@ -165,7 +189,7 @@ mod tests {
+@@ -165,7 +188,7 @@ mod tests {
                      "-ExecutionPolicy",
                      "Bypass",
                      "-c",
@@ -536,7 +535,7 @@ index 7b3433e..2eaf919 100644
                  ][..],
              )
          );
-@@ -173,10 +197,13 @@ mod tests {
+@@ -173,10 +196,13 @@ mod tests {
  
      #[cfg(unix)]
      #[test]
@@ -553,6 +552,38 @@ index 7b3433e..2eaf919 100644
          let output = std::process::Command::new(command)
              .args([args[0], &offline_command])
              .env_clear()
+@@ -187,6 +213,31 @@ mod tests {
+ 
+         assert!(!output.status.success(), "{output:?}");
+     }
++
++    #[cfg(unix)]
++    #[test]
++    fn standalone_unix_update_runs_the_installer_the_environment_names() {
++        let dir = tempfile::tempdir().expect("temp dir");
++        let installer = dir.path().join("install.sh");
++        let ran = dir.path().join("ran");
++        std::fs::write(
++            &installer,
++            format!("echo \"$CODEX_NON_INTERACTIVE\" > '{}'\n", ran.display()),
++        )
++        .expect("write installer");
++        let (command, args) = UpdateAction::StandaloneUnix.command_args();
++        let output = std::process::Command::new(command)
++            .args(args)
++            .env_clear()
++            .env("HOME", "/dev/null")
++            .env("PATH", "/usr/bin:/bin")
++            .env(codex_install_context::mavergreen::INSTALLER_ENV, &installer)
++            .output()
++            .expect("run standalone Unix update command");
++
++        assert!(output.status.success(), "{output:?}");
++        assert_eq!(std::fs::read_to_string(&ran).expect("installer ran"), "1\n");
++    }
+ }
+ 
+ /// Package source explicitly selected by the user in the daemon menu.
 diff --git a/codex-rs/tui/src/update_prompt.rs b/codex-rs/tui/src/update_prompt.rs
 index 30e948d..e03a532 100644
 --- a/codex-rs/tui/src/update_prompt.rs
