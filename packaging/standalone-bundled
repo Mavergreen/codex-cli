@@ -1,0 +1,2 @@
+rg libexec/codex-cli/bundled/rg
+ed25519 libexec/codex-cli/bundled/ed25519
