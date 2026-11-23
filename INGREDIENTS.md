@@ -21,11 +21,13 @@ alone, so it is its own upstream, versioned by `UPSTREAM_VERSION` (the pkg's own
 `components/codex/min-pkg` is the oldest pkg (`YYYYMMDD.N`) the current source needs, or empty; each
 build records it in its channel metadata (see "A build that needs a newer pkg").
 
-Not ingredients: `rg` and `ed25519` are required at install and run time
-(`tree/share/codex-cli/requires`, checked by the pkg's preinstall and by the launcher), not shipped
-in this package. Each build's `codex-path/rg` is a two-line script that runs the `rg` package's
-`/usr/local/mavergreen/rg/bin/rg`, so no other `rg` is fetched or pinned, and the installer checks
-each build's signature with the `ed25519` package's `ed25519-verify`. What CI tests against is
+`rg` and `ed25519` are required at install and run time
+(`tree/share/codex-cli/requires`, checked by the pkg's preinstall and by the launcher). The pkg does
+not ship them, and the standalone archive bundles them (see "Standalone archive"). Each build's
+`codex-path/rg` is a two-line script that runs the rg Codex is handed in `CODEX_MAVERGREEN_RG` (the
+archive's own), else the `rg` package's `/usr/local/mavergreen/rg/bin/rg`. The installer checks
+each build's signature with the archive's `ed25519-verify`, else the `ed25519` product's beside its
+tree. What CI tests against is
 pinned all the same: the 10.9 smokes install, and `builds.yml` signs with, the releases named in
 `components/rg/version` and `components/ed25519/version`, which `build/fetch-required-pkg.sh` fetches
 and checks against that release's `SHA256SUMS` and Renovate's `github-releases` moves. The pins say
@@ -130,6 +132,7 @@ hand-written. `VERSION` is the pkg's own `YYYYMMDD.N`. The tree is:
 | `libexec/codex-cli/lib.sh`, `link.sh` | the launcher's modules |
 | `libexec/codex-cli/install.sh` | the installer, derived from upstream's `install.sh` (see `PROVENANCE.md`) |
 | `share/codex-cli/requires` | `rg` and `ed25519`, which the preinstall and the launcher require |
+| `share/codex-cli/version` | the release's `YYYYMMDD.N`, which the installer reads where there is no `mavergreen.plist` |
 | `share/codex-cli/ed25519_key.pub` | the family EdDSA public key, against which the installer checks each build's signature |
 | `share/doc/codex-cli/` | the repo's `README.md`, copied at package time as mavergreen-gh does, and the `LICENSE` and `NOTICE` of Codex, which the installer is derived from |
 
@@ -164,7 +167,7 @@ in. Its header lists every change from upstream's.
 **A Codex build.** `packaging/build-codex-package.sh CODEX-OUT BUILD-ID OUT-DIR` lays a build's
 artifact directory (`codex-native` or `codex-cross`) out as upstream's package:
 `bin/codex`, `bin/codex-code-mode-host`, an empty `codex-resources/`, `codex-path/rg` (a script that
-execs the `rg` package's `rg`), `codex-package.json` (upstream's fields plus `"mavergreenBuild":"<ID>"`), and
+execs the handed rg, else the `rg` package's `rg`), `codex-package.json` (upstream's fields plus `"mavergreenBuild":"<ID>"`), and
 the artifact's `build-manifest`, `LICENSE` and `NOTICE`, in
 `OUT-DIR/codex-package-x86_64-apple-darwin-<ID>.tar.gz`. It refuses an artifact with a voice
 runtime. Upstream's macOS package can also carry OpenAI's prebuilt zsh fork in `codex-resources/`;
@@ -283,8 +286,9 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
   build and does not run on 10.9. It is left as upstream's, unpatched, and unsupported.
 - **`codex-path/rg` is the family's `rg`.** Upstream's package carries BurntSushi's macOS `rg` in
   `codex-path/`, which Codex puts first on the agent shell's `PATH`. Here it is a script,
-  `exec /usr/local/mavergreen/rg/bin/rg "$@"`, for the `rg` package the pkg requires, as pi uses
-  that `rg`. It is not a link because the app-server daemon copies the package and refuses any link
+  `exec "${CODEX_MAVERGREEN_RG:-/usr/local/mavergreen/rg/bin/rg}" "$@"`. Under the pkg it runs the
+  `rg` package the pkg requires, as pi uses that `rg`; under the standalone archive, the rg the
+  archive carries. It is not a link because the app-server daemon copies the package and refuses any link
   that resolves outside it.
 - **Updates come from this product's builds.** The startup check, `codex update`, `codex doctor`
   and the app-server daemon's background updates all use the builds channel and the package's
@@ -419,3 +423,29 @@ Open shipyard dependency: a pkg built on a modern Mac that tags files with
 `com.apple.provenance` (macOS 27) carries `._` entries and is not releasable until shipyard fixes
 it. The cross pkg was therefore packaged on 10.9. CI-built pkgs are likely fine, but that is
 unmeasured, and measuring it is shipyard's.
+
+## Standalone archive
+
+The release's primary form is `codex-cli-VERSION-macos-x86_64.tar.gz`, and the pkg is derived from it
+(the maintainer's archive-first ruling, 2026-11-23). `packaging/build-standalone.sh` stages:
+- `tree/` as committed, less the pkg-only `libexec/mavergreen`;
+- the README and `share/codex-cli/version`;
+- each requirement `packaging/standalone-bundled` names, unpacked from its pinned release without
+  its manifest, under `libexec/codex-cli/bundled/SHORT`.
+
+It is archived with shipyard's `stage_standalone.sh` and judged by `check-standalone-archive.sh`.
+`packaging/derive-pkg-tree.sh` makes the pkg's tree from it: it drops the bundled requirements and
+adds the uninstall hook. `tests/build-pkg-test.sh` checks that the result is the pkg as it was
+before the archive. Shipyard is lifting the derivation as `scripts/derive_pkg_tree.sh`.
+
+A tree with `libexec/codex-cli/bundled` is the archive's, and in it:
+- the launcher meets each requirement with the bundled copy;
+- it links `~/.local/bin/codex` to itself;
+- it hands Codex `CODEX_MAVERGREEN_INSTALLER` (its own installer, which `codex update` and the
+  app-server daemon run, per patches 0011 to 0013) and `CODEX_MAVERGREEN_RG`.
+
+The installer names no install prefix. It finds its tree from its own path, or from
+`CODEX_MAVERGREEN_INSTALLER` when it is piped to `sh -s`. A build that needs a newer archive installs
+nothing and says where to download one: the archive has no updater.
+`packaging/install-standalone.sh`, published beside `install.sh`, is its no-sudo one-liner. It
+unpacks the latest archive under `~/.local/share/codex-cli` and links `~/.local/bin/codex`.
