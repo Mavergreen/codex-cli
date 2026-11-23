@@ -109,12 +109,23 @@ jobs:
       - name: Locate the build
         run: echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross" >> "$GITHUB_ENV"
 
-      - name: Package the .pkg
+      # The standalone archive is the primary form; the pkg is derived from it.
+      - name: Package the standalone archive
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          sa="$(sh packaging/build-standalone.sh "$VER" "$BUILD/dist")"
+          [ -f "$sa" ] || { echo "::error::build-standalone.sh did not print an archive path: $sa"; exit 1; }
+          echo "SA=$sa" >> "$GITHUB_ENV"
+
+      - name: Package the .pkg, derived from the archive
         env:
           VER: ${{ steps.ver.outputs.ver }}
         run: |
           set -eu
-          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$VER" "$BUILD/dist")"
+          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$VER" "$BUILD/dist" "$SA")"
           [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 
@@ -132,6 +143,7 @@ jobs:
           set -eu
           sh "$SHIPYARD_SCRIPTS/release-notes.sh" --tag "$VER" --version "$VER" \
             --product "Codex CLI" --min-os 10.9.5 --out "$BUILD/dist/RELEASE_NOTES.md"
+          printf '\n%s\n' "\`codex-cli-$VER-macos-x86_64.tar.gz\` is the standalone form: unpack it anywhere and run its \`bin/codex\`, which downloads Codex on first run. It carries rg and ed25519 itself: no updater, no installer." >> "$BUILD/dist/RELEASE_NOTES.md"
 
       - name: Record the declared state in the notes
         if: steps.ver.outputs.publish == 'yes'
