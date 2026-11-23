@@ -70,3 +70,7 @@ h_assert_fails() {
 h_assert_absent() {
   if [ -e "$1" ] || [ -L "$1" ]; then echo "FAIL: $2" >&2; echo "  present: $1" >&2; H_FAILS=$((H_FAILS+1)); fi
 }
+
+h_assert_present() {
+  if [ ! -e "$1" ]; then echo "FAIL: $2" >&2; echo "  absent: $1" >&2; H_FAILS=$((H_FAILS+1)); fi
+}

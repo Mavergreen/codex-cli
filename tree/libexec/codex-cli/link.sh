@@ -4,6 +4,7 @@
 cx_claim_link() {
   CX_LINK="$HOME/.local/bin/codex"
   _cx_want="$CX_MG/bin/codex"
+  [ "$CX_STANDALONE" = 0 ] || _cx_want="$CX_TREE/bin/codex"
   if [ -L "$CX_LINK" ]; then
     _cx_a="$(cx_resolve "$CX_LINK" 2>/dev/null)" || _cx_a=""
     _cx_b="$(cx_resolve "$_cx_want" 2>/dev/null)" || _cx_b=""
