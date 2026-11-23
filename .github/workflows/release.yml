@@ -134,7 +134,9 @@ jobs:
 
       # the README's one-liner fetches it from the latest release, beside the pkg it installs
       - name: The one-line installer
-        run: cp packaging/install.sh "$BUILD/dist/install.sh"
+        run: |
+          cp packaging/install.sh "$BUILD/dist/install.sh"
+          cp packaging/install-standalone.sh "$BUILD/dist/install-standalone.sh"
 
       - name: Release notes
         env:
