@@ -101,10 +101,12 @@ at the end says what each did and why it went.
   installer (`/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh`) and the package's
   updater. Its `BuildId` reads a build identity, `<x.y.z>-mavericks.<N>` with N at least 1 and no
   leading zero, as the channel's identity rule has it, or a plain `x.y.z` as build 0, and orders
-  builds by Codex version and then by build number.
+  builds by Codex version and then by build number. Its `installer_path()` is
+  `$CODEX_MAVERGREEN_INSTALLER` when that is an absolute path, else the package's installer: the
+  standalone archive's launcher names its own installer there.
   `CodexPackageManifest` in `install-context/src/lib.rs` reads `codex-package.json`'s
   `mavergreenBuild`, and `current_build_id` returns it for the running package. Tests in
-  `mavergreen.rs` cover parsing, ordering and the manifest.
+  `mavergreen.rs` cover parsing, ordering, the manifest and the installer path.
 - **Why:** a rebuild of the same Codex version, for a patch or a toolchain change, must reach users
   as an update, while `codex --version` keeps printing OpenAI's version. Upstream's update check
   compares versions with `parse_version`, which reads only `x.y.z`, so it cannot tell
@@ -124,7 +126,9 @@ at the end says what each did and why it went.
   cask probe is removed, and installs from Homebrew, npm, bun, vp or pnpm check nothing. The
   standalone update action (`codex-rs/tui/src/update_action.rs`), which `codex update` and the
   startup notice run, is `CODEX_NON_INTERACTIVE=1 exec /bin/sh
-  /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh` instead of piping
+  "${CODEX_MAVERGREEN_INSTALLER:-/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh}"`,
+  so the standalone archive's installer serves it too (tested by
+  `standalone_unix_update_runs_the_installer_the_environment_names`), instead of piping
   `chatgpt.com/codex/install.sh` into `sh`. The Windows action only reports that it is unsupported.
   When the installer exits 3 because the newest build needs a newer codex-cli package,
   `codex update` (`codex-rs/cli/src/main.rs`) says so, where to get the newer package (its updater,
@@ -153,8 +157,9 @@ at the end says what each did and why it went.
 ## 0013-daemon-updates-through-the-package-installer.patch
 
 - **What:** `codex-rs/app-server-daemon/src/update_loop.rs`: the app-server daemon's background
-  update loop, and the migration its manual update runs, read the package's installer from disk at
-  0011's path instead of downloading `https://chatgpt.com/codex/install.sh`. A failed scheduled
+  update loop, and the migration its manual update runs, read the installer from disk at 0011's
+  `installer_path()`, and pipe it to `sh -s` with `CODEX_MAVERGREEN_INSTALLER` set to that path so
+  the installer knows its tree (`the_piped_installer_is_told_where_it_lives`), instead of downloading `https://chatgpt.com/codex/install.sh`. A failed scheduled
   update is logged on the updater's stderr (`warning: scheduled update failed: …`) where upstream
   dropped it. Upstream adds the tail of the installer's stderr to a failure's message, but exit 3
   is not a failure, so it gets its own message that says why: the newest build needs a newer
