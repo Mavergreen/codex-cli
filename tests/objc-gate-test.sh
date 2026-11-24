@@ -250,10 +250,11 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
       fail "--check accepted a codex that changed after its proof"
     else pass "--check refuses a proof once codex changed: $(head -1 "$T/check2.log")"; fi
     printf '\001' | dd of="$TB/codex-$MODE/codex-code-mode-host" bs=1 seek=4096 conv=notrunc 2>/dev/null
-    if ( MAVERICKS_BUILD_ROOT="$TB" sh "$ROOT/build/objc-build-evidence.sh" --check "$MODE" ) > "$T/check3.log" 2>&1 ||
-       ! grep -q 'codex-code-mode-host changed since its proof' "$T/check3.log"; then
-      fail "--check did not name a code-mode host that changed after its proof: $(head -2 "$T/check3.log")"
-    else pass "--check refuses a proof once the code-mode host changed"; fi
+    if ( MAVERICKS_BUILD_ROOT="$TB" sh "$ROOT/build/objc-build-evidence.sh" --check "$MODE" ) > "$T/check3.log" 2>&1; then
+      fail "--check accepted a code-mode host that changed after its proof"
+    elif grep -q 'codex-code-mode-host changed since its proof' "$T/check3.log"; then
+      pass "--check refuses a proof once the code-mode host changed"
+    else fail "--check did not name a code-mode host that changed after its proof: $(head -2 "$T/check3.log")"; fi
     rc=0; MAVERICKS_BUILD_ROOT="$TB" CODEX_DEV_RECAULK_PREFIX="$PFX" sh "$ROOT/build/compat-guard.sh" "$TB/codex-$MODE/codex" > "$T/stale-guard.log" 2>&1 || rc=$?
     [ "$rc" = 1 ] && grep -q 'no current Objective-C proof' "$T/stale-guard.log" && pass "the gate will not reuse the stale reports" || fail "the gate with a stale proof: exit $rc"
   else

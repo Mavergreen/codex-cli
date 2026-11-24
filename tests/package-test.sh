@@ -23,6 +23,8 @@ MAVERICKS_BUILD_DIR="$REPO/build"; export MAVERICKS_BUILD_DIR
 . "$REPO/build/lib.sh"
 PR="$SHIPYARD/pkg_read.sh"
 SD="$(sh "$SHIPYARD/fetch_stevedore.sh")"
+# spec: shipyard scripts/mavergreen.sh -- without PlistBuddy, link and uninstall read each manifest with $STEVEDORE
+STEVEDORE=$SD; export STEVEDORE
 pget() { "$SD" plist get "$1" "$2"; }
 
 V="$(basename "$PKG")"; V="${V#codex-cli-}"; V="${V%.pkg}"

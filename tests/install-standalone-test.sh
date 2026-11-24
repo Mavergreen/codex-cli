@@ -32,9 +32,9 @@ release() {
   mkdir -p "$DL" "$H/stage/codex-cli-$1/bin"
   printf '#!/bin/sh\necho "launcher %s $*"\n' "$1" > "$H/stage/codex-cli-$1/bin/codex"
   chmod +x "$H/stage/codex-cli-$1/bin/codex"
-  ( cd "$H/stage" && tar -czf "$DL/codex-cli-$1-macos-x86_64.tar.gz" "codex-cli-$1" )
-  ( cd "$DL" && shasum -a 256 "codex-cli-$1-macos-x86_64.tar.gz" > SHA256SUMS
-    printf '%s  codex-cli-%s.pkg\n' 0000000000000000000000000000000000000000000000000000000000000000 "$1" >> SHA256SUMS )
+  ( cd "$H/stage" && tar -czf "$DL/codex-cli-$1-macos-x86_64.tar.gz" "codex-cli-$1" ) || return 1
+  ( cd "$DL" && shasum -a 256 "codex-cli-$1-macos-x86_64.tar.gz" > SHA256SUMS &&
+    printf '%s  codex-cli-%s.pkg\n' 0000000000000000000000000000000000000000000000000000000000000000 "$1" >> SHA256SUMS ) || return 1
 }
 run() { sh "$I" >"$H/out" 2>&1 && rc=0 || rc=$?; }
 

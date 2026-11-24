@@ -152,8 +152,7 @@ jobs:
         run: |
           set -eu
           sh "$SHIPYARD_SCRIPTS/release-notes.sh" --tag "$VER" --version "$VER" \
-            --product "Codex CLI" --min-os 10.9.5 --out "$BUILD/dist/RELEASE_NOTES.md"
-          printf '\n%s\n' "\`codex-cli-$VER-macos-x86_64.tar.gz\` is the standalone form: unpack it anywhere and run its \`bin/codex\`, which downloads Codex on first run. It carries rg and ed25519 itself: no updater, no installer." >> "$BUILD/dist/RELEASE_NOTES.md"
+            --product "Codex CLI" --min-os 10.9.5 --standalone "$SA" --out "$BUILD/dist/RELEASE_NOTES.md"
 
       - name: Record the declared state in the notes
         if: steps.ver.outputs.publish == 'yes'
