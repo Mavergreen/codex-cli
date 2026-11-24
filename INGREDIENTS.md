@@ -176,11 +176,9 @@ this one never does (see "Deviations").
 `check-readme-reviewed.sh`, run by shipyard's `publish-release.yml`, refuses a release while
 `README.md` carries shipyard's unreviewed-README marker line. The maintainer's edit removed it.
 
-The updater is an off-by-default CMake option, `-DCODEX_BUILD_UPDATER=ON`, because it needs `codex-cli`
-in the installed shipyard's product registry (`codex-cli dev.mavergreen.codex-cli codex-cli`). The row arrived in shipyard commit `b3b9a91`, released as `v1.0.487`; packaging and the updater were verified against that
-registry with no override. It stays off by default, as in mavergreen-gh. The updater's version is the
-pkg's own, from `VERSION` (else `UPSTREAM_VERSION`), as mavergreen-claude-code's is, because Sparkle
-compares the feed's version with the bundle's. The updater never links the CLI binary.
+The updater is built by shipyard's `build_updater.sh` with clang22, x86_64 only, on whatever host
+the job runs on (Linux for releases). Its version is the pkg's own, as mavergreen-claude-code's is,
+because Sparkle compares the feed's version with the bundle's. The updater never links the CLI binary.
 
 ## The builds channel
 

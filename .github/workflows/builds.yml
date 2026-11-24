@@ -125,10 +125,10 @@ jobs:
       # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
       # CMake registers the guard tests only when it finds the built binaries, so a build that is not
       # where CMake looks would otherwise pass with no guard at all.
-      - name: Configure, build the updater, then run the compat guard tests
+      - name: Configure, build, then run the compat guard tests
         run: |
           set -eu
-          shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
+          shipyard-cmake --preset cross -DCODEX_CROSS_ONLY_MANIFEST=ON
           shipyard-cmake --build --preset cross
           listed="$(shipyard-ctest --preset cross -N)"
           for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host cxxabi_codex cxxabi_codex-code-mode-host; do
@@ -226,7 +226,12 @@ jobs:
           PKGVER: ${{ steps.id.outputs.pkgver }}
         run: |
           set -eu
-          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$PKGVER" "$BUILD/vm")"
+          app="$(sh "$SHIPYARD_SCRIPTS/build_updater.sh" --product codex-cli --display-name "Mavericks Codex CLI" \
+            --confirm-title "Codex CLI for Mavericks updated" --confirm-body "The next codex you start uses the new launcher." \
+            --pubkey updater/ed25519_key.pub --version "$PKGVER" --clang22-pin components/clang-22 --arch x86_64 \
+            --generic-icon --out-dir "$BUILD/updater")"
+          sa="$(sh packaging/build-standalone.sh "$PKGVER" "$BUILD/vm")"
+          pkg="$(sh packaging/build-pkg.sh "$app" "$PKGVER" "$BUILD/vm" "$sa")"
           [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
           sh tests/package-test.sh "$pkg"
 

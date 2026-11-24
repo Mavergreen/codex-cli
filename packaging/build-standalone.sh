@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- drives shipyard's stage_standalone.sh, fetch_product_pkg.sh and check-standalone-archive.sh
+# platform: host-agnostic -- shipyard's stage_standalone.sh, fetch_product_pkg.sh and check-standalone-archive.sh run on any host
 #   usage: build-standalone.sh VERSION OUT-DIR
 #          The standalone archive, the release's primary form: OUT-DIR/codex-cli-VERSION-macos-x86_64.tar.gz,
 #          whose path it prints. VERSION is the release's YYYYMMDD.N. It holds tree/ as committed at

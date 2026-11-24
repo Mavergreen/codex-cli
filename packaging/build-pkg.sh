@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- drives shipyard's stage_product.sh, build_component_pkg.sh and set_install_floor.sh
+# platform: host-agnostic -- shipyard's stage_pkg_from_archive.sh, stage_product.sh, build_component_pkg.sh and set_install_floor.sh run on any host
 #   usage: build-pkg.sh UPDATER-APP VERSION OUT-DIR STANDALONE-ARCHIVE
 #          VERSION is the pkg's own YYYYMMDD.N. The pkg is derived from the standalone archive
 #          build-standalone.sh made for VERSION: shipyard's stage_pkg_from_archive.sh checks it, drops
@@ -24,7 +24,7 @@ die() { echo "build-pkg: $*" >&2; exit 1; }
 . "$REPO/build/msc.sh"
 printf '%s\n' "$V" | grep -Eq '^[0-9]{8}\.[1-9][0-9]*$' || die "version '$V' is not YYYYMMDD.N"
 [ -s "$REPO/README.md" ] || die "no $REPO/README.md"
-[ -d "$APP" ] || die "no updater $APP; configure with -DCODEX_BUILD_UPDATER=ON"
+[ -d "$APP" ] || die "no updater $APP; build it with shipyard's build_updater.sh"
 work=$(mktemp -d "${TMPDIR:-/tmp}/codex-cli-pkg.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 ROOT=$work/root
