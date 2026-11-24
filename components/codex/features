@@ -50,6 +50,7 @@ incremental_tools_legacy     works
 incremental_tools_legacy_gcp works
 instant_interrupt            works
 login_shell_package_path     works
+mcp_lazy_stdio_startup       works
 mcp_oauth_refresh_coordination works  probably: the credential store is the Keychain, whose SecItem API 10.9 has
 mentions_v2                  works
 multi_agent                  works
