@@ -378,7 +378,7 @@ index 8c2dce8..9a167e5 100644
              Line::from(""),
              Line::from("See full release notes:"),
 diff --git a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
-index 8f1548c..8a24bc7 100644
+index 8f1548c..f44467e 100644
 --- a/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
 +++ b/codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap
 @@ -4,8 +4,8 @@ expression: rendered
@@ -387,8 +387,8 @@ index 8f1548c..8a24bc7 100644
  │ ✨ Update available! 0.0.0 -> 9.9.9                                                                        │
 -│ Run sh -c 's=$(curl -fsSL https://chatgpt.com/codex/install.sh) && CODEX_NON_INTERACTIVE=1 eval "$s"' to   │
 -│ update.                                                                                                    │
-+│ Run sh -c 'CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/         │
-+│ install.sh' to update.                                                                                     │
++│ Run sh -c 'CODEX_NON_INTERACTIVE=1 exec /bin/sh "${CODEX_MAVERGREEN_INSTALLER:-/usr/local/mavergreen/      │
++│ codex-cli/libexec/codex-cli/install.sh}"' to update.                                                       │
  │                                                                                                            │
  │ See full release notes:                                                                                    │
  │ https://github.com/openai/codex/releases/latest                                                            │
@@ -461,7 +461,7 @@ index c3abb00..b04ee06 100644
  pub(crate) mod onboarding;
  mod oss_selection;
 diff --git a/codex-rs/tui/src/update_action.rs b/codex-rs/tui/src/update_action.rs
-index 7b3433e..c693978 100644
+index 7b3433e..acd4059 100644
 --- a/codex-rs/tui/src/update_action.rs
 +++ b/codex-rs/tui/src/update_action.rs
 @@ -20,9 +20,11 @@ pub enum UpdateAction {
@@ -483,8 +483,8 @@ index 7b3433e..c693978 100644
                  &[
                      "-c",
 -                    r#"s=$(curl -fsSL https://chatgpt.com/codex/install.sh) && CODEX_NON_INTERACTIVE=1 eval "$s""#,
-+                    // Mavergreen: must equal `mavergreen::INSTALLER_PATH`; a test checks it.
-+                    "CODEX_NON_INTERACTIVE=1 exec /bin/sh /usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh",
++                    // Mavergreen: must name `mavergreen::INSTALLER_ENV` and `INSTALLER_PATH`; a test checks it.
++                    r#"CODEX_NON_INTERACTIVE=1 exec /bin/sh "${CODEX_MAVERGREEN_INSTALLER:-/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh}""#,
                  ],
              ),
              UpdateAction::StandaloneWindows => (
