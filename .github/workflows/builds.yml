@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   # Not "build": release.yml's build job reports that check, and both must be required separately.
-  # platform: macOS until shipyard provides the Linux cargo cross environment (Rust and clang22 on Linux
+  # platform: macOS until shipyard provides the Linux cargo environment (Rust and clang22 on Linux
   #   targeting x86_64-apple-darwin with sdk109, llvm-otool, pkg_read for pkgutil and plutil), which fd and
   #   rg adopt with codex-cli. Revisit when shipyard releases it.
   codex-build:
