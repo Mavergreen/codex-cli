@@ -82,7 +82,10 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           sudo mkdir -p /mnt/mm-build
           sudo chown "$(id -u):$(id -g)" /mnt/mm-build
-          echo "MAVERICKS_BUILD_ROOT=/mnt/mm-build" >> "$GITHUB_ENV"
+          # platform: shipyard's cross preset sets the build root to $TMPDIR/mm-build itself, so /mnt reaches it through a link
+          [ ! -e "$TMPDIR/mm-build" ] || { echo "::error::$TMPDIR/mm-build already exists"; exit 1; }
+          ln -s /mnt/mm-build "$TMPDIR/mm-build"
+          # platform: run 45600034272 peaked at 6 GB of swap with 418 MB of RAM free; without it the runner was lost
           sudo fallocate -l 8G /mnt/swapfile
           sudo chmod 600 /mnt/swapfile
           sudo mkswap /mnt/swapfile > /dev/null
