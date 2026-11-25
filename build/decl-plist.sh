@@ -21,6 +21,7 @@ if [ "$host" = Linux ]; then
   need_plistutil
   plistutil -i "$1" -o "$2" -f xml > /dev/null 2>&1 || { rm -f "$2"; echo "decl-plist: plistutil cannot read $1 as JSON" >&2; exit 1; }
 else
+  # platform: guarded macOS-only call -- the else of the Linux test above
   plutil -convert xml1 -o "$2" "$1" > /dev/null 2>&1 || { rm -f "$2"; echo "decl-plist: plutil cannot read $1 as JSON" >&2; exit 1; }
 fi
 [ -s "$2" ] || { rm -f "$2"; echo "decl-plist: no plist from $1" >&2; exit 1; }
