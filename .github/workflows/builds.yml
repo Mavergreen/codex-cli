@@ -41,7 +41,8 @@ jobs:
   #   rg adopt with codex-cli. Revisit when shipyard releases it.
   codex-build:
     runs-on: macos-26
-    timeout-minutes: 240
+    # platform: Codex 0.172 compiles in about three hours on macos-26, and a saturated runner took over four (run 45523135799)
+    timeout-minutes: 360
     outputs:
       id: ${{ steps.id.outputs.id }}
       next: ${{ steps.id.outputs.next }}
