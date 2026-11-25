@@ -286,6 +286,16 @@ jobs:
             ${{ env.CODEX_OBJC }}/reports/
           if-no-files-found: warn
 
+      # diagnostics, never part of the payload: on a failure, the code-mode host, so where its sends
+      # landed can be read off the binary the proof could not resolve
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: codex-build-code-mode-host
+          path: ${{ runner.temp }}/mm-build/codex-cross/codex-code-mode-host
+          retention-days: 3
+          if-no-files-found: warn
+
       - uses: actions/upload-artifact@v7
         with:
           name: codex-build-channel
