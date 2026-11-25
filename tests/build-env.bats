@@ -340,6 +340,12 @@ linux_host() {
   printf '#!/bin/sh\ncase "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' \
     > "$stand_ins/linux/uname"
   chmod +x "$stand_ins/linux/uname"
+  # platform: this host's own stevedore, and a plistutil that converts with its plutil: the stand-in
+  #           uname would otherwise fetch the Linux stevedore, which cannot run here.
+  STEVEDORE=$(PATH="$outer_path" sh "$real_shipyard/fetch_stevedore.sh"); export STEVEDORE
+  printf '#!/bin/sh\n[ "$1" = --version ] && { echo "plistutil 2.3.0"; exit 0; }\nexec plutil -convert xml1 -o "$4" "$2"\n' \
+    > "$stand_ins/linux/plistutil"
+  chmod +x "$stand_ins/linux/plistutil"
   lin="$BATS_TEST_TMPDIR/clang22-linux"
   mkdir -p "$lin/bin" "$lin/SDKs"
   ln -s "$sdk" "$lin/SDKs/MacOSX10.9.sdk"
@@ -379,6 +385,7 @@ linux_build() {
   grep -qx "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=$lin/bin/clang++" "$cargo_env"
   cargo_lacks CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS
   grep -qx 'sdk=MacOSX10.9.sdk' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+  grep -qx 'decl_reader=plistutil 2.3.0' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
 }
 
 @test "a native build is refused on Linux" {
@@ -387,4 +394,10 @@ linux_build() {
   chmod -R u+w "$lin"
   [ "$status" -eq 1 ]
   [[ "$output" == *"build-codex: native builds run on Mac OS X 10.9"* ]] || false
+}
+
+@test "the manifest records which tool read the provider declaration" {
+  run build native
+  succeeded
+  grep -qx 'decl_reader=plutil' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native/build-manifest"
 }
