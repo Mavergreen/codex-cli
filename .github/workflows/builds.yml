@@ -59,6 +59,14 @@ jobs:
       - name: The Linux cargo environment
         run: sh "$SHIPYARD_SCRIPTS/cargo-env.sh" components/rust components/clang-22 >> "$GITHUB_ENV"
 
+      # spec: INGREDIENTS.md "Deviations" -- plistutil reads Recaulk's provider declaration, until
+      #       drydock-objc's manifest query
+      - name: Install plistutil
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libplist-utils
+          plistutil --version
+
       - name: Record the toolchain
         run: |
           "$RUSTC" --version

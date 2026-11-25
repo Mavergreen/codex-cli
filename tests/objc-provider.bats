@@ -401,3 +401,23 @@ hook_binary() {
     [ -s "$spaced/codex.map" ]
   done
 }
+
+# linux_decl: the declaration is read as on Linux, through a plistutil stand-in that converts with plutil.
+linux_decl() {
+  mkdir -p "$BATS_TEST_TMPDIR/pu"
+  printf '#!/bin/sh\necho "$*" >> "%s/plistutil.calls"\nexec plutil -convert xml1 -o "$4" "$2"\n' "$BATS_TEST_TMPDIR" \
+    > "$BATS_TEST_TMPDIR/pu/plistutil"
+  chmod +x "$BATS_TEST_TMPDIR/pu/plistutil"
+  export CODEX_DECL_HOST=Linux PATH="$BATS_TEST_TMPDIR/pu:$PATH"
+}
+
+@test "on Linux the declaration is read through plistutil, and verified the same" {
+  linux_decl
+  fixture_prefix "$BATS_TEST_TMPDIR/staged"
+  CODEX_DEV_RECAULK_PREFIX="$BATS_TEST_TMPDIR/staged" fetch
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  grep -q -- "-i $BATS_TEST_TMPDIR/staged/share/recaulk/objc-providers.json" "$BATS_TEST_TMPDIR/plistutil.calls"
+  mutate "$BATS_TEST_TMPDIR/staged" 's/"@56@0:8@16@24Q32@40^@48"/"@56@0:8@16@24I32@40^@48"/'
+  CODEX_DEV_RECAULK_PREFIX="$BATS_TEST_TMPDIR/staged" fetch
+  refused
+}

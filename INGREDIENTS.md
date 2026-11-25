@@ -292,6 +292,13 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
   and the app-server daemon's background updates all use the builds channel and the package's
   installer, never OpenAI's releases (0011 to 0013). Their wording and defaults are upstream's: the
   startup check and the daemon are on.
+- **Recaulk's `objc-providers.json` is read as a plist (interim).** `build/fetch-recaulk-objc.sh` and
+  `build/objc-build-evidence.sh` read the provider declaration by converting its JSON to an xml1 plist
+  (`build/decl-plist.sh`: `plutil` on a Mac, libplist's `plistutil` on Linux, from Ubuntu's unpinned
+  `libplist-utils`) and reading that with shipyard's `stevedore plist get`. It reads metadata only
+  and builds nothing, so the distro tool is not pinned; the build manifest records it as
+  `decl_reader`. It ends in the first release after Drydock ships a schema-aware `drydock-objc`
+  manifest query, which these reads then use.
 - **Biometric user verification reports unsupported** (0004), because it needs LocalAuthentication
   and Secure Enclave APIs, which 10.9 lacks. It cannot be turned on.
 
