@@ -1,5 +1,6 @@
 #!/bin/sh
-# platform: macOS-only -- the native and cross build environment, shared by build-codex.sh and cargo-dev.sh
+# platform: host-agnostic -- the native (10.9) and cross (x86_64 Linux or an arm64 modern Mac) build
+#   environment, shared by build-codex.sh and cargo-dev.sh
 # so a development cargo run cannot drift from the release build.
 # Sourced after lib.sh. Prints errors as "build-codex:" in both callers.
 
@@ -10,12 +11,11 @@ codex_check_host() {
   [ "$MODE" = "$ACTUAL_MODE" ] || {
     echo "build-codex: requested $MODE build on a $ACTUAL_MODE host" >&2; exit 1;
   }
-  [ "$(uname -s)" = Darwin ] || {
-    echo "build-codex: Apple builds require macOS" >&2; exit 1;
-  }
-  [ "$MODE" != cross ] || [ "$(uname -m)" = arm64 ] || {
-    echo "build-codex: cross builds require an arm64 modern macOS host" >&2; exit 1;
-  }
+  case "$MODE:$(uname -s):$(uname -m)" in
+    native:Darwin:*|cross:Darwin:arm64|cross:Linux:x86_64) ;;
+    native:*) echo "build-codex: native builds run on Mac OS X 10.9" >&2; exit 1 ;;
+    *) echo "build-codex: cross builds run on x86_64 Linux or an arm64 modern Mac" >&2; exit 1 ;;
+  esac
 }
 
 # codex_build_env MODE SOURCE TARGET_DIR OBJC_DIR: export the build environment and set RUST_PREFIX,
@@ -28,7 +28,19 @@ codex_build_env() {
   sh "$BUILD_DIR/check-rust-pin.sh" "$SOURCE"
   RUST_PIN=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/rust/version")
 
-  RUST_PREFIX=$(sh "$BUILD_DIR/fetch-rust.sh")
+  # spec: shipyard scripts/cargo-env.sh -- on Linux the pinned rust, clang22 and 10.9 SDK, and the cargo
+  #       environment that targets 10.9 with them, are shipyard's. Its SDKROOT reaches only Apple
+  #       targets there, so the Linux host's build scripts and proc macros never see it.
+  if [ "$(uname -s)" = Linux ]; then
+    linux_env=$(sh "$SHIPYARD_SCRIPTS/cargo-env.sh" --sh "$MAVERICKS_ROOT/components/rust" \
+      "$MAVERICKS_ROOT/components/clang-22") || {
+      echo "build-codex: shipyard's cargo-env.sh gave no Linux cargo environment" >&2; exit 1;
+    }
+    eval "$linux_env"
+    RUST_PREFIX=${CARGO%/bin/cargo}
+  else
+    RUST_PREFIX=$(sh "$BUILD_DIR/fetch-rust.sh")
+  fi
   [ -x "$RUST_PREFIX/bin/cargo" ] && [ -x "$RUST_PREFIX/bin/rustc" ] || {
     echo "build-codex: fetched Rust toolchain is incomplete at $RUST_PREFIX" >&2; exit 1;
   }
@@ -36,19 +48,22 @@ codex_build_env() {
   # platform: both modes build against shipyard's pinned 10.9 SDK. The Mavergreen clang-22 product
   #           expects it at SDKs/MacOSX10.9.sdk beside its bin/, and its cfg passes -isysroot there
   #           for every target C and C++ compile; this host's xcrun --show-sdk-path prints nothing.
-  SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh")
+  if [ "$(uname -s)" = Linux ]; then SDK=$SDKROOT; else SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh"); fi
   # platform: cargo uses RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS from the caller in place of the
   #           target rustflags that cross sets below, so neither reaches either mode.
   unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
-  case "$MODE" in
+  case "$MODE:$(uname -s)" in
     # platform: natively host and target are both 10.9 x86_64, so SDKROOT may reach build scripts
     #           too. The 2026-10-14 native builds were measured with it set.
-    native) export SDKROOT="$SDK" ;;
+    native:*) export SDKROOT="$SDK" ;;
     # platform: in cross, SDKROOT would also reach the aarch64 build scripts and proc macros, which
     #           cannot link against the 10.9 SDK (as ../mavergreen-rg and ../mavergreen-fd's
     #           build/build.sh say). target.x86_64-apple-darwin rustflags reach only the target's
     #           links, and cargo splits them on whitespace. Not yet measured on an arm64 host.
-    cross)
+    # platform: on Linux cargo-env.sh's SDKROOT reaches only Apple targets, so it stays and no target
+    #           rustflags are needed.
+    cross:Linux) ;;
+    cross:*)
       case "$SDK" in *[[:space:]]*)
         echo "build-codex: the SDK path $SDK contains whitespace, which cargo would split inside its rustflags" >&2
         exit 1 ;;
@@ -64,15 +79,22 @@ codex_build_env() {
   #           aarch64 build scripts on the host compiler.
   case "$MODE" in native) CLANG_PRODUCT=clang22 ;; cross) CLANG_PRODUCT=clang22-cross ;; esac
   CLANG_VERSION=$(tr -d '[:space:]' < "$MAVERICKS_ROOT/components/clang-22/version")
-  CLANG_PREFIX=$(sh "$BUILD_DIR/fetch-clang-22.sh" "$CLANG_PRODUCT")
-  # platform: the product's SDKs is a link to a directory its pkg does not carry: ../sdk109/SDKs,
-  #           which Longboat's sdk109 fills on an install (../var/$CLANG_PRODUCT/SDKs before
-  #           22.1.8-mavericks.11). Extracted, not installed, it dangles until made here.
-  if sdks=$(readlink "$CLANG_PREFIX/SDKs"); then
-    case "$sdks" in /*) ;; *) sdks="$CLANG_PREFIX/$sdks" ;; esac
-    mkdir -p "$sdks"
+  # platform: on Linux, cargo-env.sh's clang22 is shipyard's install, whose SDKs already holds the SDK
+  #           and which this user may not write.
+  if [ "$(uname -s)" = Linux ]; then
+    CLANG_PRODUCT=clang22
+    CLANG_PREFIX=${CXX_x86_64_apple_darwin%/bin/clang++}
+  else
+    CLANG_PREFIX=$(sh "$BUILD_DIR/fetch-clang-22.sh" "$CLANG_PRODUCT")
+    # platform: the product's SDKs is a link to a directory its pkg does not carry: ../sdk109/SDKs,
+    #           which Longboat's sdk109 fills on an install (../var/$CLANG_PRODUCT/SDKs before
+    #           22.1.8-mavericks.11). Extracted, not installed, it dangles until made here.
+    if sdks=$(readlink "$CLANG_PREFIX/SDKs"); then
+      case "$sdks" in /*) ;; *) sdks="$CLANG_PREFIX/$sdks" ;; esac
+      mkdir -p "$sdks"
+    fi
+    ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
   fi
-  ln -sfn "$SDK" "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk"
   [ -x "$CLANG_PREFIX/bin/clang" ] && [ -x "$CLANG_PREFIX/bin/clang++" ] &&
     [ -d "$CLANG_PREFIX/SDKs/MacOSX10.9.sdk/usr/include" ] || {
     echo "build-codex: $CLANG_PRODUCT at $CLANG_PREFIX has no compilers or no SDK" >&2; exit 1;

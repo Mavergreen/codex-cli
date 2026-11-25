@@ -331,3 +331,60 @@ provider_reaches_cargo() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"not exactly one crate index"* ]] || false
 }
+
+# linux_host: uname says x86_64 Linux, and shipyard's cargo-env.sh is a stand-in that records its
+# arguments and prints, as --sh does, a pinned rust and an installed clang22 prefix whose SDKs already
+# holds the SDK. That prefix is read-only, as /usr/local/mavergreen/clang22 is to a runner's user.
+linux_host() {
+  mkdir -p "$stand_ins/linux"
+  printf '#!/bin/sh\ncase "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' \
+    > "$stand_ins/linux/uname"
+  chmod +x "$stand_ins/linux/uname"
+  lin="$BATS_TEST_TMPDIR/clang22-linux"
+  mkdir -p "$lin/bin" "$lin/SDKs"
+  ln -s "$sdk" "$lin/SDKs/MacOSX10.9.sdk"
+  for t in clang clang++ llvm-ar llvm-nm; do printf '#!/bin/sh\n' > "$lin/bin/$t"; chmod +x "$lin/bin/$t"; done
+  chmod -R a-w "$lin"
+  rm "$shipyard/cargo-env.sh"
+  cat > "$shipyard/cargo-env.sh" <<CE
+#!/bin/sh
+printf '%s\n' "\$*" > "$BATS_TEST_TMPDIR/cargo-env-args"
+cat <<'E'
+export CARGO='$rust/bin/cargo'
+export RUSTC='$rust/bin/rustc'
+export CARGO_BUILD_TARGET='x86_64-apple-darwin'
+export CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER='$lin/bin/clang++'
+export CC_x86_64_apple_darwin='$lin/bin/clang'
+export CXX_x86_64_apple_darwin='$lin/bin/clang++'
+export SDKROOT='$sdk'
+export MACOSX_DEPLOYMENT_TARGET='10.9'
+E
+CE
+  printf '#!/bin/sh\necho "codex fetcher ran" >&2\nexit 9\n' > "$product/build/fetch-rust.sh"
+  printf '#!/bin/sh\necho "codex fetcher ran" >&2\nexit 9\n' > "$product/build/fetch-clang-22.sh"
+}
+
+linux_build() {
+  MODE_FOR_TEST=cross PATH="$stand_ins/linux:$outer_path" sh "$product/build/build-codex.sh" cross
+}
+
+@test "a cross build on Linux takes its toolchain, compilers and SDK from shipyard's cargo-env.sh" {
+  linux_host
+  run linux_build
+  chmod -R u+w "$lin"
+  succeeded
+  [ "$(cat "$BATS_TEST_TMPDIR/cargo-env-args")" = "--sh $product/components/rust $product/components/clang-22" ]
+  grep -qx "SDKROOT=$sdk" "$cargo_env"
+  grep -qx "CC_x86_64_apple_darwin=$lin/bin/clang" "$cargo_env"
+  grep -qx "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=$lin/bin/clang++" "$cargo_env"
+  cargo_lacks CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS
+  grep -qx 'sdk=MacOSX10.9.sdk' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+}
+
+@test "a native build is refused on Linux" {
+  linux_host
+  MODE_FOR_TEST=native PATH="$stand_ins/linux:$outer_path" run sh "$product/build/build-codex.sh" native
+  chmod -R u+w "$lin"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"build-codex: native builds run on Mac OS X 10.9"* ]] || false
+}

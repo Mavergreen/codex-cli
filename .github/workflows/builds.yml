@@ -36,12 +36,9 @@ concurrency:
 
 jobs:
   # Not "build": release.yml's build job reports that check, and both must be required separately.
-  # platform: macOS until shipyard provides the Linux cargo environment (Rust and clang22 on Linux
-  #   targeting x86_64-apple-darwin with sdk109, llvm-otool, pkg_read for pkgutil and plutil), which fd and
-  #   rg adopt with codex-cli. Revisit when shipyard releases it.
   codex-build:
-    runs-on: macos-26
-    # platform: Codex 0.172 compiles in about three hours on macos-26, and a saturated runner took over four (run 45523135799)
+    runs-on: ubuntu-latest
+    # platform: Codex 0.172 compiled in about three hours on macos-26; GitHub's job limit is six
     timeout-minutes: 360
     outputs:
       id: ${{ steps.id.outputs.id }}
@@ -57,10 +54,23 @@ jobs:
       - name: Install mavericks-shipyard
         uses: Mavergreen/shipyard/.github/actions/install@v1
 
+      # spec: shipyard scripts/cargo-env.sh -- the pinned rust, clang22 and 10.9 SDK, and their llvm tools
+      #       (OTOOL, NM, LIPO), which the compat guards read Mach-O with on Linux.
+      - name: The Linux cargo environment
+        run: sh "$SHIPYARD_SCRIPTS/cargo-env.sh" components/rust components/clang-22 >> "$GITHUB_ENV"
+
       - name: Record the toolchain
         run: |
-          clang --version
-          xcodebuild -version
+          "$RUSTC" --version
+          "$CC_x86_64_apple_darwin" --version
+
+      # platform: the release target directory and the cargo registry outgrow a runner's free disk;
+      #   these preinstalled SDKs are never used here
+      - name: Free disk for the cargo target
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - name: Record the pre-build tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
@@ -183,17 +193,16 @@ jobs:
             --min-pkg "$minpkg" --state "$STATE" > "$nx/codex-build-$NEXT.json"
           ls -l "$ch" "$nx"
 
-      - name: Fetch the signer (Mavergreen's ed25519, as pinned)
+      - name: Fetch the signer (shipyard's pinned ed25519, for this host)
         if: steps.id.outputs.publish == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          tag="$(tr -d '[:space:]' < components/ed25519/version)"
-          dest="$(sh "$SHIPYARD_SCRIPTS/fetch_product_pkg.sh" ed25519 "$tag" "$RUNNER_TEMP/ed25519")"
-          [ -x "$dest/bin/ed25519-sign" ] && [ -x "$dest/bin/ed25519-verify" ] \
-            || { echo "::error::ed25519 $tag has no bin/ed25519-sign and bin/ed25519-verify"; exit 1; }
-          echo "ED25519=$dest/bin" >> "$GITHUB_ENV"
+          bin="$(sh "$SHIPYARD_SCRIPTS/fetch_ed25519_tools.sh" "$RUNNER_TEMP/ed25519")"
+          [ -x "$bin/ed25519-sign" ] && [ -x "$bin/ed25519-verify" ] \
+            || { echo "::error::shipyard's pinned ed25519 has no ed25519-sign and ed25519-verify"; exit 1; }
+          echo "ED25519=$bin" >> "$GITHUB_ENV"
 
       # This is the one job that holds the key, so scan-for-key.yml scans its log;
       # publish uploads the signed directory with no key. The 10.9 job then checks

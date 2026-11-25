@@ -86,3 +86,11 @@ libpath() { otool -L "$2" | awk -v n="$1" 'NR > 1 && $1 ~ ("/" n "[^/]*$") { pri
   run check "$BATS_TEST_TMPDIR/missing"
   [ "$status" -eq 2 ]
 }
+
+@test "OTOOL names the otool it reads load commands with, as on a Linux host" {
+  printf '#!/bin/sh\necho "$*" > "%s/otool.args"\nexec otool "$@"\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/llvm-otool"
+  chmod +x "$BATS_TEST_TMPDIR/llvm-otool"
+  OTOOL="$BATS_TEST_TMPDIR/llvm-otool" run check "$stub"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/otool.args")" = "-l $stub" ]
+}
