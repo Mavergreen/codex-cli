@@ -33,7 +33,8 @@ chmod +x "$APP/Contents/MacOS/codex-cli-updater"
 
 for s in rg ed25519; do
   mkdir -p "$H/bundles/$s/bin"
-  cp /bin/ls "$H/bundles/$s/bin/$s"
+  # platform: a script, not a host Mach-O: a modern host's binaries fail the archive's 10.9 pin
+  printf '#!/bin/sh\n' > "$H/bundles/$s/bin/$s"; chmod 755 "$H/bundles/$s/bin/$s"
   : > "$H/bundles/$s/mavergreen.plist"
 done
 CODEX_STANDALONE_BUNDLES="$H/bundles"

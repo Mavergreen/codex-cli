@@ -25,7 +25,12 @@ cat > "$H/bin/pkgutil" <<'PU'
 [ -n "${H_RECEIPT-}" ] || exit 1
 printf 'package-id: Wowfunhappy.AquaTransport\nversion: %s\n' "$H_RECEIPT"
 PU
-chmod +x "$H/bin/sudo" "$H/bin/sw_vers" "$H/bin/pkgutil"
+# platform: the installer takes only an x86_64 Mac; CI's macOS runners are arm64
+cat > "$H/bin/uname" <<'UN'
+#!/bin/sh
+case "$1" in -m) echo x86_64 ;; -s) echo Darwin ;; *) exec /usr/bin/uname "$@" ;; esac
+UN
+chmod +x "$H/bin/sudo" "$H/bin/sw_vers" "$H/bin/pkgutil" "$H/bin/uname"
 
 release() {
   rm -rf "$DL" "$H/stage"
