@@ -62,7 +62,16 @@ codex_build_env() {
     #           links, and cargo splits them on whitespace. Not yet measured on an arm64 host.
     # platform: on Linux cargo-env.sh's SDKROOT reaches only Apple targets, so it stays and no target
     #           rustflags are needed.
-    cross:Linux) ;;
+    # spec: the family build-twice check -- the build root reaches the binary through panic
+    #       locations under CARGO_HOME and through the debug map's object paths, so both are
+    #       written relative to fixed names
+    cross:Linux)
+      case "$BUILD_ROOT" in *[[:space:]]*)
+        echo "build-codex: the build root $BUILD_ROOT contains whitespace, which cargo would split inside its rustflags" >&2
+        exit 1 ;;
+      esac
+      CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS="--remap-path-prefix=$BUILD_ROOT/cargo-home=/cargo-home --remap-path-prefix=$TARGET_DIR=/target -C link-arg=-Wl,-oso_prefix,$BUILD_ROOT/"
+      export CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS ;;
     cross:*)
       case "$SDK" in *[[:space:]]*)
         echo "build-codex: the SDK path $SDK contains whitespace, which cargo would split inside its rustflags" >&2
