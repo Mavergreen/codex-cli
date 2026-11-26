@@ -63,16 +63,16 @@ codex_build_env() {
     # platform: on Linux cargo-env.sh's SDKROOT reaches only Apple targets, so it stays and no target
     #           rustflags are needed.
     # spec: the family build-twice check -- the build root reaches the binary through Rust panic
-    #       locations and C __FILE__ under CARGO_HOME, so both are written relative to fixed names;
-    #       the debug map names ThinLTO objects and rustc's random temporary directories, all
+    #       locations, C __FILE__ and the compile directory of Codex's own crates, so each tree it
+    #       names is written as a fixed name; the debug map names ThinLTO objects and rustc's random temporary directories, all
     #       deleted once the link is done, so it is left out
     cross:Linux)
       case "$BUILD_ROOT" in *[[:space:]]*)
         echo "build-codex: the build root $BUILD_ROOT contains whitespace, which cargo would split inside its rustflags" >&2
         exit 1 ;;
       esac
-      CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS="--remap-path-prefix=$BUILD_ROOT/cargo-home=/cargo-home --remap-path-prefix=$TARGET_DIR=/target -C link-arg=-Wl,-S"
-      CFLAGS_x86_64_apple_darwin="-ffile-prefix-map=$BUILD_ROOT/cargo-home=/cargo-home -ffile-prefix-map=$TARGET_DIR=/target"
+      CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS="--remap-path-prefix=$BUILD_ROOT/cargo-home=/cargo-home --remap-path-prefix=$TARGET_DIR=/target --remap-path-prefix=$SOURCE=/codex-src -C link-arg=-Wl,-S"
+      CFLAGS_x86_64_apple_darwin="-ffile-prefix-map=$BUILD_ROOT/cargo-home=/cargo-home -ffile-prefix-map=$TARGET_DIR=/target -ffile-prefix-map=$SOURCE=/codex-src"
       CXXFLAGS_x86_64_apple_darwin=$CFLAGS_x86_64_apple_darwin
       export CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS CFLAGS_x86_64_apple_darwin CXXFLAGS_x86_64_apple_darwin ;;
     cross:*)
