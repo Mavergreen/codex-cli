@@ -1,0 +1,26 @@
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 2e55733..d9b31cb 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -5009,6 +5009,7 @@ dependencies = [
+  "pretty_assertions",
+  "rand 0.9.3",
+  "regex",
++ "rust-embed",
+  "schemars 0.8.22",
+  "serde",
+  "serde_json",
+diff --git a/codex-rs/secrets/Cargo.toml b/codex-rs/secrets/Cargo.toml
+index 2a294ee..9c72d9d 100644
+--- a/codex-rs/secrets/Cargo.toml
++++ b/codex-rs/secrets/Cargo.toml
+@@ -15,6 +15,9 @@ codex-git-utils = { workspace = true }
+ codex-keyring-store = { workspace = true }
+ rand = { workspace = true }
+ regex = { workspace = true }
++# Mavergreen: age embeds its locale files through rust-embed, which otherwise records each file's
++# modification and creation times, so two builds of one source differ.
++rust-embed = { version = "8", features = ["deterministic-timestamps"] }
+ schemars = { workspace = true }
+ serde = { workspace = true }
+ serde_json = { workspace = true }
