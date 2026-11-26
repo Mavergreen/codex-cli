@@ -26,6 +26,13 @@ codex_build_env "$MODE" "$SOURCE" "$TARGET_DIR" "$BUILD_ROOT/objc-$MODE"
 
 ARTIFACT="$BUILD_ROOT/codex-$MODE"
 mkdir -p "$ARTIFACT"
+# spec: the family build-twice check -- cargo unpacks a crate with the time it unpacked it, and age
+#       embeds its locale files' times through rust-embed, so every unpacked crate file is stamped
+#       with the commit time before the build reads it
+codex_cargo fetch --locked || exit 1
+EPOCH=$(sh "$SHIPYARD_SCRIPTS/source-date-epoch.sh") || exit 1
+STAMP=$(TZ=UTC date -d "@$EPOCH" +%Y%m%d%H%M.%S 2>/dev/null || TZ=UTC date -r "$EPOCH" +%Y%m%d%H%M.%S) || exit 1
+find "$CARGO_HOME/registry/src" -exec env TZ=UTC touch -t "$STAMP" {} + || exit 1
 codex_cargo build --locked --release \
   --target x86_64-apple-darwin -p codex-cli -p codex-code-mode-host || exit 1
 
