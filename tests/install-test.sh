@@ -377,6 +377,8 @@ if [ -x "$RV" ]; then
   export CODEX_HOME
   RS="$CODEX_HOME/packages/standalone"
   unset CODEX_ED25519_VERIFY
+  # with no CODEX_ED25519_VERIFY, the verifier is the ed25519 product's beside the package's tree
+  ln -s /usr/local/mavergreen/ed25519 "$(dirname "$CODEX_PKG_ROOT")/ed25519"
   KG=/usr/local/mavergreen/ed25519/bin/ed25519-keygen
   SG=/usr/local/mavergreen/ed25519/bin/ed25519-sign
   h_channel $A

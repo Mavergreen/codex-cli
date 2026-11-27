@@ -1,10 +1,10 @@
 #!/bin/sh
-# platform: macOS-only -- pkgutil expands the product archive, lsbom lists the component's payload, and
-#   PlistBuddy reads the manifest and the updater; the install steps run against a temporary target root
+# platform: host-agnostic -- shipyard's pkg_read.sh and stevedore read the pkg, gzip and cpio its payloads;
+#   the install steps run against a temporary target root
 #   usage: package-test.sh PKG
 #          PKG must be named codex-cli-<YYYYMMDD.N>.pkg. Its codex-cli component must carry exactly the
 #          launcher (bin/codex, a script), the installer's modules, the pre-uninstall hook, share/codex-cli/
-#          {requires,aquatransport-min-version,ed25519_key.pub}, upstream's LICENSE and NOTICE, the
+#          {requires,aquatransport-min-version,ed25519_key.pub,version}, upstream's LICENSE and NOTICE, the
 #          repo's README, the mavergreen.plist manifest and the updater app (Sparkle framework aside)
 #          with its LaunchAgent, and no Codex binary. Its preinstall must require each product in
 #          tree/share/codex-cli/requires. It then
@@ -21,7 +21,11 @@ PKG="${1:-}"
 [ -n "$PKG" ] || { echo "package-test: usage: package-test.sh PKG" >&2; exit 77; }
 MAVERICKS_BUILD_DIR="$REPO/build"; export MAVERICKS_BUILD_DIR
 . "$REPO/build/lib.sh"
-PB=/usr/libexec/PlistBuddy
+PR="$SHIPYARD/pkg_read.sh"
+SD="$(sh "$SHIPYARD/fetch_stevedore.sh")"
+# spec: shipyard scripts/mavergreen.sh -- without PlistBuddy, link and uninstall read each manifest with $STEVEDORE
+STEVEDORE=$SD; export STEVEDORE
+pget() { "$SD" plist get "$1" "$2"; }
 
 V="$(basename "$PKG")"; V="${V#codex-cli-}"; V="${V%.pkg}"
 case "$(basename "$PKG")" in codex-cli-*.pkg) _n=ok ;; *) _n=bad ;; esac
@@ -34,12 +38,13 @@ a_eq ok "$_n" "the pkg's version is YYYYMMDD.N"
 a_file_exists "the pkg exists" "$PKG"
 
 t_tmp T
-pkgutil --expand "$PKG" "$T/x"
+sh "$PR" expand "$PKG" "$T/x"
 C="$T/x/codex-cli-component.pkg"
-a_file_exists "the product archive carries the codex-cli component" "$C/Bom"
-lsbom -s -f "$C/Bom" | sed 's|^\./||' > "$T/bom"
+a_file_exists "the product archive carries the codex-cli component" "$C/Payload"
+sh "$PR" list "$T/x" dev.mavergreen.codex-cli | sed 's|^\./||' > "$T/list"
+awk -F'\t' '$2 !~ /^4/ { print $1 }' "$T/list" > "$T/bom"
 a_eq 1 "$(grep -c 'codex-cli-updater\.app/Contents/Frameworks/Sparkle\.framework/Versions/A/Sparkle$' "$T/bom")" "the Sparkle binary is in the payload"
-lsbom "$C/Bom" | sed 's|^\./||' > "$T/modes"
+cut -f1,2 "$T/list" > "$T/modes"
 a_eq "" "$(awk -F'\t' '{ m = $2; o = substr(m, length(m)) + 0 }
   m ~ /^10/ && int(o / 4) % 2 == 0 { print $1 " " m }
   m ~ /^4/ && o % 2 == 0 { print $1 " " m }' "$T/modes")" "every payload file is world-readable and every directory world-searchable"
@@ -49,7 +54,7 @@ a_eq "" "$(grep -E 'codex-code-mode-host|codex-resources|codex-voice-host|build-
 for f in bin/codex libexec/codex-cli/lib.sh libexec/codex-cli/link.sh libexec/codex-cli/install.sh libexec/mavergreen/pre-uninstall; do
   a_eq "100755" "$(awk -F'\t' -v p="$M/$f" '$1 == p { print $2 }' "$T/modes")" "$f is executable"
 done
-for f in share/codex-cli/requires share/codex-cli/aquatransport-min-version share/codex-cli/ed25519_key.pub share/doc/codex-cli/LICENSE share/doc/codex-cli/NOTICE share/doc/codex-cli/README.md; do
+for f in share/codex-cli/requires share/codex-cli/aquatransport-min-version share/codex-cli/ed25519_key.pub share/codex-cli/version share/doc/codex-cli/LICENSE share/doc/codex-cli/NOTICE share/doc/codex-cli/README.md; do
   a_eq "100644" "$(awk -F'\t' -v p="$M/$f" '$1 == p { print $2 }' "$T/modes")" "$f is a plain file"
 done
 grep -v '/Sparkle\.framework/' "$T/bom" | LC_ALL=C sort > "$T/payload"
@@ -65,9 +70,10 @@ usr/local/mavergreen/codex-cli/mavergreen.plist
 usr/local/mavergreen/codex-cli/share/codex-cli/aquatransport-min-version
 usr/local/mavergreen/codex-cli/share/codex-cli/ed25519_key.pub
 usr/local/mavergreen/codex-cli/share/codex-cli/requires
+usr/local/mavergreen/codex-cli/share/codex-cli/version
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/LICENSE
 usr/local/mavergreen/codex-cli/share/doc/codex-cli/NOTICE
-usr/local/mavergreen/codex-cli/share/doc/codex-cli/README.md" "$(cat "$T/payload")" "the payload is the launcher, the installer, the uninstall hook, the requires, AquaTransport pin and key, the docs, the manifest, the updater and its LaunchAgent"
+usr/local/mavergreen/codex-cli/share/doc/codex-cli/README.md" "$(cat "$T/payload")" "the payload is the launcher, the installer, the uninstall hook, the requires, AquaTransport pin, key and version, the docs, the manifest, the updater and its LaunchAgent"
 
 # The preinstall requires each product the tree's requires file names, and says where to get it.
 pre="$C/Scripts/preinstall"
@@ -89,7 +95,7 @@ B="$T/x/mavergreen-base.pkg"
 a_file_exists "the product archive carries the mavergreen base component" "$B/Payload"
 install_into() {
   sh "$C/Scripts/preinstall" pkg dest "$1"
-  for _c in "$B" "$C"; do ( cd "$1" && gzip -dc < "$_c/Payload" | cpio -id 2>/dev/null ); done
+  for _id in dev.mavergreen.base dev.mavergreen.codex-cli; do sh "$PR" payload "$T/x" "$_id" "$1"; done
   sh "$B/Scripts/postinstall" pkg dest "$1"
   sh "$C/Scripts/postinstall" pkg dest "$1"
 }
@@ -117,9 +123,11 @@ a_eq script "$_k" "bin/codex is not a Mach-O binary"
 a_no_file "no codex-code-mode-host is installed" "$P/bin/codex-code-mode-host"
 a_no_file "no codex-resources is installed" "$P/codex-resources"
 
-a_eq "dev.mavergreen.codex-cli" "$("$PB" -c 'Print :identifier' "$P/mavergreen.plist")" "the manifest identifier"
-a_eq "codex-cli" "$("$PB" -c 'Print :product' "$P/mavergreen.plist")" "the manifest product"
-a_eq "$V" "$("$PB" -c 'Print :version' "$P/mavergreen.plist")" "the manifest version is the package version"
+a_eq "dev.mavergreen.codex-cli
+codex-cli
+$V" "$(sh "$PR" plist "$T/x" identifier product version)" "the manifest's identifier, product, and the package version"
+a_eq "$V" "$(pget "$P/mavergreen.plist" version)" "the installed manifest says the package version"
+a_eq "distribution os-version-min 10.9.5" "$(sh "$PR" facts "$PKG" | grep '^distribution os-version-min ')" "the pkg's install floor is 10.9.5"
 a_eq "dev.mavergreen.codex-cli" "$(sh "$SHIPYARD/product-name.sh" identifier codex-cli)" "the manifest identity is the registry's"
 
 a_eq "codex" "$(ls "$FARM")" "the link farm exports codex and nothing else"
@@ -140,11 +148,10 @@ a_no_file "uninstall removes the updater app" "$ROOT/Library/Application Support
 a_no_file "uninstall removes the updater's LaunchAgent" "$ROOT/Library/LaunchAgents/dev.mavergreen.codex-cli-updatecheck.plist"
 
 # The updater, as shipped in the pkg, against the registry.
-mkdir "$T/out"
-( cd "$T/out" && gzip -dc < "$C/Payload" | cpio -id 2>/dev/null )
+sh "$PR" payload "$T/x" dev.mavergreen.codex-cli "$T/out"
 UP="$T/out/Library/Application Support/Mavergreen/codex-cli-updater.app/Contents/Info.plist"
-a_eq "$(sh "$SHIPYARD/product-name.sh" updater-bundle-id codex-cli)" "$("$PB" -c 'Print :CFBundleIdentifier' "$UP")" "the updater's bundle ID is the registry's"
-a_eq "$(sh "$SHIPYARD/product-name.sh" feed codex-cli)" "$("$PB" -c 'Print :SUFeedURL' "$UP")" "the updater's feed is the registry's"
-a_eq "$V" "$("$PB" -c 'Print :CFBundleShortVersionString' "$UP")" "the updater shows the package version"
-a_eq "$V" "$("$PB" -c 'Print :CFBundleVersion' "$UP")" "the updater's comparison version is the package version"
+a_eq "$(sh "$SHIPYARD/product-name.sh" updater-bundle-id codex-cli)" "$(pget "$UP" CFBundleIdentifier)" "the updater's bundle ID is the registry's"
+a_eq "$(sh "$SHIPYARD/product-name.sh" feed codex-cli)" "$(pget "$UP" SUFeedURL)" "the updater's feed is the registry's"
+a_eq "$V" "$(pget "$UP" CFBundleShortVersionString)" "the updater shows the package version"
+a_eq "$V" "$(pget "$UP" CFBundleVersion)" "the updater's comparison version is the package version"
 a_done

@@ -1,5 +1,5 @@
 diff --git a/codex-rs/utils/pty/src/posix_child.rs b/codex-rs/utils/pty/src/posix_child.rs
-index abf46c28aa..40fd6b7126 100644
+index 436263a..7784ac2 100644
 --- a/codex-rs/utils/pty/src/posix_child.rs
 +++ b/codex-rs/utils/pty/src/posix_child.rs
 @@ -35,9 +35,9 @@ use libc::POSIX_SPAWN_SETSID;

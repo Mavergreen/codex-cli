@@ -36,10 +36,10 @@ index 918edba..957e567 100644
      assert_eq!(
 diff --git a/codex-rs/install-context/src/mavergreen.rs b/codex-rs/install-context/src/mavergreen.rs
 new file mode 100644
-index 0000000..16e1447
+index 0000000..06bf187
 --- /dev/null
 +++ b/codex-rs/install-context/src/mavergreen.rs
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,185 @@
 +//! Mavergreen: the identity of this build and where newer ones come from.
 +//!
 +//! A Mavergreen build is named `<x.y.z>-mavericks.<N>`: the Codex version it was built from and the
@@ -57,6 +57,22 @@ index 0000000..16e1447
 +    "https://github.com/Mavergreen/codex-cli/releases/download/codex-builds/latest.json";
 +/// The package's installer, which fetches and installs a build.
 +pub const INSTALLER_PATH: &str = "/usr/local/mavergreen/codex-cli/libexec/codex-cli/install.sh";
++/// Names another installer in place of `INSTALLER_PATH`: the standalone archive's launcher sets it
++/// to the installer beside itself.
++pub const INSTALLER_ENV: &str = "CODEX_MAVERGREEN_INSTALLER";
++
++/// The installer `codex update` and the daemon run: `$CODEX_MAVERGREEN_INSTALLER` when it is an
++/// absolute path, else `INSTALLER_PATH`.
++pub fn installer_path() -> std::path::PathBuf {
++    installer_path_from(std::env::var_os(INSTALLER_ENV))
++}
++
++fn installer_path_from(value: Option<std::ffi::OsString>) -> std::path::PathBuf {
++    match value.map(std::path::PathBuf::from) {
++        Some(path) if path.is_absolute() => path,
++        _ => std::path::PathBuf::from(INSTALLER_PATH),
++    }
++}
 +/// The Sparkle updater for the package itself.
 +pub const UPDATER_APP: &str = "/Library/Application Support/Mavergreen/codex-cli-updater.app";
 +
@@ -159,6 +175,19 @@ index 0000000..16e1447
 +        ] {
 +            assert_eq!(BuildId::parse(bad), None, "{bad}");
 +        }
++    }
++
++    #[test]
++    fn the_installer_is_the_packages_unless_an_absolute_path_names_another() {
++        let default = std::path::PathBuf::from(INSTALLER_PATH);
++        assert_eq!(installer_path_from(None), default);
++        assert_eq!(installer_path_from(Some("".into())), default);
++        assert_eq!(installer_path_from(Some("relative/install.sh".into())), default);
++        assert_eq!(
++            installer_path_from(Some("/a b/libexec/codex-cli/install.sh".into())),
++            std::path::PathBuf::from("/a b/libexec/codex-cli/install.sh")
++        );
++        assert_eq!(INSTALLER_ENV, "CODEX_MAVERGREEN_INSTALLER");
 +    }
 +
 +    #[test]

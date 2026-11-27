@@ -28,8 +28,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Linux-hosted (the maintainer's standing order, 2026-11-23): the updater is the only compiled thing,
+  # and shipyard's build_updater.sh builds it with clang22 here as on a Mac; the pkg is read with
+  # pkg_read.sh. The 10.9 guest job below runs on Linux too.
   build:
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
       ver: ${{ steps.ver.outputs.ver }}
@@ -43,10 +46,13 @@ jobs:
       - name: Install mavericks-shipyard
         uses: Mavergreen/shipyard/.github/actions/install@v1
 
-      - name: Record the toolchain
+      - name: Build out of tree
         run: |
-          clang --version
-          xcodebuild -version
+          echo "MAVERICKS_BUILD_ROOT=$RUNNER_TEMP/mm-build" >> "$GITHUB_ENV"
+          echo "BUILD=$RUNNER_TEMP/codex-cli" >> "$GITHUB_ENV"
+
+      - name: The package test reads payloads with cpio
+        run: command -v cpio || { sudo apt-get update -qq && sudo apt-get install -y -qq cpio; }
 
       - name: Record the pre-build tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
@@ -95,26 +101,39 @@ jobs:
             sh build/check-aquatransport-pin.sh --allow-unreleased
           fi
 
-      # The pkg carries no Codex binary, so no Codex is built here and CMake registers no Codex guard
-      # tests; the updater, the one compiled thing, is guarded as it is built.
-      - name: Configure (cross, pinned 10.9 SDK, with the updater)
-        run: shipyard-cmake --preset x86_64 -DCODEX_BUILD_UPDATER=ON
-
-      - name: Build + compat guard
-        run: shipyard-cmake --build --preset x86_64
-
-      - name: Run the repo's tests
-        run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
-
-      - name: Locate the build
-        run: echo "BUILD=$(sh build/resolve-build-root.sh)/$(basename "$PWD")-x86_64" >> "$GITHUB_ENV"
-
-      - name: Package the .pkg
+      # The pkg carries no Codex binary; the updater is the one compiled thing.
+      # spec: updater/ICON-CREDIT.txt -- the generic icon on purpose, with its reason and its exit
+      - name: Build the updater with clang22
         env:
           VER: ${{ steps.ver.outputs.ver }}
         run: |
           set -eu
-          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$VER" "$BUILD/dist")"
+          app="$(sh "$SHIPYARD_SCRIPTS/build_updater.sh" --product codex-cli --display-name "Mavericks Codex CLI" \
+            --confirm-title "Codex CLI for Mavericks updated" --confirm-body "The next codex you start uses the new launcher." \
+            --pubkey updater/ed25519_key.pub --version "$VER" --clang22-pin components/clang-22 --arch x86_64 \
+            --generic-icon --out-dir "$BUILD/updater")"
+          echo "UPDATER=$app" >> "$GITHUB_ENV"
+
+      - name: Run the repo's tests
+        run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
+
+      # The standalone archive is the primary form; the pkg is derived from it.
+      - name: Package the standalone archive
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          sa="$(sh packaging/build-standalone.sh "$VER" "$BUILD/dist")"
+          [ -f "$sa" ] || { echo "::error::build-standalone.sh did not print an archive path: $sa"; exit 1; }
+          echo "SA=$sa" >> "$GITHUB_ENV"
+
+      - name: Package the .pkg, derived from the archive
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          set -eu
+          pkg="$(sh packaging/build-pkg.sh "$UPDATER" "$VER" "$BUILD/dist" "$SA")"
           [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 
@@ -123,7 +142,9 @@ jobs:
 
       # the README's one-liner fetches it from the latest release, beside the pkg it installs
       - name: The one-line installer
-        run: cp packaging/install.sh "$BUILD/dist/install.sh"
+        run: |
+          cp packaging/install.sh "$BUILD/dist/install.sh"
+          cp packaging/install-standalone.sh "$BUILD/dist/install-standalone.sh"
 
       - name: Release notes
         env:
@@ -131,7 +152,7 @@ jobs:
         run: |
           set -eu
           sh "$SHIPYARD_SCRIPTS/release-notes.sh" --tag "$VER" --version "$VER" \
-            --product "Codex CLI" --min-os 10.9.5 --out "$BUILD/dist/RELEASE_NOTES.md"
+            --product "Codex CLI" --min-os 10.9.5 --standalone "$SA" --out "$BUILD/dist/RELEASE_NOTES.md"
 
       - name: Record the declared state in the notes
         if: steps.ver.outputs.publish == 'yes'

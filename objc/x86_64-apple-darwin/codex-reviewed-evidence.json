@@ -43,11 +43,25 @@
       "source": "objc2-app-kit-0.3.2 src/generated/NSPasteboard.rs:362 sha256:b08f0b44f6942ce8bd335b7aa2fd69b67e114fe4b04e20da6bbb02dcb99d3f51"
     },
     {
+      "cache": "<objc2_app_kit::generated::__NSPasteboardItem::NSPasteboardItem>::dataForType::CACHED_SEL",
+      "kind": "-",
+      "receiver": "NSPasteboardItem",
+      "selector": "dataForType:",
+      "source": "objc2-app-kit-0.3.2 src/generated/NSPasteboardItem.rs:80 sha256:449c6564a37b8264e0d23d906ab127623f285d261c7cb0470373205c64c41e8e"
+    },
+    {
       "cache": "<objc2_app_kit::generated::__NSPasteboardItem::NSPasteboardItem>::stringForType::CACHED_SEL",
       "kind": "-",
       "receiver": "NSPasteboardItem",
       "selector": "stringForType:",
       "source": "objc2-app-kit-0.3.2 src/generated/NSPasteboardItem.rs:85 sha256:449c6564a37b8264e0d23d906ab127623f285d261c7cb0470373205c64c41e8e"
+    },
+    {
+      "cache": "<objc2_app_kit::generated::__NSPasteboardItem::NSPasteboardItem>::types::CACHED_SEL",
+      "kind": "-",
+      "receiver": "NSPasteboardItem",
+      "selector": "types",
+      "source": "objc2-app-kit-0.3.2 src/generated/NSPasteboardItem.rs:36 sha256:449c6564a37b8264e0d23d906ab127623f285d261c7cb0470373205c64c41e8e"
     },
     {
       "cache": "<objc2_app_kit::generated::__NSRunningApplication::NSRunningApplication>::bundleIdentifier::CACHED_SEL",

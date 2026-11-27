@@ -82,18 +82,3 @@ else()
   message(STATUS "No Codex build under ${_build_root}/codex-${_codex_mode}: its compat-guard and load-path tests are not registered")
 endif()
 
-option(CODEX_BUILD_UPDATER "Build the Sparkle updater (needs codex-cli in the installed shipyard's product registry)" OFF)
-
-if(CODEX_BUILD_UPDATER)
-  # The updater is the only compiled code here; the Codex binaries, when present, are imported.
-  enable_language(OBJC)
-  include(MavericksSparkle)
-  # spec: updater/ICON-CREDIT.txt -- the generic icon on purpose, with its reason and its exit
-  mavericks_add_updater_app(
-    PRODUCT codex-cli
-    PRODUCT_NAME "Mavericks Codex CLI"
-    ALLOW_GENERIC
-    VERSION "${MAVERICKS_CODEX_VERSION}"
-    CONFIRM_TITLE "Codex CLI for Mavericks updated"
-    CONFIRM_BODY "The next codex you start uses the new launcher.")
-endif()

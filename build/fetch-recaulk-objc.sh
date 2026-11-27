@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- plutil reads the provider declaration; shipyard's provider helper builds against the host SDK
+# platform: host-agnostic -- build/decl-plist.sh and stevedore read the provider declaration; shipyard's provider helper runs Drydock
 #   usage: fetch-recaulk-objc.sh
 #          The Recaulk prefix whose Objective-C provider recaulk.nsworkspace.open-urls.v1 (the 10.9
 #          backfill of -[NSWorkspace openURLs:withApplicationAtURL:options:configuration:error:], which
@@ -36,6 +36,8 @@ ENCODING='@56@0:8@16@24Q32@40^@48'
 ROOT=__recaulk_objc_activate
 
 fail() { echo "fetch-recaulk-objc: $*" >&2; exit 1; }
+probe=
+trap '[ -z "$probe" ] || rm -rf "$probe"' EXIT
 
 # platform: the shared interfaces this provider's linkage and proof go through. A shipyard too old to
 #           have them cannot link or prove the provider, so it is refused here, before anything links.
@@ -47,8 +49,11 @@ done
 nl='
 '
 cr=$(printf '\r')
-# pl KEYPATH: the one-line string at KEYPATH in $decl, or nothing.
-pl() { plutil -extract "$1" xml1 -o - "$decl" 2>/dev/null | sed -n 's:^<string>\(.*\)</string>$:\1:p'; }
+# spec: build/decl-plist.sh header -- the declaration is read as an xml1 plist, by stevedore's
+#       KEY:INDEX:KEY paths: interim, until drydock-objc ships a schema-aware manifest query.
+STEVEDORE=$(sh "$SHIPYARD_SCRIPTS/fetch_stevedore.sh") || fail "no stevedore from shipyard to read the provider declaration"
+# pl KEYPATH: the scalar at KEYPATH (dot-separated) in $plist, or nothing.
+pl() { "$STEVEDORE" plist get "$plist" "$(printf '%s' "$1" | tr . :)" 2>/dev/null || :; }
 check() {
   got=$(pl "$1")
   [ "$got" = "$2" ] || fail "$decl: $1 is '$got', Codex needs '$2'"
@@ -65,13 +70,14 @@ validate() {
   rc=0
   sh "$SHIPYARD_SCRIPTS/objc-provider-link-args.sh" --prefix "$p" --link-map "$probe/probe.map" > "$probe/args" 2> "$probe/err" || rc=$?
   args=$(cat "$probe/args"); err=$(cat "$probe/err")
-  rm -rf "$probe"
+  plist="$probe/decl.plist"
   [ "$rc" = 0 ] || fail "shipyard refused the provider declaration of $p (exit $rc): $err"
+  sh "$HERE/decl-plist.sh" "$decl" "$plist" || fail "cannot read $decl"
   printf '%s\n' "$args" | grep -qx -- "-Wl,-u,_$ROOT" ||
     fail "$p does not root $ROOT (shipyard printed no -Wl,-u,_$ROOT)"
   # spec: Recaulk README "objc-providers.json" -- schema 2 keeps the one-method entries, as schema 1
   #       had them, under legacy_providers, and its groups under providers.
-  schema=$(plutil -extract schema xml1 -o - "$decl" 2>/dev/null | sed -n 's:^<integer>\(.*\)</integer>$:\1:p')
+  schema=$(pl schema)
   case "$schema" in
     1) list=providers ;;
     2) list=legacy_providers ;;
@@ -79,8 +85,7 @@ validate() {
   esac
   found=
   i=0
-  # platform: plutil prints a failed -extract's error on stdout, so both streams are discarded.
-  while plutil -extract "$list.$i" xml1 -o /dev/null "$decl" >/dev/null 2>&1; do
+  while "$STEVEDORE" plist has "$plist" "$list:$i" 2>/dev/null; do
     if [ "$(pl "$list.$i.provider_id")" = "$PROVIDER_ID" ]; then
       [ -z "$found" ] || fail "$decl declares $PROVIDER_ID twice"
       found=$i

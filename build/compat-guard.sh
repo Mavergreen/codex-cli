@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- shipyard's guard reads Mach-O with lipo/otool/nm and runs Drydock's drydock-objc analyzer from the pinned release
+# platform: host-agnostic -- shipyard's guard reads Mach-O with $LIPO/$OTOOL/$NM (llvm tools on Linux) and runs Drydock's drydock-objc analyzer from the pinned release
 #   usage: compat-guard.sh BINARY
 #          The 10.9 compatibility gate for one Codex binary: shipyard's assert_binary_compatible.sh,
 #          whose Objective-C half is the strict analyzer (scripts/objc-compat.sh). For BINARY in

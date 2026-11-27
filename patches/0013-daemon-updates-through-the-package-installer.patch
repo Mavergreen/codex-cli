@@ -92,7 +92,7 @@ index ef09b6d..25b60ae 100644
          format!("local-{digest}-{target}")
      };
 diff --git a/codex-rs/app-server-daemon/src/prepare_install_tests.rs b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
-index ee33ca8..e7c2324 100644
+index 9180bf6..fcf3ac9 100644
 --- a/codex-rs/app-server-daemon/src/prepare_install_tests.rs
 +++ b/codex-rs/app-server-daemon/src/prepare_install_tests.rs
 @@ -242,6 +242,47 @@ async fn legacy_selection_is_not_migrated_or_refreshed() {
@@ -144,7 +144,7 @@ index ee33ca8..e7c2324 100644
  async fn standalone_seed_preserves_explicit_pin_or_latest_channel() {
      for follows_latest in [false, true] {
 diff --git a/codex-rs/app-server-daemon/src/update_loop.rs b/codex-rs/app-server-daemon/src/update_loop.rs
-index 344aba5..b6c9fe8 100644
+index 344aba5..e4ea8a4 100644
 --- a/codex-rs/app-server-daemon/src/update_loop.rs
 +++ b/codex-rs/app-server-daemon/src/update_loop.rs
 @@ -3,6 +3,7 @@
@@ -226,7 +226,19 @@ index 344aba5..b6c9fe8 100644
                          let _ = crate::diagnostics::result::<()>("scheduled_update", started, Err(err));
                      }
                      Ok((UpdateLoopControl::Stop, _)) => return Ok(()),
-@@ -709,6 +702,12 @@ async fn run_installer_script(
+@@ -583,6 +576,11 @@ async fn run_installer_script(
+     let mut command = {
+         let mut command = Command::new("/bin/sh");
+         command.arg("-s");
++        // Mavergreen: piped to sh -s, the installer learns from this where its tree is.
++        command.env(
++            codex_install_context::mavergreen::INSTALLER_ENV,
++            codex_install_context::mavergreen::installer_path(),
++        );
+         command.process_group(0);
+         command
+     };
+@@ -709,6 +707,12 @@ async fn run_installer_script(
      if status.success() {
          stderr_task.abort();
          Ok(UpdateLoopControl::Continue)
@@ -239,7 +251,7 @@ index 344aba5..b6c9fe8 100644
      } else {
          let _ = tokio::time::timeout(INSTALLER_STDERR_DRAIN_TIMEOUT, &mut stderr_task).await;
          stderr_task.abort();
-@@ -747,7 +746,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
+@@ -747,7 +751,7 @@ async fn cancel_installer(child: &mut tokio::process::Child, package_root: &Path
  }
  
  async fn fetch_installer_script(http: &impl InstallerHttp) -> Result<Vec<u8>> {
@@ -248,7 +260,7 @@ index 344aba5..b6c9fe8 100644
          InstallerResponse::Success(body) => Ok(body),
          InstallerResponse::Unsuccessful { status } => {
              anyhow::bail!("standalone Codex updater request failed with status {status}")
-@@ -772,22 +771,29 @@ trait InstallerHttp: Send + Sync {
+@@ -772,22 +776,29 @@ trait InstallerHttp: Send + Sync {
      ) -> impl std::future::Future<Output = Result<InstallerResponse>> + Send + 'a;
  }
  
@@ -279,7 +291,7 @@ index 344aba5..b6c9fe8 100644
 +
 +fn local_installer() -> LocalInstaller {
 +    LocalInstaller {
-+        path: PathBuf::from(INSTALLER_PATH),
++        path: codex_install_context::mavergreen::installer_path(),
 +    }
 +}
 +
@@ -295,7 +307,7 @@ index 344aba5..b6c9fe8 100644
      }
  }
 diff --git a/codex-rs/app-server-daemon/src/update_loop_tests.rs b/codex-rs/app-server-daemon/src/update_loop_tests.rs
-index 02aca06..4991f5e 100644
+index 97c8248..7101314 100644
 --- a/codex-rs/app-server-daemon/src/update_loop_tests.rs
 +++ b/codex-rs/app-server-daemon/src/update_loop_tests.rs
 @@ -6,9 +6,10 @@ use pretty_assertions::assert_eq;
@@ -310,7 +322,7 @@ index 02aca06..4991f5e 100644
  use super::fetch_installer_script;
  #[cfg(unix)]
  use super::manual_update::run as manual_update_once;
-@@ -39,6 +40,54 @@ async fn installer_fetch_uses_exact_url_and_preserves_bytes() {
+@@ -39,6 +40,74 @@ async fn installer_fetch_uses_exact_url_and_preserves_bytes() {
      assert_eq!(http.requested_urls(), vec![INSTALL_URL.to_string()]);
  }
  
@@ -360,6 +372,26 @@ index 02aca06..4991f5e 100644
 +        .expect("a failing installer is an error");
 +        assert!(error.to_string().contains(expected), "{error}");
 +    }
++}
++
++// Mavergreen: the installer is piped to sh -s, so it learns where its tree is from the environment.
++#[cfg(unix)]
++#[tokio::test]
++async fn the_piped_installer_is_told_where_it_lives() {
++    let home = TempDir::new().unwrap();
++    let script = format!(
++        "[ \"$CODEX_MAVERGREEN_INSTALLER\" = '{}' ] || exit 1\n",
++        codex_install_context::mavergreen::installer_path().display()
++    );
++    let control = super::run_installer_script(
++        script.as_bytes(),
++        super::InstallerMode::Update("0.161.0-mavericks.1-x86_64-apple-darwin"),
++        &home.path().join("packages/app-server-daemon"),
++        std::future::pending::<Option<()>>(),
++    )
++    .await
++    .expect("the installer sees CODEX_MAVERGREEN_INSTALLER");
++    assert!(matches!(control, super::UpdateLoopControl::Continue));
 +}
 +
  #[tokio::test]

@@ -46,7 +46,8 @@ for f in build-manifest LICENSE NOTICE; do
 done
 # spec: the rg package provides rg, which need not exist when the tarball is built. A script, not a
 #       link: the app-server daemon copies this package and refuses any link that leaves it.
-printf '#!/bin/sh\nexec /usr/local/mavergreen/rg/bin/rg "$@"\n' > "$P/codex-path/rg"
+# spec: tree/libexec/codex-cli/lib.sh -- the standalone archive's launcher hands Codex its own rg
+printf '#!/bin/sh\nexec "${CODEX_MAVERGREEN_RG:-/usr/local/mavergreen/rg/bin/rg}" "$@"\n' > "$P/codex-path/rg"
 chmod 0755 "$P/codex-path/rg"
 # upstream's codex_package/layout.py writes these fields in this order, indented two spaces
 cat > "$P/codex-package.json" <<JSON

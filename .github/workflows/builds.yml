@@ -37,8 +37,9 @@ concurrency:
 jobs:
   # Not "build": release.yml's build job reports that check, and both must be required separately.
   codex-build:
-    runs-on: macos-26
-    timeout-minutes: 240
+    runs-on: ubuntu-latest
+    # platform: Codex 0.172 compiled in about three hours on macos-26; GitHub's job limit is six
+    timeout-minutes: 360
     outputs:
       id: ${{ steps.id.outputs.id }}
       next: ${{ steps.id.outputs.next }}
@@ -53,10 +54,44 @@ jobs:
       - name: Install mavericks-shipyard
         uses: Mavergreen/shipyard/.github/actions/install@v1
 
+      # spec: shipyard scripts/cargo-env.sh -- the pinned rust, clang22 and 10.9 SDK, and their llvm tools
+      #       (OTOOL, NM, LIPO), which the compat guards read Mach-O with on Linux.
+      - name: The Linux cargo environment
+        run: sh "$SHIPYARD_SCRIPTS/cargo-env.sh" components/rust components/clang-22 >> "$GITHUB_ENV"
+
+      # spec: INGREDIENTS.md "Deviations" -- plistutil reads Recaulk's provider declaration, until
+      #       drydock-objc's manifest query
+      - name: Install plistutil
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libplist-utils
+          plistutil --version
+
       - name: Record the toolchain
         run: |
-          clang --version
-          xcodebuild -version
+          "$RUSTC" --version
+          "$CC_x86_64_apple_darwin" --version
+
+      # platform: the build root (about 22G: target and cargo home) goes on the runner's /mnt disk, so
+      #   filling it cannot starve the runner's own / (run 45587339508 lost its runner 27 minutes into
+      #   the cross-build, with no log). Swap there backs the parallel LTO rustc jobs. The
+      #   preinstalled SDKs removed are never used here.
+      - name: Room for the cargo target
+        run: |
+          set -eu
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/mm-build
+          sudo chown "$(id -u):$(id -g)" /mnt/mm-build
+          # platform: shipyard's launcher and build/resolve-build-root.sh honour an exported MAVERICKS_BUILD_ROOT
+          echo "MAVERICKS_BUILD_ROOT=/mnt/mm-build" >> "$GITHUB_ENV"
+          # platform: run 45600034272 peaked at 6 GB of swap with 418 MB of RAM free; without it the runner was lost.
+          #   On 4 CPUs the build peaks at 20 GB (three crates compiling at once) and 19 GB (the codex link alone).
+          sudo fallocate -l 16G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile > /dev/null
+          sudo swapon /mnt/swapfile
+          df -h / /mnt
+          free -h
 
       - name: Record the pre-build tree
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
@@ -110,8 +145,16 @@ jobs:
 
       # build-codex.sh fetches the pinned Mavergreen Rust and clang-22 pkgs, the pinned Codex commit
       # and OpenAI's rusty_v8 archive itself, and writes $BUILD_ROOT/codex-cross. It reads BUILD_ID.
+      # platform: two cargo jobs, not four. Run 46028797799 lost its runner 75 minutes in, even with 16G of
+      #   swap; four jobs reach 20 GB with three crates compiling at once. The job count schedules crates
+      #   and LTO threads only, so it changes no output bytes.
       - name: Cross-build Codex
-        run: sh build/build-codex.sh cross
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: |
+          set -eu
+          ( while sleep 120; do df -h / /mnt | tail -n 2; free -m | sed -n 2,3p; done ) &
+          sh build/build-codex.sh cross
 
       # spec: build/objc-build-evidence.sh -- binds shipyard's Objective-C proof to the exact bytes just
       #       built. A blocking or unmeasurable send does not stop here: the CTest guards below rerun the
@@ -125,10 +168,10 @@ jobs:
       # against the pins alone; the native-vs-cross comparison is an out-of-band check; nothing enforces it.
       # CMake registers the guard tests only when it finds the built binaries, so a build that is not
       # where CMake looks would otherwise pass with no guard at all.
-      - name: Configure, build the updater, then run the compat guard tests
+      - name: Configure, build, then run the compat guard tests
         run: |
           set -eu
-          shipyard-cmake --preset x86_64 -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
+          shipyard-cmake --preset x86_64 -DCODEX_CROSS_ONLY_MANIFEST=ON
           shipyard-cmake --build --preset x86_64
           listed="$(shipyard-ctest --preset x86_64 -N)"
           for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host cxxabi_codex cxxabi_codex-code-mode-host; do
@@ -179,17 +222,16 @@ jobs:
             --min-pkg "$minpkg" --state "$STATE" > "$nx/codex-build-$NEXT.json"
           ls -l "$ch" "$nx"
 
-      - name: Fetch the signer (Mavergreen's ed25519, as pinned)
+      - name: Fetch the signer (shipyard's pinned ed25519, for this host)
         if: steps.id.outputs.publish == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          tag="$(tr -d '[:space:]' < components/ed25519/version)"
-          dest="$(sh "$SHIPYARD_SCRIPTS/fetch_product_pkg.sh" ed25519 "$tag" "$RUNNER_TEMP/ed25519")"
-          [ -x "$dest/bin/ed25519-sign" ] && [ -x "$dest/bin/ed25519-verify" ] \
-            || { echo "::error::ed25519 $tag has no bin/ed25519-sign and bin/ed25519-verify"; exit 1; }
-          echo "ED25519=$dest/bin" >> "$GITHUB_ENV"
+          bin="$(sh "$SHIPYARD_SCRIPTS/fetch_ed25519_tools.sh" "$RUNNER_TEMP/ed25519")"
+          [ -x "$bin/ed25519-sign" ] && [ -x "$bin/ed25519-verify" ] \
+            || { echo "::error::shipyard's pinned ed25519 has no ed25519-sign and ed25519-verify"; exit 1; }
+          echo "ED25519=$bin" >> "$GITHUB_ENV"
 
       # This is the one job that holds the key, so scan-for-key.yml scans its log;
       # publish uploads the signed directory with no key. The 10.9 job then checks
@@ -226,7 +268,12 @@ jobs:
           PKGVER: ${{ steps.id.outputs.pkgver }}
         run: |
           set -eu
-          pkg="$(sh packaging/build-pkg.sh "$BUILD/codex-cli-updater.app" "$PKGVER" "$BUILD/vm")"
+          app="$(sh "$SHIPYARD_SCRIPTS/build_updater.sh" --product codex-cli --display-name "Mavericks Codex CLI" \
+            --confirm-title "Codex CLI for Mavericks updated" --confirm-body "The next codex you start uses the new launcher." \
+            --pubkey updater/ed25519_key.pub --version "$PKGVER" --clang22-pin components/clang-22 --arch x86_64 \
+            --generic-icon --out-dir "$BUILD/updater")"
+          sa="$(sh packaging/build-standalone.sh "$PKGVER" "$BUILD/vm")"
+          pkg="$(sh packaging/build-pkg.sh "$app" "$PKGVER" "$BUILD/vm" "$sa")"
           [ -f "$pkg" ] || { echo "::error::build-pkg.sh did not print a pkg path: $pkg"; exit 1; }
           sh tests/package-test.sh "$pkg"
 
@@ -242,6 +289,16 @@ jobs:
             ${{ env.CODEX_OBJC }}/identity
             ${{ env.CODEX_OBJC }}/evidence/
             ${{ env.CODEX_OBJC }}/reports/
+          if-no-files-found: warn
+
+      # diagnostics, never part of the payload: on a failure, the code-mode host, so where its sends
+      # landed can be read off the binary the proof could not resolve
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: codex-build-code-mode-host
+          path: ${{ env.MAVERICKS_BUILD_ROOT }}/codex-cross/codex-code-mode-host
+          retention-days: 3
           if-no-files-found: warn
 
       - uses: actions/upload-artifact@v7

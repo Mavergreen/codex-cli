@@ -34,6 +34,27 @@ cx_init() {
   while :; do case "$CX_HOME" in ?*/) CX_HOME="${CX_HOME%/}" ;; *) break ;; esac; done
   CX_ROOT="$CX_HOME/packages/standalone"
   CX_STATE="$HOME/Library/Application Support/dev.mavergreen.codex-cli"
+  # spec: packaging/build-standalone.sh -- the standalone archive carries its requirements here; the
+  #       pkg is that tree without them, so a tree with them is the archive's
+  CX_BUNDLED="$CX_TREE/libexec/codex-cli/bundled"
+  if [ -d "$CX_BUNDLED" ]; then CX_STANDALONE=1; else CX_STANDALONE=0; fi
+}
+
+# a requirement is met by the archive's own copy, or else by the installed product
+cx_has_required() {
+  [ -d "$CX_BUNDLED/$1" ] || [ -f "$CX_MG/$1/mavergreen.plist" ]
+}
+
+# Codex runs the installer and rg it is handed (patches 0011 and 0012, build-codex-package.sh's
+# codex-path/rg); the archive hands it its own, and the pkg leaves Codex the installed products' defaults
+cx_export_standalone() {
+  [ "$CX_STANDALONE" = 1 ] || return 0
+  CODEX_MAVERGREEN_INSTALLER="$CX_TREE/libexec/codex-cli/install.sh"
+  export CODEX_MAVERGREEN_INSTALLER
+  if [ -d "$CX_BUNDLED/rg" ]; then
+    CODEX_MAVERGREEN_RG="$CX_BUNDLED/rg/bin/rg"
+    export CODEX_MAVERGREEN_RG
+  fi
 }
 
 # prints the user's Codex only when its current release is a Mavergreen build; OpenAI's own build

@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- otool lists load commands; the same on modern macOS and Mavericks
+# platform: host-agnostic -- $OTOOL (llvm-otool on Linux, from shipyard's cargo-env.sh) or otool lists load commands
 #   usage: check-load-paths.sh BINARY...   exits 0 when every BINARY loads libraries only from
 #          /usr/lib/ and /System/Library/ and has no LC_RPATH; 1 if one does not; 2 on misuse
 # platform: interim, until shipyard's family guard checks load paths. assert_binary_compatible.sh
@@ -12,7 +12,7 @@ rc=0
 for binary in "$@"; do
   [ -f "$binary" ] || { echo "check-load-paths: not a file: $binary" >&2; exit 2; }
   # platform: otool -l exits 0 on a file that is not Mach-O, after saying so.
-  commands=$(otool -l "$binary") || { echo "check-load-paths: otool cannot read $binary" >&2; exit 1; }
+  commands=$("${OTOOL:-otool}" -l "$binary") || { echo "check-load-paths: ${OTOOL:-otool} cannot read $binary" >&2; exit 1; }
   case "$commands" in
     *"is not an object file"*) echo "check-load-paths: $binary is not a Mach-O file" >&2; exit 1 ;;
   esac

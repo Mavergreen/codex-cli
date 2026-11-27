@@ -14,7 +14,8 @@
 #      the Linux and Apple Silicon targets. The asset's digest comes from the signed metadata.
 #      Fetching the channel's metadata and signature times out after 30 seconds (upstream's
 #      metadata timeout) and the package after 300.
-#   2. Signature: the metadata's .sig is fetched and checked with $CODEX_ED25519_VERIFY against
+#   2. Signature: the metadata's .sig is fetched and checked with $CODEX_ED25519_VERIFY (else the
+#      standalone archive's own ed25519-verify, else the ed25519 product's beside this one) against
 #      the package's public key before the metadata is parsed. The temp dir and its cleanup trap
 #      are therefore set up before the release is resolved. A refusal suggests trying again in a
 #      minute: a fetch while a build is published can see a new latest.json beside the old signature.
@@ -23,7 +24,9 @@
 #      release counts as complete when `codex --version` reports the build's x.y.z. Whether the
 #      requested build is already installed is judged by the current link's release name.
 #   4. Package requirement: a build whose mavergreen_min_pkg is newer than the installed package
-#      installs nothing; an interactive run opens the package's updater, and either way exits 3,
+#      (the standalone archive's share/codex-cli/version where there is no mavergreen.plist)
+#      installs nothing; an interactive run opens the package's updater (the archive has none, so it
+#      says where the newer archive is), and either way exits 3,
 #      before any "Updating" or "Resolved version" line. A run is guarded (it opens nothing) when
 #      CODEX_INSTALL_IF_LATEST, CODEX_INSTALL_IF_CURRENT or CODEX_INSTALL_DAEMON_ONLY is 1, when
 #      CODEX_INSTALL_NO_UPDATER is 1 (the launcher's first run), or when, as in upstream's
@@ -52,8 +55,26 @@ RELEASE="${CODEX_RELEASE:-latest}"
 DAEMON_ONLY="${CODEX_INSTALL_DAEMON_ONLY:-0}"
 BUILDS_URL="${CODEX_BUILDS_URL:-https://github.com/Mavergreen/codex-cli/releases/download/codex-builds}"
 BUILDS_URL="${BUILDS_URL%/}"
-PKG_ROOT="${CODEX_PKG_ROOT:-/usr/local/mavergreen/codex-cli}"
-ED25519_VERIFY="${CODEX_ED25519_VERIFY:-/usr/local/mavergreen/ed25519/bin/ed25519-verify}"
+# spec: tree/libexec/codex-cli/lib.sh -- the tree this installer belongs to is three levels above it:
+#       its own path when it is run as a file (the launcher's first run, `codex update`), else
+#       CODEX_MAVERGREEN_INSTALLER, which the daemon sets when it pipes the script to sh -s (patch 0013)
+PKG_ROOT=""
+for _installer in "$0" "${CODEX_MAVERGREEN_INSTALLER-}"; do
+  case "$_installer" in
+    /*/libexec/codex-cli/install.sh) PKG_ROOT="${_installer%/libexec/codex-cli/install.sh}"; break ;;
+  esac
+done
+PKG_ROOT="${CODEX_PKG_ROOT:-$PKG_ROOT}"
+if [ -z "$PKG_ROOT" ]; then
+  echo "Cannot tell which codex-cli this installer belongs to: run it by its absolute path, or name it in CODEX_MAVERGREEN_INSTALLER." >&2
+  exit 1
+fi
+STANDALONE=0
+[ -d "$PKG_ROOT/libexec/codex-cli/bundled" ] && STANDALONE=1
+# the standalone archive's own ed25519-verify, else the ed25519 product installed beside this one
+ED25519_VERIFY="$(dirname "$PKG_ROOT")/ed25519/bin/ed25519-verify"
+[ "$STANDALONE" = 0 ] || ED25519_VERIFY="$PKG_ROOT/libexec/codex-cli/bundled/ed25519/bin/ed25519-verify"
+ED25519_VERIFY="${CODEX_ED25519_VERIFY:-$ED25519_VERIFY}"
 UPDATER_OPEN="${CODEX_PKG_UPDATER_OPEN:-/usr/bin/open '/Library/Application Support/Mavergreen/codex-cli-updater.app' --args --user}"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
@@ -371,8 +392,12 @@ select_release_assets() {
 }
 
 installed_pkg_version() {
+  # the standalone archive has no manifest; its version file says the same
+  if [ ! -r "$PKG_ROOT/mavergreen.plist" ]; then
+    [ ! -r "$PKG_ROOT/share/codex-cli/version" ] || tr -d '[:space:]' < "$PKG_ROOT/share/codex-cli/version"
+    return 0
+  fi
   # PlistBuddy prints its complaints on stdout and would create a missing file
-  [ -r "$PKG_ROOT/mavergreen.plist" ] || return 0
   /usr/libexec/PlistBuddy -c 'Print :version' "$PKG_ROOT/mavergreen.plist" 2>/dev/null || true
 }
 
@@ -436,6 +461,10 @@ require_pkg_for_release() {
 
   if [ -z "$pkg_version" ]; then
     pkg_version="unknown, the package's mavergreen.plist is missing or unreadable"
+  fi
+  if [ "$STANDALONE" = 1 ]; then
+    echo "Codex $resolved_version needs a newer codex-cli (it requires $min_pkg; installed: $pkg_version); installing nothing. This standalone archive has no updater: download the newer standalone archive from https://github.com/Mavergreen/codex-cli/releases/latest" >&2
+    exit 3
   fi
   if guarded_run; then
     echo "Codex $resolved_version needs a newer codex-cli package (it requires $min_pkg; installed: $pkg_version); installing nothing. Get the newer package with its updater (/Library/Application Support/Mavergreen/codex-cli-updater.app) or from https://github.com/Mavergreen/codex-cli/releases/latest" >&2

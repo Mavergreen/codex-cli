@@ -1,8 +1,8 @@
 diff --git a/codex-rs/sandboxing/src/seatbelt.rs b/codex-rs/sandboxing/src/seatbelt.rs
-index 3597649..4a27a56 100644
+index 4b56255..2e7dba6 100644
 --- a/codex-rs/sandboxing/src/seatbelt.rs
 +++ b/codex-rs/sandboxing/src/seatbelt.rs
-@@ -1067,7 +1067,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
+@@ -1008,7 +1008,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
              .map_err(|error| SeatbeltPreparationError::FileSystem(error.to_string()))?;
          policy_sections.push(daemon::protection_policy(&directory)?);
      }
@@ -15,10 +15,10 @@ index 3597649..4a27a56 100644
      policy_sections.push(deny_read_policy);
      // Renaming an allowed ancestor relocates its protected descendants past
      // their pathname carveouts. Keep these denies last so no broader allowance
-@@ -1084,7 +1088,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
+@@ -1025,7 +1029,11 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
      // file-write* and file-ioctl. Even deny-default needs this explicit deny.
      // F_MAKECOMPRESSED = 80, F_TRANSFEREXTENTS = 110.
-     if !file_system_sandbox_policy.has_full_disk_write_access() {
+     if !resolved_filesystem_permissions.has_full_disk_write_access {
 -        policy_sections.push("(deny system-fcntl (fcntl-command 80 110))".to_string());
 +        policy_sections.push(
 +            "(if (defined? 'system-fcntl)\n\
@@ -27,7 +27,7 @@ index 3597649..4a27a56 100644
 +        );
      }
  
-     let full_policy = policy_sections.join("\n");
+     // Deny injecting input into the shell that resumes after this child. Keep the deny last.
 diff --git a/codex-rs/sandboxing/src/seatbelt_daemon.rs b/codex-rs/sandboxing/src/seatbelt_daemon.rs
 index 964144c..f322b06 100644
 --- a/codex-rs/sandboxing/src/seatbelt_daemon.rs

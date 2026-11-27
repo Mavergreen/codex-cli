@@ -57,13 +57,12 @@ RGW="$H/rg-wrapper"
 [ -L "$X/codex-path/rg" ] || cp "$X/codex-path/rg" "$RGW"
 h_assert_eq 755 "$(stat -f %Lp "$X/codex-path/rg")" "codex-path/rg is mode 0755"
 h_assert_eq '#!/bin/sh
-exec /usr/local/mavergreen/rg/bin/rg "$@"' "$(cat "$RGW")" "codex-path/rg execs the rg package's rg"
+exec "${CODEX_MAVERGREEN_RG:-/usr/local/mavergreen/rg/bin/rg}" "$@"' "$(cat "$RGW")" "codex-path/rg execs the rg Codex is handed, else the rg package's"
 # the wrapper passes its arguments through unchanged, spaces included
 mkdir -p "$H/fake rg/bin"
 printf '#!/bin/sh\nfor a in "$@"; do printf "<%%s>" "$a"; done\n' > "$H/fake rg/bin/rg"
 chmod 0755 "$H/fake rg/bin/rg"
-sed "s|/usr/local/mavergreen/rg/bin/rg|'$H/fake rg/bin/rg'|" "$RGW" > "$RGW.test"
-h_assert_eq '<a b><-->' "$(sh "$RGW.test" 'a b' --)" "the wrapper passes every argument through"
+h_assert_eq '<a b><-->' "$(CODEX_MAVERGREEN_RG="$H/fake rg/bin/rg" sh "$RGW" 'a b' --)" "the wrapper passes every argument through"
 
 h_assert_ok plutil -convert json -o /dev/null "$X/codex-package.json"
 h_assert_eq '{

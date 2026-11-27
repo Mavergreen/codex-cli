@@ -1,5 +1,5 @@
 #!/bin/sh
-# platform: macOS-only -- shipyard's Objective-C helpers build against the host SDK; perl's core JSON::PP merges evidence
+# platform: host-agnostic -- shipyard's Objective-C helpers run the pinned Drydock; perl's core JSON::PP merges evidence
 #   usage: objc-build-evidence.sh native|cross
 #          objc-build-evidence.sh --check native|cross
 #          Binds shipyard's Objective-C proof to the exact bytes build-codex.sh MODE left in
@@ -105,7 +105,14 @@ SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64) || fail "no pinned 10.9
 provider=$(sh "$HERE/fetch-recaulk-objc.sh") || fail "no verified Recaulk provider"
 PREFIX=$(printf '%s\n' "$provider" | sed -n 1p)
 DECL="$PREFIX/share/recaulk/objc-providers.json"
-ARCHIVE="$PREFIX/$(plutil -extract build.archive_path xml1 -o - "$DECL" | sed -n 's:^<string>\(.*\)</string>$:\1:p')"
+# spec: build/decl-plist.sh header -- read as an xml1 plist by stevedore, until drydock-objc's manifest query
+STEVEDORE=$(sh "$SHIPYARD_SCRIPTS/fetch_stevedore.sh") || fail "no stevedore from shipyard to read $DECL"
+DECL_PLIST=$(mktemp "${TMPDIR:-/tmp}/objc-build-evidence-decl.XXXXXX")
+sh "$HERE/decl-plist.sh" "$DECL" "$DECL_PLIST" || { rm -f "$DECL_PLIST"; fail "cannot read $DECL"; }
+ARCHIVE_PATH=$("$STEVEDORE" plist get "$DECL_PLIST" build:archive_path) || ARCHIVE_PATH=
+rm -f "$DECL_PLIST"
+[ -n "$ARCHIVE_PATH" ] || fail "$DECL names no build.archive_path"
+ARCHIVE="$PREFIX/$ARCHIVE_PATH"
 [ "$(sha "$ARCHIVE")" = "$(field recaulk_archive_sha256)" ] && [ "$(sha "$DECL")" = "$(field recaulk_declaration_sha256)" ] ||
   fail "the provider at $PREFIX is not the one $ART/build-manifest says codex linked"
 # The provider body's source receipt, which Recaulk ships beside its declaration: shipyard closes the
