@@ -1,0 +1,101 @@
+name: repro-check
+
+# spec: the family build-twice check -- a cache may feed a publish only while two builds of one input
+# set are the same bytes. Build one commit three times on Linux, twice in one build root and once in
+# another, and fail unless every file, the archive's build-manifest included, is the same. Nothing is
+# published.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repro-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { run: a, root: /mnt/mm-build }
+          - { run: b, root: /mnt/mm-build }
+          - { run: c, root: /mnt/elsewhere/mm-build-c }
+    env:
+      MAVERICKS_BUILD_ROOT: ${{ matrix.root }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install mavericks-shipyard
+        uses: Mavergreen/shipyard/.github/actions/install@v1
+
+      - name: The Linux cargo environment
+        run: sh "$SHIPYARD_SCRIPTS/cargo-env.sh" components/rust components/clang-22 >> "$GITHUB_ENV"
+
+      # spec: INGREDIENTS.md "Deviations" -- plistutil reads Recaulk's provider declaration
+      - name: Install plistutil
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libplist-utils
+
+      # platform: as builds.yml -- the build root on /mnt, and swap, or the runner is lost
+      - name: Room for the cargo target
+        run: |
+          set -eu
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p "$MAVERICKS_BUILD_ROOT"
+          sudo chown "$(id -u):$(id -g)" "$MAVERICKS_BUILD_ROOT"
+          sudo fallocate -l 8G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile > /dev/null
+          sudo swapon /mnt/swapfile
+
+      - name: Build identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          rm -f BUILD_ID
+          sh build/build-id.sh auto | sed -n 's/^ID=//p' > BUILD_ID
+          grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-mavericks\.[1-9][0-9]*$' BUILD_ID
+          cat BUILD_ID
+
+      - name: Cross-build Codex
+        run: sh build/build-codex.sh cross
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: repro-${{ matrix.run }}
+          path: ${{ matrix.root }}/codex-cross/
+          retention-days: 3
+
+  compare:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: repro-*
+          path: ${{ runner.temp }}/repro
+      - name: Same root, twice
+        run: |
+          r="$RUNNER_TEMP/repro"
+          sh build/compare-builds.sh --path /mnt/mm-build --path /home/runner "$r/repro-a" "$r/repro-b"
+      - name: Another root
+        if: ${{ !cancelled() }}
+        run: |
+          r="$RUNNER_TEMP/repro"
+          sh build/compare-builds.sh --path /mnt/mm-build --path /mnt/elsewhere/mm-build-c --path /home/runner \
+            "$r/repro-a" "$r/repro-c"
