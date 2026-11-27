@@ -98,6 +98,7 @@ if [ -n "${CODEX_GATE_MODE:-}" ]; then
   # spec: build/compat-guard.sh header -- schema-2 evidence is checked against the tree, crate sources and SDK
   TREE="$BR/codex-src"
   CRATES=$(sed -n 's/^crate_sources=//p' "$ART/build-manifest")
+  case "$CRATES" in /*) ;; *) CRATES="$BR/$CRATES" ;; esac
   SDKR=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64)
   # spec: build/compat-guard.sh header -- codex's link map and objects, so the analyzer can attest its relocations
   LINKED="CODEX_OBJC_LINK_MAP=$OBJC/linkmaps/codex.map CODEX_OBJC_OBJECT_DIRS=$BR/codex-$MODE-target/x86_64-apple-darwin/release/deps"

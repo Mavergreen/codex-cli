@@ -99,6 +99,8 @@ field() { sed -n "s/^$1=//p" "$ART/build-manifest"; }
 TREE=$(field source_tree_sha256)
 CRATES=$(field crate_sources)
 [ -n "$TREE" ] && [ -n "$CRATES" ] || fail "$ART/build-manifest records no source_tree_sha256 or crate_sources: rebuild with build/build-codex.sh $MODE"
+# spec: build/build-codex.sh -- crate_sources is relative to the build root
+case "$CRATES" in /*) ;; *) CRATES="$BUILD_ROOT/$CRATES" ;; esac
 [ -d "$CRATES" ] || fail "no crate sources at $CRATES, which $ART/build-manifest names"
 SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64) || fail "no pinned 10.9 SDK from shipyard"
 

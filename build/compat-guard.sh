@@ -48,6 +48,8 @@ case "$BIN" in
     # spec: build/objc-build-evidence.sh header -- the roots its proof was measured with
     SRCROOT="$BUILD_ROOT/codex-src"
     CRATES=$(sed -n 's/^crate_sources=//p' "$BUILD_ROOT/codex-$MODE/build-manifest")
+    # spec: build/build-codex.sh -- crate_sources is relative to the build root
+    case "$CRATES" in /*|'') ;; *) CRATES="$BUILD_ROOT/$CRATES" ;; esac
     OBJC_SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh" --arch x86_64) || { echo "compat-guard: no pinned 10.9 SDK from shipyard" >&2; exit 4; } ;;
 esac
 # spec: shipyard scripts/assert_binary_compatible.sh header -- the strict analyzer is opt-in there; Codex opts in.

@@ -77,9 +77,10 @@ check_manifest() {
     echo "check-build-manifests: malformed source_tree_sha256 in $manifest" >&2; exit 1; }
   [ "$(field source_tree_sha256 "$manifest")" = "$TREE_NATIVE" ] || {
     echo "check-build-manifests: source_tree_sha256 differs from native in $manifest" >&2; exit 1; }
+  # spec: the family build-twice check -- relative to the build root, so a manifest names no build path
   case "$(field crate_sources "$manifest")" in
-    /*) ;;
-    *) echo "check-build-manifests: missing or relative crate_sources in $manifest" >&2; exit 1 ;;
+    '') echo "check-build-manifests: missing crate_sources in $manifest" >&2; exit 1 ;;
+    /*) echo "check-build-manifests: absolute crate_sources in $manifest: it names a build path" >&2; exit 1 ;;
   esac
   case "$(field cargo_lock_sha256 "$manifest")" in
     *[!0-9a-f]*|'') echo "check-build-manifests: missing or malformed cargo_lock_sha256 in $manifest" >&2; exit 1 ;;

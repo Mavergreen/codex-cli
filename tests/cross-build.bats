@@ -20,7 +20,7 @@ setup() {
     printf 'recaulk_origin=released\nrecaulk_version=20261201.1\nrecaulk_archive_sha256=%s\nrecaulk_declaration_sha256=%s\n' \
       "$(printf a%.0s $(seq 64))" "$(printf b%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
     # spec: Drydock content-keyed reviews -- the prepared tree the compiler read, and the crate sources
-    printf 'source_tree_sha256=%s\ncrate_sources=/cargo-home-%s/registry/src/index.crates.io-x\ncargo_lock_sha256=%s\n' \
+    printf 'source_tree_sha256=%s\ncrate_sources=cargo-home-%s/registry/src/index.crates.io-x\ncargo_lock_sha256=%s\n' \
       "$(printf c%.0s $(seq 64))" "$mode" "$(printf d%.0s $(seq 64))" >> "$MAVERICKS_BUILD_ROOT/codex-$mode/build-manifest"
   done
 }
@@ -188,6 +188,13 @@ setup() {
   run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *source_tree_sha256* ]] || false
+}
+
+@test "a manifest records its crate sources relative to the build root, so it names no build path" {
+  sed -i.bak "s,^crate_sources=,crate_sources=$MAVERICKS_BUILD_ROOT/," "$MAVERICKS_BUILD_ROOT/codex-cross/build-manifest"
+  run sh "$PRODUCT_ROOT/build/check-build-manifests.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"absolute crate_sources"* ]] || false
 }
 
 @test "a manifest must record where its crate sources are and which Cargo.lock chose them" {

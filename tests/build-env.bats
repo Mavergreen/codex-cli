@@ -315,14 +315,14 @@ provider_reaches_cargo() {
   grep -qx -- "$root/objc-dev/linkmaps/codex.map" "$root/objc-dev/link-args"
 }
 
-@test "the manifest records the prepared tree's digest, the crate sources and the Cargo.lock that chose them" {
+@test "the manifest records the prepared tree's digest, the crate sources (relative to the build root) and the Cargo.lock that chose them" {
   run build native
   succeeded
   root="$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)"
   m="$root/codex-native/build-manifest"
   want=$(sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only --source-root "$source_dir")
   grep -qx "source_tree_sha256=$want" "$m"
-  grep -qx "crate_sources=$root/cargo-home/registry/src/index.crates.io-test" "$m"
+  grep -qx "crate_sources=cargo-home/registry/src/index.crates.io-test" "$m"
   grep -qx "cargo_lock_sha256=$(shasum -a 256 < "$source_dir/codex-rs/Cargo.lock" | cut -c1-64)" "$m"
 }
 

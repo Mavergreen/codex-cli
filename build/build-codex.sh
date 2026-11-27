@@ -71,7 +71,11 @@ TREE_SHA256=$(sh "$SHIPYARD_SCRIPTS/objc-build-evidence.sh" --tree-digest-only -
   echo "build-codex: no digest of the prepared tree $SOURCE" >&2; exit 1; }
 set -- "$CARGO_HOME"/registry/src/*/
 [ "$#" -eq 1 ] && [ -d "$1" ] || { echo "build-codex: not exactly one crate index under $CARGO_HOME/registry/src" >&2; exit 1; }
+# spec: the family build-twice check -- the manifest travels in the archive, so it names the crate
+#       sources relative to the build root, never a build path
 CRATE_SOURCES=${1%/}
+CRATE_SOURCES=${CRATE_SOURCES#"$BUILD_ROOT"/}
+case "$CRATE_SOURCES" in /*) echo "build-codex: crate sources $CRATE_SOURCES are not under the build root $BUILD_ROOT" >&2; exit 1 ;; esac
 {
   printf 'version=%s\nmode=%s\ntarget=x86_64-apple-darwin\ndeployment_target=10.9\n' "$VERSION" "$MODE"
   printf 'source_revision=%s\nrust_version=%s\nrusty_v8_version=%s\nrusty_v8_removed=%s\n' \
