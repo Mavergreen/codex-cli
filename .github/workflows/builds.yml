@@ -128,14 +128,14 @@ jobs:
       - name: Configure, build the updater, then run the compat guard tests
         run: |
           set -eu
-          shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
-          shipyard-cmake --build --preset cross
-          listed="$(shipyard-ctest --preset cross -N)"
+          shipyard-cmake --preset x86_64 -DCODEX_BUILD_UPDATER=ON -DCODEX_CROSS_ONLY_MANIFEST=ON
+          shipyard-cmake --build --preset x86_64
+          listed="$(shipyard-ctest --preset x86_64 -N)"
           for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host cxxabi_codex cxxabi_codex-code-mode-host; do
             printf '%s\n' "$listed" | grep -Eq "Test +#[0-9]+: $t\$" \
               || { printf '%s\n' "$listed"; echo "::error::CTest has no $t test: CMake did not find the cross build"; exit 1; }
           done
-          shipyard-ctest --preset cross
+          shipyard-ctest --preset x86_64
 
       # CODEX_PREPARED_SRC names the patched source the cross build compiled, so the repo's tests
       # scan it for fetches of OpenAI's builds (tests/no-upstream-fetch.bats). With it set, that
@@ -143,7 +143,7 @@ jobs:
       - name: Locate the build
         run: |
           {
-            echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross"
+            echo "BUILD=$(sh build/resolve-build-root.sh)/$(basename "$PWD")-x86_64"
             echo "CODEX_OUT=$(sh build/resolve-build-root.sh)/codex-cross"
             echo "CODEX_PREPARED_SRC=$(sh build/resolve-build-root.sh)/codex-src"
           } >> "$GITHUB_ENV"

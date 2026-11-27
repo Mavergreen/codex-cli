@@ -28,7 +28,9 @@ if(CODEX_CROSS_ONLY_MANIFEST)
   set(_manifest_args --cross-only)
 endif()
 
-if(MAVERICKS_MODE STREQUAL "cross")
+# platform: shipyard's MAVERICKS_MODE is mavericks on a 10.9 host and modern elsewhere; codex names the
+#           builds native and cross
+if(MAVERICKS_MODE STREQUAL "modern")
   set(_codex_mode cross)
 else()
   set(_codex_mode native)

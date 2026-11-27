@@ -98,16 +98,16 @@ jobs:
       # The pkg carries no Codex binary, so no Codex is built here and CMake registers no Codex guard
       # tests; the updater, the one compiled thing, is guarded as it is built.
       - name: Configure (cross, pinned 10.9 SDK, with the updater)
-        run: shipyard-cmake --preset cross -DCODEX_BUILD_UPDATER=ON
+        run: shipyard-cmake --preset x86_64 -DCODEX_BUILD_UPDATER=ON
 
       - name: Build + compat guard
-        run: shipyard-cmake --build --preset cross
+        run: shipyard-cmake --build --preset x86_64
 
       - name: Run the repo's tests
         run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
 
       - name: Locate the build
-        run: echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross" >> "$GITHUB_ENV"
+        run: echo "BUILD=$(sh build/resolve-build-root.sh)/$(basename "$PWD")-x86_64" >> "$GITHUB_ENV"
 
       - name: Package the .pkg
         env:
