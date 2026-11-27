@@ -11,7 +11,7 @@ export MAVERICKS_BUILD_DIR
 . "$HERE/lib.sh"
 . "$HERE/codex-build-env.sh"
 
-MODE=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
+MODE=$(codex_host_mode)
 codex_check_host "$MODE"
 BUILD_ROOT=$(mavericks_build_root)
 SOURCE="$BUILD_ROOT/codex-src"

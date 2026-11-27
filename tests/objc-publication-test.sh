@@ -120,8 +120,8 @@ before() {
     echo "FAIL: builds.yml: '$1' (line ${a:-none}) must come before '$2' (line ${b:-none})" >&2; H_FAILS=$((H_FAILS+1)); fi
 }
 before "sh build/build-codex.sh cross" "sh build/objc-build-evidence.sh cross"
-before "sh build/objc-build-evidence.sh cross" "shipyard-cmake --preset cross"
-before "shipyard-ctest --preset cross" "sh build/objc-publication-check.sh cross"
+before "sh build/objc-build-evidence.sh cross" "shipyard-cmake --preset x86_64"
+before "shipyard-ctest --preset x86_64" "sh build/objc-publication-check.sh cross"
 before "sh build/objc-publication-check.sh cross" "sh packaging/build-codex-package.sh"
 before "sh packaging/build-codex-package.sh" 'sh build/objc-publication-check.sh cross "$BUILD/channel/'
 before 'sh build/objc-publication-check.sh cross "$BUILD/channel/' "sh build/channel-publish.sh sign"

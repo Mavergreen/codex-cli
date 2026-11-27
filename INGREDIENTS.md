@@ -80,7 +80,7 @@ ingredient pin.
 
 Both imported Rust executables, `codex` and `codex-code-mode-host`, are checked by shipyard's
 `assert_binary_compatible.sh`, through `build/compat-guard.sh`, as CTest tests (`compat_guard_codex`, `compat_guard_codex-code-mode-host`), run by
-`shipyard-ctest --preset native|cross`, as mavergreen-gh does. They are not a build-time step.
+`shipyard-ctest --preset x86_64`, as mavergreen-gh does. They are not a build-time step.
 Shipyard's `mavericks_assert_binary_compatible()` attaches a `POST_BUILD` command to a compiled
 target, while CMake does not permit that command on an imported executable. The tests therefore
 invoke the same shipyard checker on each exact imported file. The tests `load_paths_codex` and
