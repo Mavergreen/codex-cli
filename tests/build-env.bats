@@ -397,9 +397,25 @@ linux_build() {
   grep -qx "SDKROOT=$sdk" "$cargo_env"
   grep -qx "CC_x86_64_apple_darwin=$lin/bin/clang" "$cargo_env"
   grep -qx "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=$lin/bin/clang++" "$cargo_env"
-  cargo_lacks CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS
   grep -qx 'sdk=MacOSX10.9.sdk' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
   grep -qx 'decl_reader=plistutil 2.3.0' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-cross/build-manifest"
+}
+
+@test "a cross build on Linux names no build path: each tree is remapped, and no debug map is written" {
+  linux_host
+  run linux_build
+  chmod -R u+w "$lin"
+  succeeded
+  root=$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)
+  flags=$(sed -n 's/^CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS=//p' "$cargo_env")
+  for want in "--remap-path-prefix=$root=/build-root" "--remap-path-prefix=$root/cargo-home=/cargo-home" \
+              "--remap-path-prefix=$root/codex-cross-target=/target" "--remap-path-prefix=$source_dir=/codex-src" \
+              "link-arg=-Wl,-S"; do
+    [[ " $flags " == *" $want "* || " $flags " == *" -C $want "* ]] || { echo "rustflags lack $want: $flags"; false; }
+  done
+  for v in CFLAGS_x86_64_apple_darwin CXXFLAGS_x86_64_apple_darwin; do
+    grep -qx "$v=-ffile-prefix-map=$root=/build-root -ffile-prefix-map=$root/cargo-home=/cargo-home -ffile-prefix-map=$root/codex-cross-target=/target -ffile-prefix-map=$source_dir=/codex-src" "$cargo_env"
+  done
 }
 
 @test "a native build is refused on Linux" {
