@@ -27,7 +27,12 @@ setup() {
   cp -R "$PRODUCT_ROOT/build" "$PRODUCT_ROOT/components" "$PRODUCT_ROOT/UPSTREAM_VERSION" "$product/"
   for script in "$SHIPYARD_SCRIPTS"/*; do ln -s "$script" "$shipyard/"; done
   rm "$shipyard/mavericks_mode.sh" "$shipyard/fetch_sdk.sh"
-  printf '#!/bin/sh\necho "$MODE_FOR_TEST"\n' > "$shipyard/mavericks_mode.sh"
+  # shipyard's mavericks_mode.sh answers mavericks on 10.9 and modern elsewhere; MODE_FOR_TEST names
+  # the codex build mode (native, cross) such a host builds, or the answer itself
+  cat > "$shipyard/mavericks_mode.sh" <<'MM'
+#!/bin/sh
+case "$MODE_FOR_TEST" in native) echo mavericks ;; cross) echo modern ;; *) echo "$MODE_FOR_TEST" ;; esac
+MM
   printf '#!/bin/sh\necho "%s"\n' "$sdk" > "$shipyard/fetch_sdk.sh"
   for helper in objc-provider-link-args.sh objc-build-evidence.sh objc-compat.sh; do
     rm "$shipyard/$helper"
@@ -400,4 +405,19 @@ linux_build() {
   run build native
   succeeded
   grep -qx 'decl_reader=plutil' "$(cd -P "$MAVERICKS_BUILD_ROOT" && pwd)/codex-native/build-manifest"
+}
+
+@test "a 10.9 host builds native and refuses cross; a modern host builds cross and refuses native" {
+  MODE_FOR_TEST=native PATH="$stand_ins/bin:$PATH" run sh "$product/build/build-codex.sh" cross
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requested cross build on a native host"* ]] || false
+  MODE_FOR_TEST=cross PATH="$stand_ins/bin:$PATH" run sh "$product/build/build-codex.sh" native
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requested native build on a cross host"* ]] || false
+}
+
+@test "an answer from shipyard's mavericks_mode.sh other than mavericks or modern is refused by name" {
+  MODE_FOR_TEST=cross-ish PATH="$stand_ins/bin:$PATH" run sh "$product/build/build-codex.sh" cross
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"mavericks_mode.sh answered 'cross-ish'"* ]] || false
 }

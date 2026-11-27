@@ -144,6 +144,21 @@ released
   refused "shipyard refused the provider declaration"
 }
 
+@test "a schema 2 declaration lists the provider under legacy_providers, as Recaulk's does" {
+  fixture_prefix "$BATS_TEST_TMPDIR/staged"
+  mutate "$BATS_TEST_TMPDIR/staged" 's/"schema" : 1/"schema" : 2/; s/"providers" : \[/"providers" : [ ], "legacy_providers" : [/'
+  CODEX_DEV_RECAULK_PREFIX="$BATS_TEST_TMPDIR/staged" fetch
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+@test "a schema 2 declaration whose legacy_providers lack the provider is refused" {
+  fixture_prefix "$BATS_TEST_TMPDIR/staged"
+  mutate "$BATS_TEST_TMPDIR/staged" 's/"schema" : 1/"schema" : 2/; s/"providers" : \[/"providers" : [ ], "legacy_providers" : [/; s/open-urls.v1/open-urls.v2/'
+  CODEX_DEV_RECAULK_PREFIX="$BATS_TEST_TMPDIR/staged" fetch
+  refused
+  [[ "$output" == *"does not declare recaulk.nsworkspace.open-urls.v1"* ]] || false
+}
+
 @test "another provider ID is refused" {
   fixture_prefix "$BATS_TEST_TMPDIR/staged"
   mutate "$BATS_TEST_TMPDIR/staged" 's/recaulk.nsworkspace.open-urls.v1/recaulk.nsworkspace.open-urls.v2/'

@@ -82,9 +82,8 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           sudo mkdir -p /mnt/mm-build
           sudo chown "$(id -u):$(id -g)" /mnt/mm-build
-          # platform: shipyard's cross preset sets the build root to $TMPDIR/mm-build itself, so /mnt reaches it through a link
-          [ ! -e "$TMPDIR/mm-build" ] || { echo "::error::$TMPDIR/mm-build already exists"; exit 1; }
-          ln -s /mnt/mm-build "$TMPDIR/mm-build"
+          # platform: shipyard's launcher and build/resolve-build-root.sh honour an exported MAVERICKS_BUILD_ROOT
+          echo "MAVERICKS_BUILD_ROOT=/mnt/mm-build" >> "$GITHUB_ENV"
           # platform: run 45600034272 peaked at 6 GB of swap with 418 MB of RAM free; without it the runner was lost
           sudo fallocate -l 8G /mnt/swapfile
           sudo chmod 600 /mnt/swapfile
@@ -166,14 +165,14 @@ jobs:
       - name: Configure, build, then run the compat guard tests
         run: |
           set -eu
-          shipyard-cmake --preset cross -DCODEX_CROSS_ONLY_MANIFEST=ON
-          shipyard-cmake --build --preset cross
-          listed="$(shipyard-ctest --preset cross -N)"
+          shipyard-cmake --preset x86_64 -DCODEX_CROSS_ONLY_MANIFEST=ON
+          shipyard-cmake --build --preset x86_64
+          listed="$(shipyard-ctest --preset x86_64 -N)"
           for t in compat_guard_codex compat_guard_codex-code-mode-host load_paths_codex load_paths_codex-code-mode-host cxxabi_codex cxxabi_codex-code-mode-host; do
             printf '%s\n' "$listed" | grep -Eq "Test +#[0-9]+: $t\$" \
               || { printf '%s\n' "$listed"; echo "::error::CTest has no $t test: CMake did not find the cross build"; exit 1; }
           done
-          shipyard-ctest --preset cross
+          shipyard-ctest --preset x86_64
 
       # CODEX_PREPARED_SRC names the patched source the cross build compiled, so the repo's tests
       # scan it for fetches of OpenAI's builds (tests/no-upstream-fetch.bats). With it set, that
@@ -181,7 +180,7 @@ jobs:
       - name: Locate the build
         run: |
           {
-            echo "BUILD=${TMPDIR:-/tmp}/mm-build/$(basename "$PWD")-cross"
+            echo "BUILD=$(sh build/resolve-build-root.sh)/$(basename "$PWD")-x86_64"
             echo "CODEX_OUT=$(sh build/resolve-build-root.sh)/codex-cross"
             echo "CODEX_PREPARED_SRC=$(sh build/resolve-build-root.sh)/codex-src"
           } >> "$GITHUB_ENV"
@@ -292,7 +291,7 @@ jobs:
         if: failure()
         with:
           name: codex-build-code-mode-host
-          path: ${{ runner.temp }}/mm-build/codex-cross/codex-code-mode-host
+          path: ${{ env.MAVERICKS_BUILD_ROOT }}/codex-cross/codex-code-mode-host
           retention-days: 3
           if-no-files-found: warn
 

@@ -7,30 +7,37 @@ setup() {
 
 pick() { sh "$PRODUCT_ROOT/build/rust-toolchain.sh" "$1" "$2"; }
 
-@test "native x86_64 builds with the native toolchain" {
-  run pick native x86_64
+@test "10.9 builds with the native toolchain" {
+  run pick mavericks x86_64
   [ "$status" -eq 0 ]
   [ "$output" = rust ]
 }
 
 @test "a modern Intel Mac gets rust, since rust-cross is arm64-only" {
-  run pick cross x86_64
+  run pick modern x86_64
   [ "$status" -eq 0 ]
   [ "$output" = rust ]
 }
 
 @test "Apple Silicon builds with rust-cross" {
-  run pick cross arm64
+  run pick modern arm64
   [ "$status" -eq 0 ]
   [ "$output" = rust-cross ]
 }
 
-@test "a native arm64 host does not exist" {
-  run pick native arm64
+@test "a 10.9 arm64 host does not exist" {
+  run pick mavericks arm64
   [ "$status" -eq 1 ]
 }
 
 @test "an unknown arch is refused" {
-  run pick cross ppc
+  run pick modern ppc
+  [ "$status" -eq 1 ]
+}
+
+@test "shipyard's retired mode names are refused" {
+  run pick native x86_64
+  [ "$status" -eq 1 ]
+  run pick cross arm64
   [ "$status" -eq 1 ]
 }

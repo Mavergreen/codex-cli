@@ -4,10 +4,21 @@
 # so a development cargo run cannot drift from the release build.
 # Sourced after lib.sh. Prints errors as "build-codex:" in both callers.
 
+# codex_host_mode: the build mode this host makes, in codex's own names: native on 10.9 (shipyard's
+# mavericks_mode.sh says mavericks), cross elsewhere (it says modern).
+codex_host_mode() {
+  _shipyard_mode=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
+  case "$_shipyard_mode" in
+    mavericks) echo native ;;
+    modern) echo cross ;;
+    *) echo "build-codex: shipyard's mavericks_mode.sh answered '$_shipyard_mode', not mavericks or modern" >&2; return 1 ;;
+  esac
+}
+
 # codex_check_host MODE: this host can build MODE.
 codex_check_host() {
   MODE=$1
-  ACTUAL_MODE=$(sh "$SHIPYARD_SCRIPTS/mavericks_mode.sh")
+  ACTUAL_MODE=$(codex_host_mode) || exit 1
   [ "$MODE" = "$ACTUAL_MODE" ] || {
     echo "build-codex: requested $MODE build on a $ACTUAL_MODE host" >&2; exit 1;
   }
