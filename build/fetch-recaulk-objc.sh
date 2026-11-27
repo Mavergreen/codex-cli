@@ -69,23 +69,31 @@ validate() {
   [ "$rc" = 0 ] || fail "shipyard refused the provider declaration of $p (exit $rc): $err"
   printf '%s\n' "$args" | grep -qx -- "-Wl,-u,_$ROOT" ||
     fail "$p does not root $ROOT (shipyard printed no -Wl,-u,_$ROOT)"
+  # spec: Recaulk README "objc-providers.json" -- schema 2 keeps the one-method entries, as schema 1
+  #       had them, under legacy_providers, and its groups under providers.
+  schema=$(plutil -extract schema xml1 -o - "$decl" 2>/dev/null | sed -n 's:^<integer>\(.*\)</integer>$:\1:p')
+  case "$schema" in
+    1) list=providers ;;
+    2) list=legacy_providers ;;
+    *) fail "$decl is schema '$schema': Codex reads schema 1 or 2" ;;
+  esac
   found=
   i=0
   # platform: plutil prints a failed -extract's error on stdout, so both streams are discarded.
-  while plutil -extract "providers.$i" xml1 -o /dev/null "$decl" >/dev/null 2>&1; do
-    if [ "$(pl "providers.$i.provider_id")" = "$PROVIDER_ID" ]; then
+  while plutil -extract "$list.$i" xml1 -o /dev/null "$decl" >/dev/null 2>&1; do
+    if [ "$(pl "$list.$i.provider_id")" = "$PROVIDER_ID" ]; then
       [ -z "$found" ] || fail "$decl declares $PROVIDER_ID twice"
       found=$i
     fi
     i=$((i + 1))
   done
   [ -n "$found" ] || fail "$decl does not declare $PROVIDER_ID"
-  check "providers.$found.class" "$CLASS"
-  check "providers.$found.method_kind" "$KIND"
-  check "providers.$found.selector" "$SELECTOR"
-  check "providers.$found.encoding" "$ENCODING"
-  check "providers.$found.activation_root" "$ROOT"
-  [ -n "$(pl "providers.$found.implementation_symbol")" ] || fail "$PROVIDER_ID in $decl names no implementation symbol"
+  check "$list.$found.class" "$CLASS"
+  check "$list.$found.method_kind" "$KIND"
+  check "$list.$found.selector" "$SELECTOR"
+  check "$list.$found.encoding" "$ENCODING"
+  check "$list.$found.activation_root" "$ROOT"
+  [ -n "$(pl "$list.$found.implementation_symbol")" ] || fail "$PROVIDER_ID in $decl names no implementation symbol"
   check build.architecture x86_64
   check build.artifact_role shipping
   check build.minimum_macos 10.9
