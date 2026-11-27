@@ -145,7 +145,12 @@ jobs:
 
       # build-codex.sh fetches the pinned Mavergreen Rust and clang-22 pkgs, the pinned Codex commit
       # and OpenAI's rusty_v8 archive itself, and writes $BUILD_ROOT/codex-cross. It reads BUILD_ID.
+      # platform: two cargo jobs, not four. Run 46028797799 lost its runner 75 minutes in, even with 16G of
+      #   swap; four jobs reach 20 GB with three crates compiling at once. The job count schedules crates
+      #   and LTO threads only, so it changes no output bytes.
       - name: Cross-build Codex
+        env:
+          CARGO_BUILD_JOBS: 2
         run: |
           set -eu
           ( while sleep 120; do df -h / /mnt | tail -n 2; free -m | sed -n 2,3p; done ) &
