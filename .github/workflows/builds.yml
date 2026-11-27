@@ -84,8 +84,9 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /mnt/mm-build
           # platform: shipyard's launcher and build/resolve-build-root.sh honour an exported MAVERICKS_BUILD_ROOT
           echo "MAVERICKS_BUILD_ROOT=/mnt/mm-build" >> "$GITHUB_ENV"
-          # platform: run 45600034272 peaked at 6 GB of swap with 418 MB of RAM free; without it the runner was lost
-          sudo fallocate -l 8G /mnt/swapfile
+          # platform: run 45600034272 peaked at 6 GB of swap with 418 MB of RAM free; without it the runner was lost.
+          #   On 4 CPUs the build peaks at 20 GB (three crates compiling at once) and 19 GB (the codex link alone).
+          sudo fallocate -l 16G /mnt/swapfile
           sudo chmod 600 /mnt/swapfile
           sudo mkswap /mnt/swapfile > /dev/null
           sudo swapon /mnt/swapfile
