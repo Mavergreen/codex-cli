@@ -65,6 +65,7 @@ EOF
   cat > "$rust/bin/cargo" <<EOF
 #!/bin/sh
 env > "$cargo_env"
+echo "\$*" >> "$BATS_TEST_TMPDIR/cargo-calls"
 mkdir -p "\$CARGO_TARGET_DIR/x86_64-apple-darwin/release"
 : > "\$CARGO_TARGET_DIR/x86_64-apple-darwin/release/codex"
 : > "\$CARGO_TARGET_DIR/x86_64-apple-darwin/release/codex-code-mode-host"
@@ -323,6 +324,19 @@ provider_reaches_cargo() {
   grep -qx "source_tree_sha256=$want" "$m"
   grep -qx "crate_sources=$root/cargo-home/registry/src/index.crates.io-test" "$m"
   grep -qx "cargo_lock_sha256=$(shasum -a 256 < "$source_dir/codex-rs/Cargo.lock" | cut -c1-64)" "$m"
+}
+
+@test "the build fetches first and stamps every unpacked crate file with the commit time" {
+  printf 'fn f() {}\n' > "$MAVERICKS_BUILD_ROOT/cargo-home/registry/src/index.crates.io-test/objc2-0.6.3/lib.rs"
+  SOURCE_DATE_EPOCH=1700000000 run build native
+  succeeded
+  [ "$(sed -n 1p "$BATS_TEST_TMPDIR/cargo-calls")" = "fetch --locked" ]
+  [ "$(sed -n 2p "$BATS_TEST_TMPDIR/cargo-calls" | cut -d' ' -f1)" = build ]
+  for f in objc2-0.6.3 objc2-0.6.3/lib.rs; do
+    p="$MAVERICKS_BUILD_ROOT/cargo-home/registry/src/index.crates.io-test/$f"
+    t=$(stat -c %Y "$p" 2>/dev/null || stat -f %m "$p")
+    [ "$t" = 1700000000 ] || { echo "$f: $t"; false; }
+  done
 }
 
 @test "a build with no single crate index to name fails" {
