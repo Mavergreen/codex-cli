@@ -1,0 +1,62 @@
+diff --git a/codex-rs/utils/cargo-bin/src/lib.rs b/codex-rs/utils/cargo-bin/src/lib.rs
+index 32a2329..2a9a052 100644
+--- a/codex-rs/utils/cargo-bin/src/lib.rs
++++ b/codex-rs/utils/cargo-bin/src/lib.rs
+@@ -149,12 +149,45 @@ macro_rules! find_resource {
+             // - at runtime, Bazel will set runfiles-related env vars
+             $crate::resolve_bazel_runfile(option_env!("BAZEL_PACKAGE"), resource)
+         } else {
+-            let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+-            Ok(manifest_dir.join(resource))
++            $crate::__cargo_source_dir!(resource)
+         }
+     }};
+ }
+ 
++/// Mavergreen: a debug build finds a resource beside the calling crate's sources, as upstream does.
++/// A release build compiles in no source-tree path, so two builds of one source in different
++/// directories are the same bytes; it reports the resource as unavailable instead.
++#[cfg(not(codex_bazel))]
++#[cfg(debug_assertions)]
++#[doc(hidden)]
++#[macro_export]
++macro_rules! __cargo_source_dir {
++    ($resource:expr) => {{
++        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
++        std::io::Result::Ok(manifest_dir.join($resource))
++    }};
++}
++
++#[cfg(not(codex_bazel))]
++#[cfg(not(debug_assertions))]
++#[doc(hidden)]
++#[macro_export]
++macro_rules! __cargo_source_dir {
++    ($resource:expr) => {{
++        $crate::source_dir_unavailable($resource)
++    }};
++}
++
++#[cfg(not(codex_bazel))]
++#[doc(hidden)]
++pub fn source_dir_unavailable(resource: &Path) -> std::io::Result<PathBuf> {
++    let resource = resource.display();
++    Err(std::io::Error::new(
++        std::io::ErrorKind::NotFound,
++        format!("{resource} is found beside Codex's sources, which a release build does not record"),
++    ))
++}
++
+ pub fn resolve_bazel_runfile(
+     bazel_package: Option<&str>,
+     resource: &Path,
+@@ -185,8 +218,7 @@ pub fn resolve_bazel_runfile(
+ 
+ #[cfg(not(codex_bazel))]
+ pub fn resolve_cargo_runfile(resource: &Path) -> std::io::Result<PathBuf> {
+-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+-    Ok(manifest_dir.join(resource))
++    __cargo_source_dir!(resource)
+ }
+ 
+ #[cfg(codex_bazel)]
