@@ -222,6 +222,24 @@ at the end says what each did and why it went.
 - **When to reconsider:** when `age` stops embedding through rust-embed, or rust-embed stops
   recording file times by default.
 
+## 0016-no-source-paths-in-release-builds.patch
+
+- **What:** `codex-rs/utils/cargo-bin/src/lib.rs`: `find_resource!` and `resolve_cargo_runfile`
+  look beside the caller's sources (`env!("CARGO_MANIFEST_DIR")`) only in a debug build. A release
+  build returns `NotFound`, saying the resource lives beside Codex's sources, which a release build
+  does not record. Bazel builds are unchanged.
+- **Why:** `codex-app-server-test-client`, linked into `codex`, calls `find_resource!` for its
+  default elicitation script, so each release build compiled in the absolute path of the tree it
+  was built in. LTO drops the string, but it changed one ThinLTO module's hash and so 124 symbol
+  names. Two builds of one source in different directories, or on different machines, differed.
+  Path remapping does not reach `env!` values. The family's build-twice check needs the bytes to
+  match.
+- **Invariant kept:** debug builds and tests resolve resources as upstream's. In a release build
+  the test client's elicitation hold needs `--script`: its default named a file beside the sources,
+  which an installed Codex never has.
+- **When to reconsider:** when upstream stops compiling source paths into release builds; worth
+  offering upstream.
+
 ## Removed patches
 
 ### 0001-force-rustls.patch
