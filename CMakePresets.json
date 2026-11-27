@@ -4,15 +4,12 @@
     "/usr/local/mavergreen/shipyard/share/cmake/MavericksShipyard/mavericks-presets.json"
   ],
   "configurePresets": [
-    { "name": "native", "inherits": "mavericks-native" },
-    { "name": "cross", "inherits": "mavericks-cross" }
+    { "name": "x86_64", "inherits": "mavericks-x86_64" }
   ],
   "buildPresets": [
-    { "name": "native", "configurePreset": "native" },
-    { "name": "cross", "configurePreset": "cross" }
+    { "name": "x86_64", "configurePreset": "x86_64" }
   ],
   "testPresets": [
-    { "name": "native", "configurePreset": "native", "output": { "outputOnFailure": true } },
-    { "name": "cross", "configurePreset": "cross", "output": { "outputOnFailure": true } }
+    { "name": "x86_64", "configurePreset": "x86_64", "output": { "outputOnFailure": true } }
   ]
 }
