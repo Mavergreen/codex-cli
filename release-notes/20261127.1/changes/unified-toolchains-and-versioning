@@ -1,0 +1,1 @@
+The package is built with shipyard's unified toolchains, and releases now take their version and notes from shipyard's checks. The launcher, installer and updater behave as before.

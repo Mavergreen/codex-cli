@@ -293,6 +293,10 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
 - **Biometric user verification reports unsupported** (0004), because it needs LocalAuthentication
   and Secure Enclave APIs, which 10.9 lacks. It cannot be turned on.
 
+## Versioning
+
+- self-upstream-date
+
 ## Conformance deviations
 
 - scheme: the package is its own upstream (Codex reaches users through the builds channel, pinned in components/codex/version), so it versions itself by date as YYYYMMDD.N with no -mavericks.N axis

@@ -92,15 +92,9 @@ jobs:
             push|workflow_dispatch) if [ "$GITHUB_REF" = refs/heads/main ]; then pub="$wanted"; fi ;;
           esac
           printf '%s\n' "$id" > BUILD_ID
-          # The test pkg's own version, YYYYMMDD.N, as release.yml computes it; CMake reads VERSION
+          # The test pkg's own version, YYYYMMDD.N, as release.yml derives it; CMake reads VERSION
           # for the updater, so it is written before configuring.
-          base="$(tr -d '[:space:]' < UPSTREAM_VERSION)"
-          maxn=0
-          for t in $(git tag --list "$base.*"); do
-            n="${t##*.}"
-            case "$n" in ''|*[!0-9]*) : ;; *) [ "$n" -gt "$maxn" ] && maxn="$n" ;; esac
-          done
-          pkgver="$base.$((maxn + 1))"
+          pkgver="$(sh "$SHIPYARD_SCRIPTS/release-version.sh" --product codex-cli --mode auto)"
           printf '%s\n' "$pkgver" > VERSION
           {
             echo "id=$id"; echo "next=$next"; echo "codex=$codex"; echo "state=$state"
