@@ -28,7 +28,54 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # spec: INGREDIENTS.md "Versioning" -- self-upstream-date: shipyard's release-version.sh derives
+  #       YYYYMMDD.N, and check-release-version.sh checks it and its committed notes. Only a dispatch
+  #       publishes, and only when release-needed.sh says the declared state is unreleased.
+  version-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      publish: ${{ steps.tag.outputs.publish }}
+      mode: ${{ steps.tag.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install mavericks-shipyard
+        uses: Mavergreen/shipyard/.github/actions/install@v1
+
+      - name: Derive and check the version, and decide whether to publish
+        id: tag
+        env:
+          LOCAL_RELEASE: ${{ inputs.local_release }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mode="$(sh "$SHIPYARD_SCRIPTS/release-mode.sh")"
+          t="$(sh "$SHIPYARD_SCRIPTS/release-version.sh" --product codex-cli --mode "$mode")"
+          pub=no
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ "$LOCAL_RELEASE" = true ]; then
+              pub=yes
+            else
+              digest="$(sh "$SHIPYARD_SCRIPTS/release-state.sh")"
+              answer="$(sh "$SHIPYARD_SCRIPTS/release-needed.sh" --digest "$digest" --version "$t")"
+              echo "release-needed: $answer"
+              if [ "$answer" = PUBLISH ]; then pub=yes; fi
+            fi
+          fi
+          sh "$SHIPYARD_SCRIPTS/check-release-version.sh" --product codex-cli --version "$t" --sha "$GITHUB_SHA" \
+            --mode "$mode" --publishing "$pub"
+          { echo "tag=$t"; echo "publish=$pub"; echo "mode=$mode"; } >> "$GITHUB_OUTPUT"
+          echo "version=$t publish=$pub mode=$mode"
+
   build:
+    needs: version-check
     runs-on: macos-26
     timeout-minutes: 45
     outputs:
@@ -52,31 +99,13 @@ jobs:
         run: sh "$SHIPYARD_SCRIPTS/assert-tree-clean.sh" --record
 
       # CMake reads VERSION for the updater, so it is written before configuring.
-      - name: Version (YYYYMMDD.N) + publish decision
+      - name: Version (YYYYMMDD.N) + publish decision, from version-check
         id: ver
         env:
-          LOCAL_RELEASE: ${{ inputs.local_release }}
-          GH_TOKEN: ${{ github.token }}
+          ver: ${{ needs.version-check.outputs.tag }}
+          pub: ${{ needs.version-check.outputs.publish }}
         run: |
           set -eu
-          base="$(tr -d '[:space:]' < UPSTREAM_VERSION)"
-          maxn=0
-          for t in $(git tag --list "$base.*"); do
-            n="${t##*.}"
-            case "$n" in ''|*[!0-9]*) : ;; *) [ "$n" -gt "$maxn" ] && maxn="$n" ;; esac
-          done
-          ver="$base.$((maxn + 1))"
-          pub=no
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            if [ "$LOCAL_RELEASE" = true ]; then
-              pub=yes
-            else
-              digest="$(sh "$SHIPYARD_SCRIPTS/release-state.sh")"
-              answer="$(sh "$SHIPYARD_SCRIPTS/release-needed.sh" --digest "$digest" --version "$ver")"
-              echo "release-needed: $answer"
-              if [ "$answer" = PUBLISH ]; then pub=yes; fi
-            fi
-          fi
           printf '%s\n' "$ver" > VERSION
           { echo "ver=$ver"; echo "publish=$pub"; } >> "$GITHUB_OUTPUT"
           echo "version=$ver publish=$pub"
@@ -271,7 +300,7 @@ jobs:
   # publish-release.yml creates the release with GitHub's default, so the pkg becomes the repo's
   # Latest; the codex-builds release is created with --latest=false and never takes it.
   publish:
-    needs: [build, scan, on-mavericks]
+    needs: [version-check, build, scan, on-mavericks]
     if: needs.build.outputs.publish == 'yes'
     permissions:
       contents: write
@@ -279,3 +308,5 @@ jobs:
     with:
       version: ${{ needs.build.outputs.ver }}
       artifact: codex-cli
+      product: codex-cli
+      release-mode: ${{ needs.version-check.outputs.mode }}

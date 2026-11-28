@@ -1,0 +1,1 @@
+The package is now built with the same compilers on every host, and each release carries its own notes. The launcher, installer and updater work as before.
