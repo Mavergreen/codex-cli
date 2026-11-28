@@ -299,7 +299,6 @@ a Codex bump updates it here along with the DIGEST in `components/codex/version`
 
 ## Conformance deviations
 
-- scheme: the package is its own upstream (Codex reaches users through the builds channel, pinned in components/codex/version), so it versions itself by date as YYYYMMDD.N with no -mavericks.N axis
 - builds-channel: Codex builds are signed and published to this repo's codex-builds release by build/channel-publish.sh from .github/workflows/builds.yml, not by shipyard, until shipyard has machinery for a builds channel
 - unpinned:build/channel-publish.sh: before it publishes a build whose metadata names a min-pkg, it reads this repo's own Latest release, because the check is that the pkg the build needs is already offered to users, which only the newest release can say; a pin would be the very staleness it guards against. Reconsider if shipyard's builds-channel machinery takes over that check
 
